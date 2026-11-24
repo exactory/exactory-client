@@ -374,6 +374,19 @@ class SeriesEndingTests(unittest.TestCase):
         review_series._complete_ending_step(self.case.store, native)
         self.assertEqual(native['details']['step']['arguments'], {'--attack-root': str(self.case.root / 'controller')})
 
+    def test_stop_step_that_names_another_chain_runs_that_chain(self):
+        """Review M-F2: a review-series step of a stop that names another chain in payload.assignment_id runs that
+        chain, in details.step and in its answer; a review-series step without one runs the head."""
+        step = dict(command='review-series', payload=dict(assignment_id='successor'), chooses=[])
+        row = dict(state='stop', head_id='bar-first', details=dict(step=copy.deepcopy(step), decision=dict(
+            owner_decides='Which chain goes on?', then=[dict(answer='Go on', steps=[
+                copy.deepcopy(step), dict(command='review-series')])])))
+        review_series._complete_ending_step(self.case.store, row)
+        self.assertEqual(row['details']['step']['arguments']['--assignment'], 'successor')
+        named, head = row['details']['decision']['then'][0]['steps']
+        self.assertEqual((named['arguments']['--assignment'], head['arguments']['--assignment']),
+                         ('successor', 'bar-first'))
+
     def test_failed_step_reading_uses_executable_fallback_and_then_resumes_the_head(self):
         with patch.object(review_series, '_read_plan', return_value=(self.snapshot, self.plan)), \
                 patch('research_harness.review_plan_steps.complete_plan', side_effect=self.build_error()):

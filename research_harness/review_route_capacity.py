@@ -186,8 +186,9 @@ def measure_attempt_ratio(attempt, *, margin=None):
 
 
 def describe_route_class(route):
+    from .review_codex_transport import read_route_effort
     adapter = route['adapter']
-    effort = 'high' if adapter.startswith('codex_cli_') else route['configuration'].get('effort') if adapter == 'claude_cli_v1' else None
+    effort = read_route_effort(route) if adapter.startswith('codex_cli_') else route['configuration'].get('effort') if adapter == 'claude_cli_v1' else None
     return dict(adapter=adapter, model=route['model'], effort=effort)
 
 
@@ -202,8 +203,7 @@ def select_capacity_probe_size(records, route, request_tokens, *, artifacts=None
     last = max(probes, key=lambda row: row['recorded_revision'], default=None)
     if last is not None:
         return request_tokens + route['configuration']['max_output_tokens'] if last.get('capacity_verified') else max(1, last['capacity']['input_tokens'] // 2)
-    from .review_capacity_evidence import read_capacity_evidence
-    return read_capacity_evidence(route, records, artifacts=artifacts)['probe_input_tokens']
+    return describe_route_capacity(route, records=records, artifacts=artifacts)['capacity_evidence']['probe_input_tokens']
 
 
 def build_capacity_probe_request(route, prompt, packet, tokens):
@@ -304,6 +304,13 @@ def describe_route_capacity(route, profile=None, *, records=None, artifacts=None
         tokens['probe_id'] = evidence['verified_capacity_probe']['id']
     tokens.update(output_reservation_tokens=output, reservation_basis=reservation_basis)
     calibrated = model is not None and (adapter == 'claude_cli_v1' or any((name, name_model) == (adapter, route['model']) for name, name_model, _ in VERIFIED_INPUT_TOKENS))
+    if (adapter.startswith('codex_cli_') and not calibrated and tokens['source'] == 'observed'
+            and characters['value'] is not None and evidence['key'] is not None):
+        # Without a characters-per-token ratio no probe can be built for a number of provider tokens; the largest
+        # request of the transport needs no ratio and gives the largest limit that the transport can reach. The rule
+        # holds for the Codex adapters, whose route records of earlier releases are stale, so the capacity snapshot of
+        # a chain on a current route record of an earlier release keeps its bytes.
+        evidence['probe_input_tokens'] = characters['value']
     ratio = CLAUDE_CHARACTERS_PER_TOKEN if adapter == 'claude_cli_v1' else CODEX_CHARACTERS_PER_TOKEN
     return dict(protocol=POLICY, listed=model is not None, route_class=describe_route_class(route),
                 input_text_characters=_describe_limit(math.floor(tokens['value'] * ratio) if calibrated else tokens['value'], 'estimated',
@@ -397,6 +404,20 @@ def measure_request(route, request, profile=None, *, records=None, artifacts=Non
     return result
 
 
+def fits_route(records, artifacts, route, request):
+    """Measure the request against its route's input limits.
+
+    Admission also checks bodies without a text form and honors recorded reading protocols.
+    """
+    return measure_request(route, request, records=records, artifacts=artifacts)['fits']
+
+
+def can_send_ordinary_packet(records, artifacts, route, packet, request):
+    from .review_problem_parts import preserves_ordinary_packet
+    return (fits_route(records, artifacts, route, request)
+            and preserves_ordinary_packet(artifacts, packet, request))
+
+
 CAPACITY_STOP_MESSAGE = ('The selected route cannot deliver this review; the details give the reason. '
                          'Take a listed next step when the owner authorizes it.')
 UNSERVED_REVIEW_MESSAGE = ('No verified route of this record serves this review. '
@@ -431,49 +452,54 @@ def _can_deliver_parts(assignment, packet, route):
 
 
 def _build_serving_parts(records, artifacts, assignment, route, packet, prompt, history=()):
-    from . import review_parts, review_parts_slate, review_prompt_paragraphs
+    from . import review_parts, review_prompt_paragraphs, review_protocol
     from .review_staged_protocol import ControllerArtifacts
     staged = ControllerArtifacts(artifacts)
-    if (review_parts_slate.applies(assignment, packet)
-            and not review_parts_slate.can_start_series(records, staged, assignment, route, packet, prompt, history)):
-        return None
     parameters = prompt.get('parameters', {})
     base = dict(orchestration=parameters.get('orchestration'), repair=bool(parameters.get('context_repair')),
-                excerpts='reviewer_excerpts' in parameters, common_version=parameters.get('common_prompt_version'))
+                excerpts='reviewer_excerpts' in parameters,
+                common_version=review_protocol.find_common_prompt_version(prompt))
     base.update(review_prompt_paragraphs.read_paragraph_parameters(prompt))
     if assignment['role'] in ('bar', 'slate', 'result'):
         base['excerpts'] = True
     planned = review_parts.prepare_packet(records, staged, dict(assignment, route_id=route['id']),
-        route, copy.deepcopy(packet), prompt, history if review_parts_slate.applies(assignment, packet) else [],
-        base_prompt_parameters=base)
+        route, copy.deepcopy(packet), prompt, history,
+        base_prompt_parameters=base, serving_trial=True)
     if review_parts.find_kind(planned) is None:
         return None
-    turn_prompt = review_parts.build_turn_prompt(assignment['role'], base, planned[review_parts.KEY])
+    take_capacity_request(planned)
+    turn_prompt = review_parts.build_packet_prompt(assignment['role'], base, planned)
     return transport.request_body(route, turn_prompt['text'], planned, [])
 
 
 
-def _build_serving_repair(records, artifacts, assignment, parent, route):
+def _build_serving_repair(records, artifacts, assignment, parent, route, *, repair_plan=None):
     """Measure the reassessment that the preserved-slot steps will create, with buffered writes."""
     from . import review_context_repair as repair_context, review_protocol, review_parts, review_parts_repair
-    from . import review_prompt_paragraphs, bar_sources
     from .evaluation import Evaluation
     from .review_staged_protocol import ControllerArtifacts
     from .review_delivery_notice import prepare_notice
     from .review_plan_steps import CAPACITY_ROUTE_RETIRE_REASON
     if parent.get('staged_review'):
         return None
-    event = dict(id='capacity-retirement', assignment_id=parent['id'], kind='route_retired',
-                 source='owner', reason=CAPACITY_ROUTE_RETIRE_REASON, evidence=[],
-                 recorded_revision=parent['recorded_revision'] + 1)
-    prospective = dict(records, review_context_event=dict(records.get('review_context_event', {}),
-                        **{event['id']: event}))
+    prospective, event = records, None
+    if repair_plan is None or repair_plan['cause'] is None:
+        event = dict(id='capacity-retirement', assignment_id=parent['id'], kind='route_retired',
+                     source='owner', reason=CAPACITY_ROUTE_RETIRE_REASON, evidence=[],
+                     recorded_revision=max((row['recorded_revision']
+                         for row in records.get('review_context_event', {}).values()), default=parent['recorded_revision']) + 1)
+        prospective = dict(records, review_context_event=dict(records.get('review_context_event', {}),
+                            **{event['id']: event}))
     staged = Evaluation.of(prospective, ControllerArtifacts(artifacts))
-    chain = repair_context._exposure_lineage(prospective, parent)
+    chain = (repair_context._exposure_lineage(prospective, parent) if repair_plan is None
+             else repair_plan['lineage'])
     roles = repair_context.ROLES + ('adjudicator',)
     scientific = repair_context.collect_scientific_history(prospective, staged, chain, roles)
     state = review_protocol.assignment_state(prospective, staged, parent['id'])
-    events = repair_context.cause_events(prospective, {row['id'] for row in chain})
+    if repair_plan is None:
+        events = repair_context.cause_events(prospective, {row['id'] for row in chain})
+    else:
+        events = repair_plan['events'] + ([event] if event is not None else [])
     repair = dict(predecessor=parent, slot_id=repair_context.slot_id(prospective, parent),
         packet=next(row['packet'] for row in scientific if row['assignment_id'] == parent['id']),
         predecessor_binding=repair_context.bind_predecessor(prospective, parent, state, scientific),
@@ -485,54 +511,127 @@ def _build_serving_repair(records, artifacts, assignment, parent, route):
         value['subject'] = assignment['subject']
     with transport.text_only_delivery(route['adapter'] in transport.TEXT_ONLY_ADAPTERS):
         packet = review_protocol._repair_packet(prospective, staged, value, repair)
-    parameters = dict(repair=parent['role'] != 'adjudicator',
-        orchestration='problem_creation' if value.get('subject', {}).get('kind') == 'problem' else None,
-        excerpts=parent['role'] in bar_sources.ROLES)
-    parameters.update(review_prompt_paragraphs.select_prompt_parameters(parent['role'], packet))
+    packet = review_protocol.prepare_capacity_notice(prospective, route, parent['role'], packet)
+    parameters = review_protocol.assignment_prompt_parameters(value, packet,
+        problem=value.get('subject', {}).get('kind') == 'problem')
     prompt = review_protocol.canonical_prompt(parent['role'], **parameters)
     packet = review_parts_repair.prepare_packet(prospective, staged, value, route, packet, prompt, [],
-        base_prompt_parameters=parameters, slot_id=repair['slot_id'], repair=repair)
+        base_prompt_parameters=parameters, slot_id=repair['slot_id'], repair=repair, head=parent)
     if review_parts.find_kind(packet) is not None:
-        prompt = review_parts.build_turn_prompt(parent['role'], parameters, packet[review_parts.KEY])
+        prompt = review_parts.build_packet_prompt(parent['role'], parameters, packet)
+    packet, prompt = review_protocol.apply_planned_capacity_notice(prospective, route, parent['role'], packet, prompt)
+    take_capacity_request(packet)
     packet, prompt, history = prepare_notice(prospective, staged, route,
         dict(value, session_id=value['id'], history_assignment_id=None), packet, prompt, [])
     return transport.request_body(route, prompt['text'], packet, history)
 
 
-def find_serving_routes(records, role, packet, *, artifacts, assignment, prompt, history=()):
-    """List verified routes for this role and input without sending or changing a record."""
+# The id and the reviewer of the trial of a new entry that a capacity answer names; the trial records nothing.
+NEW_ENTRY_TRIAL_ID = 'capacity-new-entry-trial'
+
+
+def find_serving_routes(records, role, packet, *, artifacts, assignment, prompt, history=(),
+                        exclude_route=None, repair_plan=None, trial_assignment=None, public_assignment=None):
+    """List verified routes for this role and input without sending or changing a record.
+
+    With trial_assignment, a route serves only when the trial prepares the public assignment there, and an
+    answer that needs a step that has not happened yet is kept in repair_plan['conditional_routes']."""
+    from collections import ChainMap
     from .errors import ResearchError
     from .review_protocol import route_state, retired_routes, canonical_prompt, _require_route_runtime
     from .review_excerpts import read_sent_packet
     from .review_problem_parts import preserves_ordinary_packet
-    from .review_plan_steps import find_capacity_parent, select_route_steps
-    from . import review_parts_slate
-    parent = find_capacity_parent(records, assignment, packet)
+    from .review_plan_steps import (describe_capacity_assignment, describe_capacity_repair, describe_new_entry_steps,
+        find_capacity_repair_binding, find_capacity_repair_probe, reconcile_capacity_routes)
+    from . import review_parts, review_parts_slate
     result = []
     prompt_record = prompt if isinstance(prompt, dict) else dict(canonical_prompt(role), text=prompt)
-    if _find_body_without_text(records, packet) is not None:
+    projected = review_parts.find_kind(packet) is not None
+    slate = not projected and review_parts_slate.applies(assignment, packet)
+    if not slate and _find_body_without_text(records, packet) is not None:
         return result
+    if repair_plan is None:
+        repair_plan = describe_capacity_repair(records, artifacts, assignment, packet)
+    parent, cause = repair_plan['parent'], repair_plan['cause']
+    public_assignment = assignment if public_assignment is None else public_assignment
+    context = assignment.get('context', {})
+    bound_repair = parent is not None and bool(find_capacity_repair_binding(assignment, parent))
+    continuation = context.get('prior_assignment_id') is not None
+    continued_slate_series = continuation and role == 'slate' and parent is not None and (
+        parent.get(review_parts.KEY, {}).get('adapter') == 'problem_slate')
+    # A problem review, a first entry and a running slate series try the public payload itself on each route.
+    direct_entry = not bound_repair and (parent is None or continued_slate_series
+                                         or packet.get('subject', {}).get('kind') == 'problem')
+    retired = retired_routes(records)
     visual = bool(packet.get('visual_source_delivery') or packet.get('visual_context_repair'))
     for route in records.get('review_route', {}).values():
-        if route['id'] in retired_routes(records):
+        route_id = route['id']
+        if route_id in retired:
+            continue
+        if continued_slate_series and route_id != parent['route_id']:
             continue
         if visual and route['adapter'] != 'codex_cli_visual_v1':
             continue
-        if route_state(records, artifacts, route['id'])['context_status'] != 'verified_for_route':
+        state = route_state(records, artifacts, route_id)
+        if state['context_status'] != 'verified_for_route':
             continue
         try:
             _require_route_runtime(route)
         except ResearchError:
             continue
-        delivery = 'single'
-        candidate_packet = copy.deepcopy(packet)
-        profile = read_output_profile(records, route)
         try:
-            starts_slate_series = (review_parts_slate.applies(assignment, packet)
+            if trial_assignment is not None:
+                if direct_entry and route_id != exclude_route:
+                    payload = describe_capacity_assignment(records, artifacts, public_assignment, route_id)['payload']
+                    try:
+                        result.append(dict(route_id=route_id, **trial_assignment(payload)))
+                        continue
+                    except ResearchError:
+                        pass
+                if parent is None or continued_slate_series:
+                    continue
+                if 1 in repair_plan['numbers']:
+                    if cause is None and route_id == parent['route_id']:
+                        continue
+                    proof = find_capacity_repair_probe(records, state, cause)
+                    repair_plan['probes'][route_id] = proof
+                    if bound_repair:
+                        if route_id == exclude_route:
+                            continue
+                        prospective = None
+                        if proof is None:
+                            # Keep the observed capacity and authenticated probe bytes. Only the
+                            # ordering is hypothetical and nothing in this overlay is published.
+                            proof = state['probe_id']
+                            probes = records['review_route_probe']
+                            fresh = dict(probes[proof], recorded_revision=cause['after_revision'] + 1)
+                            prospective = ChainMap({'review_route_probe': ChainMap({proof: fresh}, probes)}, records)
+                        payload = describe_capacity_assignment(records, artifacts, public_assignment, route_id,
+                                                               repair_probe=proof)['payload']
+                        checked = trial_assignment(payload, prospective=prospective)
+                        if prospective is None:
+                            result.append(dict(checked, route_id=route_id, delivery='reassessment'))
+                            continue
+                    else:
+                        request = _build_serving_repair(records, artifacts, assignment, parent, route,
+                                                        repair_plan=repair_plan)
+                        if request is None or not measure_request(route, request, records=records, artifacts=artifacts)['fits']:
+                            continue
+                    repair_plan.setdefault('conditional_routes', []).append(dict(route_id=route_id, delivery='reassessment'))
+                    continue
+            if route_id == exclude_route:
+                continue
+            delivery = 'single'
+            candidate_packet = copy.deepcopy(packet)
+            profile = read_output_profile(records, route)
+            starts_slate_series = (slate and not continuation
                 and review_parts_slate.can_start_series(records, artifacts, assignment, route, packet, prompt_record, history))
-            if (parent is not None and not starts_slate_series
-                    and 1 in select_route_steps(records, artifacts, parent)):
-                request = _build_serving_repair(records, artifacts, assignment, parent, route)
+            if (1 in repair_plan['numbers'] and not starts_slate_series and not continued_slate_series):
+                if route_id == parent['route_id'] and cause is None:
+                    continue
+                proof = find_capacity_repair_probe(records, state, cause)
+                repair_plan['probes'][route_id] = proof
+                request = _build_serving_repair(records, artifacts, assignment, parent, route, repair_plan=repair_plan)
                 if request is not None:
                     measure = measure_request(route, request, profile, records=records, artifacts=artifacts)
                     if measure['fits']:
@@ -552,13 +651,15 @@ def find_serving_routes(records, role, packet, *, artifacts, assignment, prompt,
                     candidate_packet['evidence'] = [omitted.get(row['artifact']['sha256'], row)
                         if row.get('encoding') == 'base64' else row for row in packet.get('evidence', [])]
                 if _find_body_without_text(records, sent) is not None:
-                    continue
-                if not preserves_ordinary_packet(artifacts, candidate_packet, request):
+                    if not slate:
+                        continue
+                    request = None
+                elif not preserves_ordinary_packet(artifacts, candidate_packet, request):
                     request = None
                 elif not measure_request(route, request, profile, records=records, artifacts=artifacts)['fits']:
                     request = None
             if request is None:
-                if not _can_deliver_parts(assignment, packet, route):
+                if projected or not _can_deliver_parts(assignment, packet, route):
                     continue
                 request = _build_serving_parts(records, artifacts, assignment, route, candidate_packet, prompt_record, history)
                 if request is None:
@@ -566,10 +667,20 @@ def find_serving_routes(records, role, packet, *, artifacts, assignment, prompt,
                 delivery = 'parts'
             measure = measure_request(route, request, profile, records=records, artifacts=artifacts)
             if measure['fits']:
-                result.append(dict(route_id=route['id'], delivery=delivery, measure=measure))
+                if trial_assignment is not None:
+                    # These role-specific handoffs require a new record or a new packet. The assignment that ends them
+                    # is tried on this route record, whose configuration the new record takes: a refusal of the store
+                    # leaves the route out.
+                    entry = describe_new_entry_steps(records, artifacts, parent, repair_plan['numbers'], route_id)[-1]
+                    if entry['command'] == 'review-assignment':
+                        trial_assignment(dict(entry['payload'], id=NEW_ENTRY_TRIAL_ID, route_id=route_id,
+                                              reviewer_id=NEW_ENTRY_TRIAL_ID))
+                    repair_plan.setdefault('conditional_routes', []).append(dict(route_id=route_id, delivery=delivery))
+                else:
+                    result.append(dict(route_id=route_id, delivery=delivery, measure=measure))
         except ResearchError:
             continue
-    return result
+    return reconcile_capacity_routes(result, repair_plan)
 
 
 def _find_body_without_text(records, packet):
@@ -584,31 +695,49 @@ def _find_body_without_text(records, packet):
                  and row['artifact']['sha256'] not in represented), None)
 
 
-def require_covered_assignment(records, artifacts, assignment, packet, prompt, request=None, history=()):
-    """Refuse an uncovered assignment before any review call or assignment is recorded."""
+def require_covered_assignment(records, artifacts, assignment, packet, prompt, request=None, history=(), *,
+                               series_body=None, serving_input=None, planner_floor=None, preserve=False,
+                               trial_assignment=None, public_assignment=None, explain=True):
+    """Refuse an uncovered assignment before any review call or assignment is recorded.
+
+    A serving trial passes explain=False: a covered request returns its measure, and a refusal carries no
+    serving routes and no steps."""
     from .errors import ResearchError
-    from .review_plan_steps import describe_capacity_steps
+    from .review_plan_steps import describe_capacity_repair, describe_capacity_steps
     from . import openness_reading
+    from .review_problem_parts import preserves_ordinary_packet
     prompt_text = prompt['text'] if isinstance(prompt, dict) else prompt
-    body = _find_body_without_text(records, packet)
+    body = series_body or _find_body_without_text(records, packet)
     if request is None:
-        if body is None:
-            return
+        if body is None and planner_floor is None:
+            return None
         request = transport.request_body(records['review_route'][assignment['route_id']], prompt_text, packet, history)
     route = records['review_route'][assignment['route_id']]
     # Running protocols retain their character admission; a zero-capacity runtime still needs its probe.
     earlier_reading = openness_reading.find_protocol(packet) is not None
     capacity = describe_route_capacity(route, records=records, artifacts=artifacts)
     measure = measure_request(route, request, records=records, artifacts=artifacts)
-    if body is None and (measure['fits'] or (earlier_reading and measure['token_limit'] > 0 and not measure['binary_inputs']
+    complete = not preserve or preserves_ordinary_packet(artifacts, packet, request)
+    if planner_floor is None and body is None and complete and (measure['fits'] or (earlier_reading and measure['token_limit'] > 0 and not measure['binary_inputs']
                           and (measure['character_limit'] is None or measure['characters'] <= measure['character_limit']))):
-        return
+        return None if explain else measure
+    if not explain:
+        raise ResearchError('review_route_capacity_below_floor', CAPACITY_STOP_MESSAGE)
     reason = 'body_without_text_form' if body is not None else measure.get('reason', 'no_parts_delivery')
-    serving = find_serving_routes(records, assignment['role'], packet, artifacts=artifacts,
-                                  assignment=assignment, prompt=prompt, history=history)
+    trial_packet, trial_prompt, trial_history = serving_input or (packet, prompt, history)
+    repair_plan, serving = None, []
+    if series_body is None:
+        repair_plan = describe_capacity_repair(records, artifacts, assignment, trial_packet)
+        serving = find_serving_routes(records, assignment['role'], trial_packet, artifacts=artifacts,
+                                      assignment=assignment, prompt=trial_prompt, history=trial_history,
+                                      exclude_route=route['id'], repair_plan=repair_plan,
+                                      public_assignment=public_assignment, trial_assignment=trial_assignment)
     probe = None
     unavailable_probe = None
-    if (reason == 'no_parts_delivery' and route['adapter'] != 'codex_cli_visual_v1'
+    if (planner_floor is None and reason == 'no_parts_delivery' and complete
+            and route['adapter'] != 'codex_cli_visual_v1'
+            and (measure['character_limit'] is None or measure['characters'] <= measure['character_limit'])
+            and measure['tokens_upper'] is not None and measure['tokens_upper'] > measure['token_limit']
             and capacity['input_tokens']['source'] in ('observed', 'default')):
         probe = select_capacity_probe_size(records, route, measure['tokens_upper'] or measure['text_tokens_upper'], artifacts=artifacts)
         from .review_protocol import build_probe_prompt
@@ -624,13 +753,19 @@ def require_covered_assignment(records, artifacts, assignment, packet, prompt, r
             probe = None
     details = dict(reason=reason, measure=measure, capacity_source=capacity['input_tokens']['source'],
                    serving_routes=serving, owner_decides=CAPACITY_OWNER_DECISION,
-                   then=describe_capacity_steps(records, artifacts, assignment, serving, probe, body=body, packet=packet))
+                   then=describe_capacity_steps(records, artifacts, assignment, serving, probe, body=body,
+                                                packet=trial_packet, series_body=series_body is not None,
+                                                repair_plan=repair_plan, public_assignment=public_assignment))
+    if planner_floor is not None:
+        for key, value in planner_floor.items():
+            details.setdefault(key, value)
+        details['planner_floor'] = planner_floor
     if unavailable_probe is not None:
         details['probe_unavailable'] = unavailable_probe
     details['closing_unit'] = ('capacity-probe' if probe is not None or unavailable_probe is not None else 'visual-series'
         if reason != 'no_parts_delivery' else 'paper-series' if assignment['role'] in ('manuscript', 'standalone')
         else 'https-series' if route['adapter'] == transport.ADAPTER else 'single-request-series')
-    if not serving:
+    if not serving and not any(answer.get('route_id') for answer in details['then']):
         details['coverage'] = UNSERVED_REVIEW_MESSAGE
     raise ResearchError('review_route_capacity_below_floor', CAPACITY_STOP_MESSAGE, details)
 
@@ -1745,7 +1880,10 @@ PLAN_VIOLATED_MESSAGE = ('The exact request of this turn is larger than the stor
 BELOW_FLOOR_MESSAGE = ('The smallest allocation at this step of the capacity plan is larger than the room for it: '
                        'details.minimum against details.room. The room can come from the input limit of the route, '
                        'from its output profile or from the share of one target. Inspect those, then record a route '
-                       'that can serve the chain with review-route.')
+                       'that can serve the chain with review-route. Where details.target_table is present, the step '
+                       'is the admission of a series of the parts protocol v3, whose every turn carries the table of '
+                       'the targets: when the characters of that table, with the prompt and the reserves of a turn, '
+                       'exceed details.frame_maximum_characters, no route admits the series.')
 CAPACITY_PLAN_DESCRIPTION = ('The capacity plan of a chain is fixed at its first assignment: the limits of the route, '
                              'the rule of measurement, the output profile, the frames, the inventory, the targets and '
                              'the allowances. Every later turn of the chain names the plan by its digest.')
@@ -1825,6 +1963,24 @@ def compute_final_target_allowances(limits, selected, targets, admission_room):
     return counts, answers
 
 
+def lower_profile_frame(profile, kind, reserve):
+    """The bound of a frame of kind that the measured output profile of a route class leaves, or None when the profile
+    does not lower it. The frame is lowered at a measured range boundary when even its floor would exceed that range:
+    below the smallest task level of kind with at least four attempts and more than 5 percent of them at or over the
+    output limit. reserve is what the frame holds besides its fields (its floor, its carried state and the notice);
+    when it exceeds the level below that boundary, the chain is refused."""
+    from .errors import ResearchError
+    unsafe = [row['task_level'] for row in profile['rows'] if row['kind'] == kind and row['attempts'] >= 4
+              and row['task_level'] not in (None, 'unmeasured') and row['at_or_over_limit'] / row['attempts'] > 0.05]
+    if not unsafe:
+        return None
+    preceding = max((level for level in TASK_LEVELS if type(level) is int and level < min(unsafe)), default=0)
+    if preceding < reserve:
+        raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
+                            dict(kind=kind, room=preceding, minimum=reserve, command='review-route'))
+    return preceding - reserve
+
+
 def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_budget=None,
                         records=None, artifacts=None, measure=None, allowance_rows_bound=None,
                         pending_requests_bound=0, final_pages=False):
@@ -1870,17 +2026,8 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
             raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
                                 dict(kind=kind, room=text_room, minimum=sum(fields.values()) + floor +
                                      carried_minimum + BOUNDED_NOTICE_CHARACTERS, command='review-route'))
-        # Lower the frame at a measured range boundary when even its floor would exceed that range.
-        own = [row for row in profile['rows'] if row['kind'] == kind and row['attempts'] >= 4
-               and row['task_level'] not in (None, 'unmeasured')]
-        unsafe = [row['task_level'] for row in own if row['at_or_over_limit'] / row['attempts'] > 0.05]
-        if unsafe:
-            preceding = max((level for level in TASK_LEVELS if type(level) is int and level < min(unsafe)), default=0)
-            lowered = preceding - floor - carried_minimum - BOUNDED_NOTICE_CHARACTERS
-            if lowered < 0:
-                raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
-                    dict(kind=kind, room=preceding, minimum=floor + carried_minimum + BOUNDED_NOTICE_CHARACTERS,
-                         command='review-route'))
+        lowered = lower_profile_frame(profile, kind, floor + carried_minimum + BOUNDED_NOTICE_CHARACTERS)
+        if lowered is not None:
             bound = min(bound, lowered)
         minimums = {name[len(FRAME_UNIT_FIELD_PREFIX):]: fields[name[len(FRAME_UNIT_FIELD_PREFIX):]]
                     for name in fields if name.startswith(FRAME_UNIT_FIELD_PREFIX)}
@@ -2089,9 +2236,8 @@ def describe_capacity_forecast(plan, route, profile, *, records=None, turn_kind=
             output=describe_output_warning(selected)))
 
 
-def describe_plan_preflight(records, route, request, plan, kind, *, observations=()):
-    """Compare the exact native text with the pinned rule and bound; forecasts remain advisory."""
-    from .review_preflight import PLANNED_PROTOCOL
+def compare_plan_request(route, request, plan, kind, *, observations=(), binding=None):
+    """Measure the exact wire text under the pinned character and token rules."""
     measured = measure_request(route, request)
     rule = plan['measure']
     calibrated = rule['rule'] == 'calibrated' and measured['non_ascii_share'] <= rule['non_ascii_limit']
@@ -2099,28 +2245,46 @@ def describe_plan_preflight(records, route, request, plan, kind, *, observations
                                 if calibrated else measured['utf8_bytes'])
     measured['measure'] = 'calibrated' if calibrated else 'bytes'
     measured['characters_per_token'] = rule['characters_per_token'] if calibrated else None
-    from .review_excerpts import read_sent_packet
-    sent = read_sent_packet(request) or {}
-    binding = sent.get('session_turn', sent.get('session_final', sent.get('session_combine', sent.get('reading_turn', sent.get('reading_final',
-        sent.get('reading_combine', sent.get('review_parts', {})))))))
+    if binding is None:
+        from .review_excerpts import read_sent_packet
+        sent = read_sent_packet(request) or {}
+        binding = sent.get('session_turn', sent.get('session_final', sent.get('session_combine', sent.get('reading_turn', sent.get('reading_final',
+            sent.get('reading_combine', sent.get('review_parts', {})))))))
     from .openness_reading import BOUNDED_CHAIN_PROTOCOLS
     if binding.get('protocol') in BOUNDED_CHAIN_PROTOCOLS + ('exactory-review-parts-v3',
                                                            'exactory-independent-review-sources-v4'):
         bounds = binding['capacity']
         observations = [dict(material_allowance=bounds.get('level_material_allowance', bounds['material_allowance']))]
-    bounds = derive_plan_task_limits(plan, ('final' if kind == 'combine' and 'combine' not in plan['task'] else kind), observations)['request_bound']
+    bounds = derive_plan_task_limits(plan, ('final' if kind == 'combine' and 'combine' not in plan['task'] else kind),
+                                    observations)['request_bound']
     comparisons = {name: dict(value=measured[name], bound=value,
                               fits=value is None or measured[name] <= value)
                    for name, value in bounds.items()}
-    fits = all(row['fits'] for row in comparisons.values())
-    measured['fits'] = fits
+    measured['fits'] = all(row['fits'] for row in comparisons.values())
+    return measured, comparisons, observations, binding
+
+
+def describe_plan_preflight(records, route, request, plan, kind, *, observations=()):
+    """Compare the exact native text with the pinned rule and bound; forecasts remain advisory."""
+    from .review_preflight import PLANNED_PROTOCOL
+    measured, comparisons, observations, binding = compare_plan_request(
+        route, request, plan, kind, observations=observations)
     forecast = describe_capacity_forecast(plan, route, read_output_profile(records, route), records=records,
         turn_kind=kind, observations_by_kind={kind: observations})
     if binding.get('protocol') == 'exactory-review-parts-v3':
         apply_final_page_forecast(forecast, binding.get('final_forecast'))
     return dict(protocol=PLANNED_PROTOCOL, request_measure=measured,
-        plan_comparison=dict(digest=digest(plan), kind=kind, fits=fits, sizes=comparisons),
+        plan_comparison=dict(digest=digest(plan), kind=kind, fits=measured['fits'], sizes=comparisons),
         capacity_forecast=forecast)
+
+
+def take_capacity_request(packet):
+    """Separate the internal plan declaration from the digested delivery."""
+    declaration = packet.pop(CAPACITY_REQUEST_KEY, None)
+    if declaration is not None:
+        packet.pop('digest', None)
+        packet['digest'] = digest(packet)
+    return declaration
 
 
 def prepare_assignment_capacity(records, artifacts, route, declaration):
@@ -2183,7 +2347,8 @@ def prepare_assignment_capacity(records, artifacts, route, declaration):
         if (type(pending_bound) is not int or pending_bound < 0
                 or pending_bound and 'request' not in frames):
             raise ResearchError('invalid_input',
-                'A pending request bound is a nonnegative integer for a plan with a request turn.')
+                'pending_requests_bound must be a nonnegative integer, and a value above zero needs a capacity '
+                'plan that holds a request turn.')
         plan = plan_chain_capacity(route, read_output_profile(records, route), frames=frames,
                                    inventory=inventory, targets=targets, carried_budget=budget,
                                    measure=declaration.get('measure'),
@@ -2224,7 +2389,7 @@ def apply_final_page_forecast(forecast, counts):
     forecast['basis'] = 'final_page_plan'
 
 
-def derive_plan_task_limits(plan, kind, observations=(), *, notice_characters=0):
+def derive_plan_task_limits(plan, kind, observations=(), *, notice_characters=0, fixed_notice_ceiling=False):
     """Derive allowances from pinned levels and authenticated observations supplied by the verifier."""
     task = copy.deepcopy(plan['task'][kind])
     levels = [row['material_allowance'] for row in task['levels']]
@@ -2253,9 +2418,10 @@ def derive_plan_task_limits(plan, kind, observations=(), *, notice_characters=0)
     if notice_characters:
         task.update(level_material_allowance=allowance, notice_characters=notice_characters,
                     material_allowance=max(levels[-1], allowance - notice_characters))
-        task['task_characters'] = (plan['frame'][kind]['bound'] + task.get('carried_characters', 0)
-                                   + task['material_allowance'] + notice_characters)
-        task['request_bound']['text_characters'] = task['task_characters']
+        if not fixed_notice_ceiling:
+            task['task_characters'] = (plan['frame'][kind]['bound'] + task.get('carried_characters', 0)
+                                       + task['material_allowance'] + notice_characters)
+            task['request_bound']['text_characters'] = task['task_characters']
     return task
 
 
@@ -2327,10 +2493,28 @@ OUTPUT_OVER_CAP_DECISION_MESSAGE = ('No smaller task that the protocol admits is
                                     'allowance. at_or_over_limit_share, profile_rows and attempts show what was '
                                     'measured. The owner decides whether the review moves to a route with another '
                                     'effort or another output limit; record that route with review-route.')
+# The condition of the answer Move to another route when the floor of the turn comes from the measured output profile
+# of the class of its route (an output cap of a chain with a capacity plan), which every route of that class shares.
+OUTPUT_CLASS_ROUTE_CONDITION = (
+    'The new route must differ from the stopped route in its adapter, its model or its effort: a route of the same '
+    'three shares the measured output profile that lowered this turn below its floor, and the store refuses its first '
+    'assignment with review_route_capacity_below_floor.')
 CAPACITY_DECISION_MESSAGE = ('This protocol has no smaller task for this turn on this route. The steps of the answer '
                              'move the review to another route. required_unit, when present, names the unit of a '
                              'later release that gives this protocol a smaller task.')
-FINAL_FLOOR_DECISION_TEXT = 'This final turn has no smaller task; after one repeated run, choose the supplied route steps or an admitted export.'
+# details.message for a turn of a final (a final in one request, a page, a closing turn or a condensing turn) that
+# ended at the output limit and has no smaller task, in a chain that takes pages under protocol v7 or the math
+# protocol v2. The plan of review-series carries it with the one repeated run and with the decision stop
+# review_output_over_cap that follows.
+FINAL_FLOOR_DECISION_TEXT = (
+    'This turn of a final ended at the output limit of the route, and its chain holds no smaller task for it. '
+    'details.range_not_served states the smallest tasks of such a chain, and details.at_or_over_limit_share, '
+    'details.profile_rows and details.attempts show what was measured. review-series first plans one more run of '
+    'the same turn. When that run also ends at the limit, review-series stops, and the owner decides between the '
+    'answers of details.decision. When details.successor is present, the answer that details.export_message names '
+    'starts a new chain over a new packet with the same reviewer, and details.successor states the admission of '
+    'that chain and what it carries. The answer Move to another route takes the review to a route with another '
+    'effort or another output limit; record that route with review-route.')
 
 
 def list_capacity_recovery_rows():
@@ -2435,7 +2619,19 @@ def describe_capacity_decision(records, artifacts, assignment, outcome, details)
                else [7])
     if numbers in ([4], [5]):
         numbers = [7] + numbers
-    steps = [describe_step(records, artifacts, assignment, number) for number in numbers]
+    checked_math_export = False
+    if version == reading.MATH_PROTOCOL_V2 and outcome == 'output_over_cap':
+        from .errors import ResearchError
+        from .native_review import load_packet
+        from .review_math_handoff import find_recovery_mode
+        native = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
+        # Step 5 names this head as its native predecessor only where the admission of the store takes that link.
+        try:
+            checked_math_export = find_recovery_mode(records, artifacts, assignment, native) is not None
+        except ResearchError:
+            checked_math_export = False
+    steps = [describe_step(records, artifacts, assignment, number, checked_export=checked_math_export)
+             for number in numbers]
     if details.get('required_unit'):
         for step in steps:
             if step['id'] in (4, 5):
@@ -2446,6 +2642,41 @@ def describe_capacity_decision(records, artifacts, assignment, outcome, details)
             and details.get('kind') in ('final', 'combine')):
         details['message'] = FINAL_FLOOR_DECISION_TEXT
     answers = [dict(answer='Move to another route', steps=steps)]
+    if outcome == 'output_over_cap' and assignment.get('capacity_plan'):
+        # The condition stands where the store refuses a route of this class instead of starting the review in an
+        # earlier form. That needs a head that keeps its form: a recorded series of the parts protocol v3, as the
+        # admission of its repair reads it (select_series_protocols). A session of the rules v4 and a chain of a
+        # reading protocol start a new chain in an earlier form when their admission refuses. It also needs the
+        # output profile of the class to refuse the frame of this turn (its kind as derive_turn_task_limits reads
+        # it), the rule of plan_chain_capacity; the reserve is the floor of the frame and the notice.
+        from .errors import ResearchError
+        from .review_parts import select_series_protocols
+        from .review_parts_v3 import PROTOCOL as PARTS_V3_PROTOCOL
+        from .review_refusal_notice import BOUNDED_NOTICE_CHARACTERS
+        protocols, recorded = select_series_protocols(records, artifacts, {}, head=assignment)
+        if recorded and protocols == (PARTS_V3_PROTOCOL,):
+            kind = assignment.get('capacity_plan_kind') or describe_assignment_kind(assignment)
+            profile = read_output_profile(records, records['review_route'][assignment['route_id']])
+            try:
+                lower_profile_frame(profile, kind, describe_material_levels(kind)[-1] + BOUNDED_NOTICE_CHARACTERS)
+            except ResearchError:
+                answers[0]['condition'] = OUTPUT_CLASS_ROUTE_CONDITION
+    if checked_math_export and 5 in numbers:
+        from .review_math_handoff import find_successor
+        from .review_continuation import describe_checked_math_export, describe_native_math_stop
+        recovered = find_successor(records, assignment)
+        if recovered is not None:
+            details['successor_assignment_id'] = recovered['id']
+            answers = [dict(answer='Go on with the chain that details.successor_assignment_id names', steps=[
+                dict(command='review-series', payload=dict(assignment_id=recovered['id']), chooses=[])])]
+        else:
+            index = numbers.index(5)
+            try:
+                steps[index] = describe_checked_math_export(records, artifacts, assignment, native, steps[index], 'cap')
+            except ResearchError as error:
+                blocked = describe_native_math_stop({}, error, native=native)['details']
+                details['export_refusal'] = blocked['refusal']
+                answers = [dict(answer=blocked['message'], steps=[blocked['step']])]
     if outcome == 'output_over_cap' and assignment.get('reading_chain'):
         from .openness_successor import (describe_successor_handoff, describe_math_successor_answer,
                                          is_math_successor_installed, MATH_PROTOCOLS, MATH_SUCCESSOR_ANSWER,
@@ -2478,7 +2709,7 @@ def plan_capacity_recovery(records, artifacts, assignment, outcome) -> 'Recovery
     profile_rows = [copy.deepcopy(value) for value in profile['rows'] if value['kind'] == row['kind']]
     sample = sum(value['attempts'] for value in profile_rows)
     share = sum(value['at_or_over_limit'] for value in profile_rows) / sample if sample else None
-    identifiers = set(failures.list_turn_assignments(records, assignment))
+    identifiers = set(failures.list_failure_position_assignments(records, artifacts, assignment))
     attempts = []
     for attempt in sorted(records.get('review_attempt', {}).values(),
                           key=lambda value: (value.get('recorded_revision', 0), value['id'])):
@@ -2516,12 +2747,14 @@ def plan_capacity_recovery(records, artifacts, assignment, outcome) -> 'Recovery
             return replacement
         return describe_capacity_decision(records, artifacts, assignment, outcome, details)
     if row['handler'] in ('reading_v7', 'final_v7'):
-        from .openness_reading_v7 import plan_turn_recovery, FINAL_PAGES_STATEMENT, FINAL_PAGE_FLOOR_STATEMENT, V7_FINAL_FORMS
+        from .openness_reading_v7 import describe_unserved_range, plan_turn_recovery
         replacement = plan_turn_recovery(records, artifacts, assignment, outcome)
-        if replacement is not None:
+        if replacement is not None and replacement['kind'] == 'replace':
             replacement['details'].update(details)
             return replacement
-        details['range_not_served'] = FINAL_PAGES_STATEMENT if V7_FINAL_FORMS == ('request',) else FINAL_PAGE_FLOOR_STATEMENT
+        if replacement is not None:
+            details.update(replacement['details'])
+        details['range_not_served'] = describe_unserved_range(packet, assignment)
         return describe_capacity_decision(records, artifacts, assignment, outcome, details)
     replacement = (failures.plan_output_replacement(records, artifacts, assignment,
                     allow_single=outcome == 'output_over_cap', outcome=outcome)

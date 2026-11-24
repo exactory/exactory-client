@@ -93,7 +93,7 @@ def validate_final(records, artifacts, assignment, output, *, attempt=None):
 def read_prior_assignment(records, artifacts, value):
     """Bind a pending native parts continuation to its observed predecessor."""
     from .operations import normalized_text
-    from .review_parts import KEY, PROTOCOL
+    from .review_parts import KEY, PROTOCOL, is_intermediate_answer
     from .review_protocol import assignment_state, find_replacement, has_ended_without_output, is_dead_assignment
 
     prior_id = value['context']['prior_assignment_id']
@@ -121,17 +121,19 @@ def read_prior_assignment(records, artifacts, value):
     if not state['ready']:
         raise ResearchError('review_source_continuation_unverified', 'The native predecessor needs a ready output')
     from .workspace import strict_json
-    page = (binding.get('protocol') == 'exactory-review-parts-v3' and
-            strict_json(artifacts.read(prior['packet']))[KEY].get('final_form') == 'page')
-    if (binding['kind'] == 'final' and not page
-            and state['output'].get('kind') != 'requests' and state['output'].get('stage') != 'material'):
+    if binding['protocol'] == 'exactory-review-parts-v3':
+        pending = is_intermediate_answer(strict_json(artifacts.read(prior['packet'])), state['output'])
+    else:
+        pending = (binding['kind'] != 'final' or state['output'].get('kind') == 'requests'
+                   or state['output'].get('stage') == 'material')
+    if not pending:
         raise ResearchError('review_resampling_forbidden', 'A native final ends its review series')
     return prior
 
 
 def find_final_assignment(records, artifacts, identifier):
     """Follow live continuations of one attested series, retaining failed-turn replacements."""
-    from .review_parts import KEY, find_kind
+    from .review_parts import KEY, find_kind, is_intermediate_answer
     from .review_protocol import assignment_state, find_replacement, has_ended_without_output, is_dead_assignment
     from .workspace import strict_json
 
@@ -157,7 +159,9 @@ def find_final_assignment(records, artifacts, identifier):
             state = assignment_state(records, artifacts, current['id'])
             if (find_kind(packet) == 'final'
                     and packet[KEY].get('replaces_assignment_id', packet[KEY]['series_assignment_id']) == identifier
-                    and state['ready'] and state['output'].get('kind') != 'requests'):
+                    and state['ready'] and state['output'].get('kind') != 'requests'
+                    and (packet[KEY]['protocol'] != 'exactory-review-parts-v3'
+                         or not is_intermediate_answer(packet, state['output']))):
                 return current
             break
         current = live[0]
@@ -168,4 +172,5 @@ def find_final_assignment(records, artifacts, identifier):
 ADAPTER = dict(applies=applies, enumerate_units=list_units, targets=list_targets,
                series_key=compute_series_key, citations=list_citations, validate_final=validate_final,
                replacement_key=compute_replacement_key, final_prompt=prompts.FINAL_NATIVE,
+               final_prompt_v3=prompts.FINAL_NATIVE_V3,
                source_requests=False)

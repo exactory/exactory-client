@@ -47,6 +47,7 @@ from .problem_post_facts import record_post_fact
 from .problem_areas import record_area
 from .problem_reports import describe_report_advisories, record_report
 from .problem_candidate_transfers import record_candidate_transfer
+from .problem_search import describe_next_step, describe_search, record_search_origin, record_search_step
 from .capture_selection import select_main_capture
 from .payload_paths import iterate_payload_paths, normalize_payload_paths
 
@@ -74,6 +75,8 @@ OPERATIONS = {
     "problem-post-external": problem_claims.record_post_external,
     "problem-post-fact": record_post_fact,
     "problem-report": record_report,
+    "problem-search-step": record_search_step,
+    "problem-search-origin": record_search_origin,
     "gate-override": overrides.record_override,
     "gate-auto-pass": record_automatic_override,
     "problem-post-time": problem_claims.record_post_time,
@@ -149,10 +152,13 @@ def _review_run(store, payload, **identity):
         fields(payload, ("action", "operation", "invocation_id"))
         return reconcile_call(store, {key: payload[key] for key in ("operation", "invocation_id")}, **identity)
     if "task_id" in payload:
+        if "epoch_id" in payload:
+            text(payload["epoch_id"], "Review epoch ID")
         records = store.snapshot()["records"]
         epoch = records.get("review_epoch", {}).get(payload.get("epoch_id"))
         if epoch is not None:
             fields(payload, ("assignment_id", "epoch_id", "task_id"), ("id", "action"))
+            text(payload["task_id"], "Review task ID")
             if payload["assignment_id"] != epoch["controller_assignment_id"]:
                 raise ResearchError("review_task_dependency_changed", "Run the task through its exact controller.")
             task = records.get("review_task", {}).get(payload["task_id"])
@@ -802,8 +808,7 @@ def _build_status_report(store, *, counters=False, context_failures=None, snapsh
             if report.get("post") is not None:
                 upcoming = report["obligations"][0]
             elif current_slate is not None and not current_slate["selected"]:
-                upcoming = {"code": "problem_no_post", "reason": current_slate["reason"],
-                            "explanation": "The latest slate selects no candidate; a new slate that selects one reopens the post path."}
+                upcoming = describe_next_step(records, current_slate)
             elif report["obligations"]:
                 upcoming = report["obligations"][0]
             else:
@@ -819,6 +824,9 @@ def _build_status_report(store, *, counters=False, context_failures=None, snapsh
                            if export_authority["override_ids"] or "authority" in report.get("post", {}) else {}))
             if records.get("forming_call"):
                 result["forming"] = problem_forming.count_forming(records)
+            search = describe_search(records)
+            if search is not None:
+                result["search"] = search
             if records.get('problem_objection_carry'):
                 result['problem_objection_carries'] = [
                     {key: carry[key] for key in ('id', 'source_workspace', 'source_origin', 'source_revision')}

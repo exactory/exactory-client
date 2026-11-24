@@ -346,7 +346,7 @@ class SeriesTests(unittest.TestCase):
                    self.case.build_provider_response(self.case.build_review_output('bar'))]
         with patch('research_harness.review_transport.send_request', side_effect=outputs) as send, patch(
                 'research_harness.review_failure_class.plan_after_failure',
-                side_effect=lambda records, artifacts, identifier: dict(
+                side_effect=lambda records, artifacts, identifier, **options: dict(
                     state='replace' if any(row['assignment_id'] == identifier
                         for row in records.get('review_attempt', {}).values()) else 'run',
                     code='fixture_failure', details={})):

@@ -23,6 +23,8 @@ DELIVERY_NOTICE_KEY = 'delivery_notice'
 DELIVERY_NOTICE_PROTOCOL = 'exactory-review-delivery-notice-v1'
 PLACE_REVIEW_KEY = 'place_review'
 SLATE_PLACES_PROTOCOL = 'exactory-problem-slate-places-v1'
+SLATE_DELIVERY_KEY = 'slate_delivery'
+SLATE_DELIVERY_PROTOCOL = 'exactory-problem-slate-delivery-v1'
 CAPACITY_NOTICE_KEY = 'route_capacity'
 CAPACITY_NOTICE_PROTOCOL = 'exactory-route-capacity-notice-v1'
 CAPACITY_PARAMETER = 'capacity'
@@ -88,6 +90,16 @@ UNREAD_FINAL_PROMPT = (
     'grounds must hold a reviewer_gap whose refs holds {ref:"x1"}. A ground about one unread unit can add '
     '{ref:<unit>}, with the unit of its row.')
 
+UNREAD_CLOSING_PARAGRAPH_VERSION = 'exactory-openness-unread-closing-v1'
+UNREAD_CLOSING_PROMPT = (
+    '\n\nUnread ranges. The last permitted sequence of one reading turn ended with a refusal by the provider at the '
+    'lowest reading level, so the chain ends with ranges that it had still to deliver. reading_final.unread '
+    'describes the complete set of these ranges, whose handle is x1: count, the number of its rows; causes, with '
+    'rows and characters for provider_refused (the ranges of the last refused request) and not_delivered (the other '
+    'ranges); rows, the first rows; and omitted, the number of rows not shown. The list unread holds every row, and '
+    'the list unread_attempts every attempt of that turn. The harness records no outcome other than unresolved. '
+    'grounds holds a packet_defect whose refs holds {ref:"x1"}. A ground about one unread unit can add '
+    '{ref:<unit>}, with the unit of its row.')
 
 FINDING_UNITS_PARAGRAPH_VERSION = 'exactory-openness-finding-units-v1'
 # Placeholder for the writer's pass. The reading frame of a v7 chain with a finding index holds 1,500 characters for
@@ -102,9 +114,45 @@ FINDING_UNITS_PROMPT = (
     'a text or your notes name and that no reading covers: a ground of the final for an unread work has to say why '
     'no recorded judgment of a bound search settles it. When a unit with the label Finding index arrives, the index '
     'itself is too long for the final; keep the bound queries of each target as well.')
+# Version 2 serves a chain whose capacity plan holds the frame members of release 0.93.0, which give its reading
+# packets reading_turn.notes_cost; every other chain keeps version 1 (decision 5 of the second writer pass).
+FINDING_UNITS_PARAGRAPH_VERSION_V2 = 'exactory-openness-finding-units-v2'
+FINDING_UNITS_PROMPT_V2 = (
+    '\n\nValues that the final names. reading_turn.finding_units counts the ranges of text that the final of this '
+    'chain names and does not show. Each range is one field value of a bound search (scope, dispositions, resolved '
+    'or row_dispositions), which the final names by the body that holds it. When the finding index itself is too '
+    'long for the final, the final names the unit with the label Finding index, whose body names every such value, '
+    'and that body is one more range. This chain delivers each of these ranges itself, also when an earlier chain '
+    'read the search. One turn can deliver several of them, and a long one arrives in parts. Such a delivery can '
+    'be the part of a search record that holds the JSON text of one field. When you read one, keep as excerpts, '
+    'with their targets, the judgment rows of the works that a text or your notes name and that no reading '
+    'covers: a ground of the final for an unread work has to say why no recorded judgment of a bound search '
+    'settles it. When the unit with the label Finding index arrives, keep the bound queries of each target as '
+    'well.')
+# Written in the writer's pass of 0.93.0. A later change of a text needs a new registered version.
+NOTES_COST_PARAGRAPH_VERSION = 'exactory-openness-notes-cost-v1'
+NOTES_COST_PROMPT = (
+    '\n\nThe size of the notes (exactory-openness-notes-cost-v1). The notes of a stage="reading" answer stay within '
+    'allowances.notes in two measures: their length, and the characters that they take in the request of the next '
+    'turn. notes_cost, under reading_turn or reading_final, gives the second measure on this route: a double quote '
+    'takes notes_cost.quote characters, a backslash notes_cost.backslash, and a line break, a tab or a carriage '
+    'return notes_cost.line_break. Another control character takes several, and every other character takes one. '
+    'notes_cost.used is what the notes that this turn shows take in this request. It is 0 where the turn shows no '
+    'notes: in a closing turn, and in a page whose notes arrive in parts among entries. The harness refuses notes '
+    'above the bound in either measure, so leave some room when you estimate the size of a long text.')
+LIST_ROWS_PARAGRAPH_VERSION = 'exactory-openness-list-rows-v1'
+LIST_ROWS_PROMPT = (
+    '\n\nThe lists of this turn (exactory-openness-list-rows-v1). lists, under reading_turn or reading_final, names '
+    'each of the lists allowances, affected_notes, unread and unread_attempts that holds rows and has pages left '
+    'after the deliveries of this turn, as {list,rows,after}: rows counts the rows of the whole list, and after is '
+    'the cursor of a request for its next page, null before its first page. A list of these four that it does not '
+    'name has no row or has ended, and the harness refuses a request for it. Such a request stands in '
+    'passage_requests of a stage="reading" answer, for example '
+    '{"id":"page-1","kind":"list_page","list":"allowances","after":null} for the first page of allowances. The list '
+    'of a block, where the instructions above offer one, is not in lists.')
 # The paragraphs that a packet without a problem subject can select, such as a turn of a v7 reading chain.
 SHARED_PARAGRAPH_NAMES = ('delivery-notice', 'output-refusal-whole', 'output-refusal-bounded', 'unread-final',
-                          'finding-units')
+                          'finding-units', 'reading-notes-cost', 'reading-list-rows')
 
 
 def _has_unread_final(role, packet):
@@ -113,6 +161,14 @@ def _has_unread_final(role, packet):
 
 def _has_finding_units(role, packet):
     return 'finding_units' in packet.get('reading_turn', {})
+
+
+def _has_notes_cost(role, packet):
+    return 'notes_cost' in packet.get('reading_turn', packet.get('reading_final', {}))
+
+
+def _has_list_rows(role, packet):
+    return 'lists' in packet.get('reading_turn', packet.get('reading_final', {}))
 
 
 def _has_whole_refusal(role, packet):
@@ -133,6 +189,64 @@ SLATE_FORMING_PROMPT = (
     'nearest alternatives, the strength that is used or supported, and the checks that would refute '
     'each candidate. State what remains unjudged in limitations; a record or a descriptor alone '
     'does not establish the claimed gain.')
+
+
+# Written in the second writer pass of 0.93.0 (forms T17). A later edit of the text requires a new registered version.
+SLATE_FORMING_PROMPT_V3 = (
+    '\n\nCandidates formed in the record (exactory-problem-slate-forming-v3). '
+    'A candidate whose source.kind is phenomenon, or whose source.evidence names a forming_call or a form_outcome '
+    'record, is a statement that the record formed itself and did not find in a source. '
+    'Its source.reference names the starting material, the move that produced the statement, the forms that it '
+    'derives from and the outcome of each. '
+    'Its observation states the gain that the record expects to establish and the work that would establish it. '
+    'source.evidence names the forming records. '
+    'forming_records and problem_forming_imports carry them, the records of this record and the imported ones, each '
+    'with its citation identity. '
+    'The session delivers each of these records, and each text artifact that a descriptor in them names, as a unit; '
+    'the text below states how units arrive. '
+    'A record or a descriptor alone does not establish the claimed gain. '
+    'Say in limitations what remains unjudged. '
+    'A gain is an established advantage of one statement over the list of what it gathers. '
+    'No statement has a gain by its form: a conjunction of known statements, a strengthening or a generalization '
+    'of one named statement, a variant in one parameter, and a statement about an object that is defined so that '
+    'it unpacks into known statements each need the established gain, like any other statement. '
+    'The number of statements that would follow from a candidate gives it no priority, and that a statement '
+    'gathers others is no evidence for its answer. '
+    'For each such candidate, answer these questions in value.reason and in your objections. '
+    'Which form of gain does the candidate expect: a common structure, an explanatory relation between two bodies '
+    'of facts, or another proved advantage? '
+    'What would the statement gather, and do the gathered statements have separate grounds, which means that the '
+    'works named state or study each for reasons of its own and present none as a case, a refinement or a '
+    'consequence of another? '
+    'For a common structure: would each gathered statement be derived from one and the same assertion of the '
+    'candidate, by applying it to a family of its instances or through a proved translation? '
+    'A candidate from which each gathered statement would follow through a clause of its own, however it is '
+    'written, gathers a list. '
+    'How would the statement stand to the conjunction of what it gathers: equivalent, stronger in a stated '
+    'respect, or not known? '
+    'Where it would be equivalent, or the relation is not known, what would the one statement add, and how would '
+    'the record establish that? '
+    'For an explanatory relation: on which cases are both bodies of facts known independently, and can the record '
+    'show on them that the statement determines the facts of one from those of the other? '
+    'For another advantage: what is it, and which proof would establish it? '
+    'Does a nearer alternative, among the declared neighbours or known to you, already give what the candidate '
+    'names: a weaker form, the same assertion with another constant or exponent, another assertion about the same '
+    'objects, or an earlier statement? '
+    'What it gives is credited to that alternative. '
+    'Which part of the strength of the candidate (its range of instances, a constant, an exponent, its exactness) '
+    'would be neither supported by evidence for its answer nor used by a consequence that is wanted on '
+    'independent grounds? '
+    'Are its objects the standard ones of an area, or does it rest on a new definition that only what it gathers '
+    'motivates? '
+    'Can the work that the observation names establish the expected relations and the gain, and which check or '
+    'attack would refute the candidate first? '
+    'The potential grades of such a candidate grade what the record would establish if the relations that it '
+    'marks as expected are proved. '
+    'Give level 1 where the expected gain rests on assertion, and say what evidence would raise it. '
+    'Where a candidate gathers a list, where a nearer alternative already gives what it names, or where it rests '
+    'on a numerical pattern, such as a bound or a constant fitted to computed values, say so as an objection that '
+    'names the candidate in candidate_ids. '
+    'The response shape of this turn is unchanged.')
 
 
 # Written in the writer's pass of 0.91.2. A later text change requires a new registered version.
@@ -290,6 +404,127 @@ SLATE_PLACES_PROMPT = (
     'The response shape of this turn stays as it is.')
 
 
+# Written in the second writer pass of 0.93.0 (forms T17). A later edit of the text requires a new registered version.
+SLATE_PLACES_PROMPT_V2 = (
+    '\n\nThe place of each candidate (exactory-problem-slate-places-v2). '
+    'A problem has the value that its place in a line of work gives it. '
+    'A place of a candidate is a work, or a group of works on one question, in which the candidate arises. '
+    'The work states the candidate as open, needs it as a hypothesis or as a missing step, stops at it in an '
+    'argument, or states an open item that an answer would decide. '
+    'Results that the candidate only continues, as a next case, as an analogue in another setting or as a wider '
+    'class, are a place too, and they show no need. '
+    'A candidate that implies a result which the works already have extends that result, and that shows no need. '
+    'A general question of a work shows no need for one instance of it that the record chose. '
+    'A work is read or it is not: only the relation that ties a candidate to an item of a work can still be '
+    'expected at this stage. '
+    'No grade rests on the judgment that a candidate is natural on its face. '
+    'Give level 1 on both grounds of significance to a candidate whose places show no need. '
+    'Beside the grades, this paragraph asks for three statements on every candidate, whatever the kind of its '
+    'source. '
+    'The first says which place its source.reference and its observation name, and what the work states, needs or '
+    'stops at. '
+    'The second, for a candidate at level 1, says which reading would raise the level. '
+    'The third is an objection that names the candidate in candidate_ids, where its places show no need and the '
+    'author grades it at level 2 or higher. '
+    'A final in one answer gives the first two statements in value.reason and the third in objections. '
+    'In a final in pages, the page that decides a candidate gives its grades in the fields of that target and '
+    'puts the three statements, in short, into the sentence of that target. '
+    'The closing turn writes value.reason and the objections from the sentences of the pages. '
+    'The response shape of each turn stays as it is.')
+
+
+# Written in the design of 0.93.0 (slate-reviews, section 7). A later edit of the text requires a new registered version.
+SLATE_DELIVERY_PROMPT = (
+    '\n\nWhat this packet delivers (exactory-problem-slate-delivery-v1). '
+    'This slate review is a session of its own. '
+    'No turn of your bar session is replayed, so a text that only that session delivered is not delivered content of '
+    'this review. '
+    'Your bar is in own_bars, and both bars of the record are in bars. '
+    'slate_delivery.cited_works lists each work that a current candidate cites as evidence, through a reading of the '
+    'record or through a source link. '
+    'Each entry names the version of the work (version_id), the depth of its text (depth) and the candidates that '
+    'cite it (candidate_ids). '
+    'In the first turn of the review each entry also holds delivery, a source delivery in the form of the source '
+    'rules, which the harness requested for you. '
+    'When the status of a delivery is delivered, the text of the work is delivered with this review. '
+    'Read these texts before you grade: the author rests the candidates on them, and you judge the place of a '
+    "candidate from what a work states, needs or stops at, and not from the author's account of the work. "
+    'Cite such a text in the form that these instructions give for a delivered source. '
+    'When the status of a delivery is not delivered, the text did not reach you: name the work in limitations, and '
+    'make no judgment that depends on its text. '
+    'A later turn of this review lists the works without their deliveries, because their texts stay in the replayed '
+    'first turn. '
+    'Do not request a listed work again. '
+    'A work of source_inventory that no candidate cites reaches you only when you request it under the source rules. '
+    'Request it when a judgment needs it. '
+    'When the packet holds problem_refresh, this review takes the place of your earlier slate review of this slot. '
+    'That review is in historical_reviews, and problem_refresh names what changed since it. '
+    'Give a finding in value.objection_findings on each objection that the earlier review states. '
+    'The response shape of this turn stays as it is.')
+
+
+# Written in the second writer pass of 0.93.0 (forms T17). A later edit of the text requires a new registered version.
+AREAS_PROMPT_V2 = (
+    '\n\nThe further areas of the record (exactory-problem-areas-v2). '
+    'The statements of this record concern more than one area of mathematics. '
+    'The area of the packet is the subject class of the record. '
+    'It is the area of the post, and it was fixed when the record was opened. '
+    'problem_areas lists each further area, with its subject class (area) and the reason for naming it. '
+    'The reason is the description of the author. '
+    'Read it to find the part of that area which the field question touches, and take it as no evidence of '
+    'value. '
+    'For a bar. '
+    'State the standard of each area separately: once for the subject class of the record, and once for each '
+    'further area. '
+    'For each area, answer the six points of a bar (First to Sixth above) for that area alone: its active lines of '
+    'work with the works that show the activity; its nearest known problems and conjectures, with what a '
+    'resolution of each would give; what it counts as a substantial advance; the meaning that its specialists give '
+    'to levels 2 and 3, on each ground of significance and for comparative priority; what makes a question '
+    'uninteresting there; and its refuted conjectures, with the questions that each refutation opens. '
+    'For a further area, the field is the part of its subject class that the field question of the packet and the '
+    'reason of its entry point to. '
+    'Write the standards one after another in value.reason, each under the name of its subject class, and begin '
+    'with the subject class of the record. '
+    'Rest each standard on delivered sources of its own area, and request the sources of an area that you need and '
+    'do not have. '
+    'Where the delivered sources do not let you state the standard of an area, name that area in limitations; its '
+    'standard then stays unstated, and the standard of another area does not stand in for it. '
+    'When the packet carries problem_refresh, later readers receive this bar in place of your earlier bar. '
+    'Keep what the earlier bar states for the areas that it covers, add the standard of each area that it does not '
+    'cover, and give every standard in full. '
+    'For a result review. '
+    'The bars of the packet state one standard for each area, and you apply each of them. '
+    'Judge each relation, each earlier statement and each alternative by the standard of the area that it belongs '
+    'to. '
+    'The standard of that area says whether a consequence there is wanted, whether a statement there is an earlier '
+    'statement of the same content, and whether an alternative there is the better question. '
+    'Where the grade of an item rests on such a judgment, say in the text of that item under value.rubric_evidence '
+    'which area the relation, the earlier statement or the alternative belongs to, and what the standard of that '
+    'area shows. '
+    'Give each grade of value.rubric by the standard of the subject class of the record, one grade for each item. '
+    'The thresholds for posting read these grades. '
+    'A consequence or a line of work in a further area enters them as far as it is established and the standard of '
+    'its own area shows it to be wanted, and no further. '
+    'A grade that the statement would have by the standard of a further area belongs to the evidence text of the '
+    'item, and it is not the grade of the item. '
+    'When the weight of the statement lies in a further area, say so in value.reason: such a statement belongs in '
+    'a record of that subject class, and the grades by the standard of this record show what it gives here. '
+    'If a bar states no standard for an area that problem_areas names, say so in limitations; a claim that belongs '
+    'to that area then enters no grade. '
+    'No item, level or threshold changes. '
+    'The response shape of this turn is unchanged: an intermediate, source-request or staged task response gives '
+    'only the fields that its task owns.')
+
+
+# Written in the second writer pass of 0.93.0 (forms T17). A later edit of the text requires a new registered version.
+REFRESH_CHAIN_PROMPT = (
+    '\n\nA review in place of an earlier one (exactory-problem-refresh-chain-v1). '
+    'This review is a new review of the record as it is now, in place of an earlier review of yours that no '
+    'longer applies to this record. No turn of the earlier review is part of it. problem_refresh names the '
+    'assignment of that review, and historical_reviews holds the earlier reviews of this slot. Where the text '
+    'above says that this review continues your earlier one, it means that review.')
+
+
 def _has_carry(role, packet):
     return CARRY_PARAMETER in packet
 
@@ -326,6 +561,11 @@ def _has_place_review(role, packet):
     return packet.get(PLACE_REVIEW_KEY, {}).get('protocol') == SLATE_PLACES_PROTOCOL
 
 
+def _has_slate_delivery(role, packet):
+    # The packet of a slate chain that is a session of its own holds slate_delivery since 0.93.0.
+    return packet.get(SLATE_DELIVERY_KEY, {}).get('protocol') == SLATE_DELIVERY_PROTOCOL
+
+
 def _has_replacement(role, packet):
     accounts = (packet.get('problem_evidence', {}).get('value') or {}).get('accounts') or {}
     return (bool(accounts.get('replacement'))
@@ -334,6 +574,11 @@ def _has_replacement(role, packet):
 
 def _has_areas(role, packet):
     return bool(packet.get('problem_areas'))
+
+
+def _has_refresh_chain(role, packet):
+    # A refresh outside a session of the rules v4 starts a new chain, whose packet holds no continuation.
+    return 'problem_refresh' in packet and 'continuation' not in packet
 
 
 def _has_delivery_notice(role, packet):
@@ -575,8 +820,13 @@ PARAGRAPHS = (
           'on a numerical pattern, such as a bound or a constant fitted to computed values, say so as an objection that '
           'names the candidate in candidate_ids. '
           'The response shape of this turn is unchanged.'),
-         ('exactory-problem-slate-forming-v2', SLATE_FORMING_PROMPT))),
-    PromptParagraph('slate-places', ('slate',), _has_place_review, ((SLATE_PLACES_PROTOCOL, SLATE_PLACES_PROMPT),)),
+         ('exactory-problem-slate-forming-v2', SLATE_FORMING_PROMPT),
+         ('exactory-problem-slate-forming-v3', SLATE_FORMING_PROMPT_V3))),
+    PromptParagraph('slate-places', ('slate',), _has_place_review,
+                    ((SLATE_PLACES_PROTOCOL, SLATE_PLACES_PROMPT),
+                     ('exactory-problem-slate-places-v2', SLATE_PLACES_PROMPT_V2))),
+    PromptParagraph('slate-delivery', ('slate',), _has_slate_delivery,
+                    ((SLATE_DELIVERY_PROTOCOL, SLATE_DELIVERY_PROMPT),)),
     PromptParagraph('replacement', ('result', 'adjudicator'), _has_replacement,
         (('exactory-problem-replacement-v1',
           '\n\nA statement posed in place of a refuted one (exactory-problem-replacement-v1). '
@@ -666,19 +916,64 @@ PARAGRAPHS = (
           'to that area then enters no grade. '
           'No item, level or threshold changes. '
           'The response shape of this turn is unchanged: an intermediate, source-request or staged task response gives '
-          'only the fields that its task owns.'),)),
+          'only the fields that its task owns.'),
+         ('exactory-problem-areas-v2', AREAS_PROMPT_V2))),
+    PromptParagraph('refresh-chain', ('bar', 'slate', 'result'), _has_refresh_chain,
+                    (('exactory-problem-refresh-chain-v1', REFRESH_CHAIN_PROMPT),)),
     PromptParagraph('capacity-notice', ('bar', 'slate', 'result'), _has_capacity_notice,
                     ((CAPACITY_NOTICE_PROTOCOL, CAPACITY_NOTICE_PROMPT),)),
     PromptParagraph('delivery-notice', ('bar', 'slate', 'result'), _has_delivery_notice,
                     ((DELIVERY_NOTICE_PROTOCOL, DELIVERY_NOTICE_PROMPT),)),
     PromptParagraph('unread-final', ('native_math',), _has_unread_final,
-                    ((UNREAD_FINAL_PARAGRAPH_VERSION, UNREAD_FINAL_PROMPT),)),
+                    ((UNREAD_FINAL_PARAGRAPH_VERSION, UNREAD_FINAL_PROMPT),
+                     (UNREAD_CLOSING_PARAGRAPH_VERSION, UNREAD_CLOSING_PROMPT))),
     PromptParagraph('finding-units', ('native_math',), _has_finding_units,
-                    ((FINDING_UNITS_PARAGRAPH_VERSION, FINDING_UNITS_PROMPT),)),
+                    ((FINDING_UNITS_PARAGRAPH_VERSION, FINDING_UNITS_PROMPT),
+                     (FINDING_UNITS_PARAGRAPH_VERSION_V2, FINDING_UNITS_PROMPT_V2))),
+    PromptParagraph('reading-notes-cost', ('native_math',), _has_notes_cost,
+                    ((NOTES_COST_PARAGRAPH_VERSION, NOTES_COST_PROMPT),)),
+    PromptParagraph('reading-list-rows', ('native_math',), _has_list_rows,
+                    ((LIST_ROWS_PARAGRAPH_VERSION, LIST_ROWS_PROMPT),)),
     PromptParagraph('output-refusal-whole', ('bar', 'slate', 'result', 'adjudicator', 'verification', 'native_math', 'manuscript', 'standalone'),
                     _has_whole_refusal, ((REFUSAL_PARAGRAPH_VERSIONS['whole'], REFUSAL_WHOLE_PROMPT),)),
     PromptParagraph('output-refusal-bounded', ('bar', 'slate', 'result', 'adjudicator', 'verification', 'native_math', 'manuscript', 'standalone'),
                     _has_bounded_refusal, ((REFUSAL_PARAGRAPH_VERSIONS['bounded'], REFUSAL_BOUNDED_PROMPT),)))
+
+
+# The forms of a turn to which a paragraph version can be limited (rows S22 and P11 of the second writer pass): a
+# turn of a session under the rules v4, a final, page or closing turn of a series of the parts protocol v3, another
+# turn of such a series, and every other prompt.
+SESSION_V4_FORM = 'session_v4'
+PARTS_V3_FINAL_FORM = 'parts_v3_final'
+PARTS_V3_TURN_FORM = 'parts_v3_turn'
+BASE_FORM = 'base'
+# The forms that a version serves, where it does not serve every form. A new assignment selects the last version that
+# serves the form of its turn, and no version of a paragraph that no version serves in that form.
+VERSION_FORMS = {
+    'exactory-problem-slate-forming-v3': (SESSION_V4_FORM,),
+    SLATE_PLACES_PROTOCOL: (BASE_FORM, SESSION_V4_FORM),
+    'exactory-problem-slate-places-v2': (PARTS_V3_FINAL_FORM,),
+    'exactory-problem-areas-v2': (SESSION_V4_FORM,),
+    'exactory-problem-refresh-chain-v1': (BASE_FORM,)}
+
+
+def find_turn_form(packet, session_rules=None):
+    """The form of the turn of this packet. session_rules names the rules of a session that the packet does not name:
+    the logical packet of a chain of the rules v4 names the rules v3."""
+    from .review_parts_v3 import PROTOCOL as PARTS_V3_PROTOCOL
+    from .review_session_v4 import PROTOCOL as SESSION_V4_RULES
+    if session_rules == SESSION_V4_RULES:
+        return SESSION_V4_FORM
+    header = packet.get('review_parts', {})
+    if header.get('protocol') != PARTS_V3_PROTOCOL:
+        return BASE_FORM
+    if header.get('kind') == 'final' and header.get('final_form') in (None, 'page', 'closing'):
+        return PARTS_V3_FINAL_FORM
+    return PARTS_V3_TURN_FORM
+
+
+def serves_form(version, form):
+    return form in VERSION_FORMS.get(version, (form,))
 
 
 def has_only_shared_paragraphs(versions):
@@ -692,19 +987,45 @@ def has_capacity_paragraph(versions):
                for version, _ in paragraph.versions)
 
 
-def select_prompt_parameters(role, packet):
-    """Select the paragraphs called for by this delivered packet, including compact task contexts."""
+def select_prompt_parameters(role, packet, *, prior_prompt=None, session_rules=None):
+    """Select the paragraphs called for by this delivered packet, including compact task contexts, in the versions
+    that serve the form of its turn (find_turn_form, with session_rules)."""
     problem = packet.get('subject', {}).get('kind') == 'problem'
     if (not problem and not _has_delivery_notice(role, packet) and 'output_refusal' not in packet
-            and not _has_unread_final(role, packet) and not _has_finding_units(role, packet)):
+            and not _has_unread_final(role, packet) and not _has_finding_units(role, packet)
+            and not _has_notes_cost(role, packet) and not _has_list_rows(role, packet)):
         return {}
     conditions = (packet.get(CONDITIONS) if 'value' not in packet.get('problem_evidence', {}) else None)
     from .bar_sources import PROTOCOL_V3
-    versions = [paragraph.versions[0 if paragraph.name == 'slate-forming'
-                and packet.get('source_rules') != PROTOCOL_V3 else -1][0] for paragraph in PARAGRAPHS[1:]
-                if role in paragraph.roles and (problem or paragraph.name in SHARED_PARAGRAPH_NAMES) and
-                (paragraph.name in conditions if conditions is not None and paragraph.name not in ('delivery-notice', 'capacity-notice', 'output-refusal-whole', 'output-refusal-bounded')
-                 else paragraph.condition(role, packet))]
+    indexed_closing = 'closing' in packet.get('reading_final', {}) and 'finding_index' in packet
+    previous = set((prior_prompt or {}).get('parameters', {}).get(PARAMETER, []))
+    form = find_turn_form(packet, session_rules)
+    versions = []
+    for paragraph in PARAGRAPHS[1:]:
+        if role not in paragraph.roles or (not problem and paragraph.name not in SHARED_PARAGRAPH_NAMES):
+            continue
+        if conditions is not None and paragraph.name not in (
+                'delivery-notice', 'capacity-notice', 'output-refusal-whole', 'output-refusal-bounded'):
+            applies = paragraph.name in conditions
+        else:
+            applies = paragraph.condition(role, packet)
+        if not applies:
+            continue
+        if paragraph.name == 'unread-final':
+            # The kind of the turn decides this text, also in a replacement that changes the kind.
+            versions.append(paragraph.versions[-1 if indexed_closing else 0][0])
+            continue
+        if paragraph.name == 'finding-units':
+            # The frame members of the chain decide this text; a chain that a release recorded without them keeps
+            # the first version.
+            versions.append(paragraph.versions[-1 if _has_notes_cost(role, packet) else 0][0])
+            continue
+        served = [version for version, _ in paragraph.versions if serves_form(version, form)]
+        if not served:
+            continue
+            continue
+        earlier = paragraph.name == 'slate-forming' and packet.get('source_rules') != PROTOCOL_V3
+        versions.append(next((version for version in served if version in previous), served[0 if earlier else -1]))
     if role in PARAGRAPHS[0].roles and _has_carry(role, packet):
         carry_version = PARAGRAPHS[0].versions[-1][0]
         if carry_version != CARRY_PROTOCOL:
@@ -796,7 +1117,11 @@ def _describe_template_suffix(selected):
     return ''.join('/' + version[len('exactory-problem-') if version.startswith('exactory-problem-')
                                else len('exactory-'):] for version, _ in selected
                    if version not in tuple(REFUSAL_PARAGRAPH_VERSIONS.values()) + (UNREAD_FINAL_PARAGRAPH_VERSION,
-                                                                                    FINDING_UNITS_PARAGRAPH_VERSION))
+                                                                                    UNREAD_CLOSING_PARAGRAPH_VERSION,
+                                                                                    FINDING_UNITS_PARAGRAPH_VERSION,
+                                                                                    FINDING_UNITS_PARAGRAPH_VERSION_V2,
+                                                                                    NOTES_COST_PARAGRAPH_VERSION,
+                                                                                    LIST_ROWS_PARAGRAPH_VERSION))
 
 
 def strip_prompt_paragraphs(prompt, role):

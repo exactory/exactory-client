@@ -9,6 +9,7 @@ constants. Only the reviewer transport and the clock are synthetic: every plan i
 import copy
 import os
 import shutil
+import sys
 import tempfile
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
@@ -17,6 +18,7 @@ from unittest.mock import patch
 from ci.continuity_guard import validate_stop_journeys
 from codex_route_fixtures import build_codex_response
 import continuity_guard_fixtures as matrix
+from test_series_code_reach import record_reachable_errors
 from research_harness import openness_reading as reading, review_failure_class as failures
 from research_harness import review_protocol as protocol, stop_classes
 from research_harness.review_continuation import plan_next
@@ -25,6 +27,11 @@ from research_harness.storage import Store
 
 UNEXECUTED_STEP_MESSAGE = 'Execute the newly declared step of a stop answer: {step}'
 NO_BOUNDARY_MESSAGE = 'The {family} {turn} row reached no boundary within {limit} plans.'
+# The model of the route that step 7 of an answer registers when the step chooses the model, by family. A context
+# repair of a recorded head of the parts protocol v3 keeps that protocol (design v3-target-table, D6), and a route of
+# the class of the walked route reads the size failures of the walk from its output profile, which lower the room of a
+# final below its floor. A route of another model has an output profile without them.
+OTHER_ROUTE_MODELS = {'parts-v3': 'fixture-model-other'}
 TURN_MESSAGE = 'The {family} fixture did not reach its {turn} turn.'
 
 
@@ -85,8 +92,8 @@ def answer_math_turn(fixture, packet, assignment):
 
 def prepare_unit_fixture(owner, cls, method):
     fixture = cls(method)
-    fixture.setUp()
     owner.addCleanup(fixture.doCleanups)
+    fixture.setUp()
     return fixture
 
 
@@ -184,9 +191,10 @@ def walk_math(owner, chain, wanted):
     import test_openness_reading_math_v2 as math
     fixture = prepare_unit_fixture(owner, math.MathV2RecoveryTests,
                                    'test_reading_at_output_limit_is_replaced_at_next_lower_level')
-    native = fixture.build_math_packet(neighbours=0 if chain[0] == 'reading' else 40)
+    controller, inputs, native = export_controller_math_packet(fixture, neighbours=0 if chain[0] == 'reading' else 40)
     fixture.assign('math-1', native)
     form = FormTurn('math-v2', 'reading', fixture, fixture, 'math-1')
+    form.math_controller, form.math_inputs = controller, inputs
     if 'reading' in wanted:
         yield form
     while reading.find_stage(form.packet()) == 'reading':
@@ -208,6 +216,87 @@ def walk_math(owner, chain, wanted):
         owner.assertEqual(reading.find_stage(form.packet()), turn)
         if turn in wanted:
             yield form
+
+
+def export_controller_math_packet(case, neighbours=0):
+    """A math result packet that the real local math controller exports over its own objective, with a search bound
+    for each synthetic neighbour. Return the controller, its supplementary inputs and the native packet."""
+    from research_harness.evidence import digest
+    from test_research_problem_openness_minimum import ProblemOpennessMinimumTests
+
+    harness = Path(__file__).resolve().parents[1] / 'skills/math-solver/harness'
+    with patch.object(sys, 'path', [str(harness), str(harness / 'tests')] + sys.path):
+        from search_controller.service import Controller
+        from search_fixtures import contract
+
+    minimum_packet = case.build_math_packet()
+    minimum = protocol._read_json(case.artifacts, minimum_packet)['scientific_context']['openness_minimum']
+    minimum['neighbours'] = ['Synthetic neighbour %d' % index for index in range(neighbours)]
+    for label in minimum['neighbours']:
+        search = ProblemOpennessMinimumTests.search(case, formulation=label)
+        minimum['searches'].append(dict(formulation=label, search_digest=digest(search)))
+    objective = contract()
+    claim = objective['original_claim']
+    claim['statement'] = minimum['statement']
+    controller = Controller(case.root)
+    controller.command('init', dict(contract=objective), 0, 'initialize-math')
+    subject = record_controller_checkpoint(case, controller, claim)
+    source = case.root / 'supplementary.txt'
+    source.write_bytes(case.artifacts.read(case.supplementary))
+    inputs = [dict(path=source.name, digest=case.supplementary['sha256'], kind='artifact')]
+    exported = controller.command('review-packet', dict(kind='result', subject=subject, claim_digest=digest(claim),
+        reviewer=dict(source='host', actor_id='openness-reviewer', attestation_id='review-assignment:math-1'),
+        inputs=inputs, openness=minimum), None, None)
+    return controller, inputs, exported['native_packet']
+
+
+def record_controller_checkpoint(case, controller, claim):
+    """Record a proof checkpoint of claim, as the controller tests do with an external result, and return it: the
+    subject that an approval of the review can be recorded on."""
+    import hashlib
+    import json
+    from research_harness.evidence import digest
+
+    def write_input(path, text, kind='artifact'):
+        (case.root / path).write_text(text)
+        return dict(path=path, kind=kind, digest=hashlib.sha256(text.encode()).hexdigest())
+
+    proof = write_input('proof.md', 'An analytical proof covering every requested case.')
+    source = write_input('source.md', 'Pinned source containing the full original statement.')
+    study = write_input('scope.md', 'Both endpoints, assumptions and equality cases were compared.')
+    manifest = dict(schema_version=1, kind='analytical', claim_digest=digest(claim),
+                    conclusion=dict(outcome='proof', dependency_ids=[], route_bindings=[]),
+                    artifacts=[dict(path='proof.md', digest=proof['digest'], role='proof')],
+                    dependencies=[], external_dependencies=[], verification=None)
+    (case.root / 'manifest.json').write_text(json.dumps(manifest))
+    checkpoint = dict(schema_version=1, kind='proof', claim=claim,
+        origin=dict(kind='external_result', source='Pinned reference', source_digest=source['digest'],
+                    statement=claim['statement'], statement_digest=digest(claim), study_digest=study['digest']),
+        evidence_digests=[digest(manifest)], what_changed='A source proof is available',
+        remaining_obligation_ids=[], next_hypothesis='Review the exact scope', milestone_id=None)
+    controller.command('checkpoint', dict(checkpoint=checkpoint, inputs=[proof, source, study,
+        dict(path='manifest.json', digest=digest(manifest), kind='blob')]),
+        controller.status()['revision'], 'record-math-checkpoint')
+    return controller.status()['checkpoints']['checkpoint-000001']
+
+
+def build_attested_math_final(owner):
+    """A bounded final over a packet exported by the real local math controller."""
+    from test_openness_reading_math_v2 import MathV2RecoveryTests
+
+    case = prepare_unit_fixture(owner, MathV2RecoveryTests, 'test_reading_at_output_limit_is_replaced_at_next_lower_level')
+    controller, inputs, native = export_controller_math_packet(case)
+    case.assign('math-1', native)
+    form = FormTurn('math-v2', 'final', case, case, 'math-1')
+    form.math_controller, form.math_inputs = controller, inputs
+    for number in range(2, 26):
+        if reading.find_stage(form.packet()) == 'final':
+            return form
+        case.invoke(form.head, form.answer())
+        following = 'math-' + str(number)
+        case.assign(following, native, prior=form.head)
+        form.head = following
+    owner.fail(TURN_MESSAGE.format(family='math-v2', turn='final'))
 
 
 WALKERS = {'session-v4': walk_session, 'parts-v3': walk_series, 'v7-pages': walk_v7_pages, 'math-v2': walk_math}
@@ -262,10 +351,9 @@ def plan_after_waits(form, identifier=None):
     return plan, waits
 
 
-def run_head(form, respond, identifier=None):
+def run_head(form, respond, identifier=None, *, plan=None):
     """Execute the run that the plan names, with the transport stub in place of the reviewer."""
-    plan = form.plan(identifier)
-    if plan['state'] == 'wait':
+    if plan is None:
         plan, _ = plan_after_waits(form, identifier)
     assert plan['state'] == 'run', plan
     with patch.dict(os.environ, {'CODEX_HOME': str(form.case.root / 'synthetic-codex')}), patch.object(
@@ -273,17 +361,21 @@ def run_head(form, respond, identifier=None):
         return matrix.execute(form.case, plan['command'], plan['payload'])
 
 
-def drive_failures(owner, form, respond, outcome, limit=40):
+def drive_failures(owner, form, respond, outcome, limit=40, *, first_plan=None):
     """Run the head with the stub until its plan is no longer a run or a due wait; count failures by sequence."""
     counts, waits = {}, []
     for _ in range(limit):
-        plan, waited = plan_after_waits(form)
+        if first_plan is None:
+            plan, waited = plan_after_waits(form)
+        else:
+            plan, waited = first_plan, []
+            first_plan = None
         waits.extend(waited)
         for code in waited:
             owner.assertIn(code, stop_classes.STOP_REGISTRY)
         if plan['state'] != 'run':
             return plan, counts, waits
-        attempt = run_head(form, respond)
+        attempt = run_head(form, respond, plan=plan)
         records = form.records()
         classified = failures.classify_attempt(records, form.case.artifacts, records['review_attempt'][attempt['id']])
         owner.assertEqual(classified['outcome'], outcome)
@@ -292,7 +384,7 @@ def drive_failures(owner, form, respond, outcome, limit=40):
     owner.fail(NO_BOUNDARY_MESSAGE.format(family=form.family, turn=form.turn, limit=limit))
 
 
-def check_replacement(owner, form, plan):
+def check_replacement(owner, form, plan, *, include_run=False):
     """A replacement on the same route and reviewer that passes the preflight and whose next plan runs."""
     prior = form.assignment()
     following = matrix.execute(form.case, plan['command'], plan['payload'])
@@ -301,9 +393,13 @@ def check_replacement(owner, form, plan):
     owner.assertEqual(route['configuration'], form.records()['review_route'][following['route_id']]['configuration'])
     preflight = matrix.check_preflight(form.case, following)
     owner.assertTrue(preflight)
-    owner.assertEqual(form.plan(following['id'])['state'], 'run')
-    return dict(kind='assignment', id=following['id'], prior_head=prior['id'], eligible=True, preflight=preflight,
-                record=following)
+    run = form.plan(following['id'])
+    owner.assertEqual(run['state'], 'run')
+    boundary = dict(kind='assignment', id=following['id'], prior_head=prior['id'], eligible=True, preflight=preflight,
+                    record=following)
+    if include_run:
+        boundary['run_plan'] = run
+    return boundary
 
 
 def answer_probe(case):
@@ -358,9 +454,51 @@ def execute_new_chain_step(owner, form, step, identifier, route_id, original=Non
                          settling_work_id=None, duplicate_resolutions=[]))
         native = export_openness(form.case.store, payload, form.case.root / (identifier + '-export'),
                                  accept_gaps=True)['native_packet']
+    elif hasattr(form, 'math_controller'):
+        from research_harness.evidence import digest
+        old = protocol._read_json(form.case.artifacts, original['context']['native_packet'])
+        payload = copy.deepcopy(step['payload'])
+        owner.assertEqual(payload['subject'], old['subject'])
+        owner.assertEqual(payload['claim_digest'], old['claim_digest'])
+        reviewer = {key: value for key, value in old['reviewer'].items() if key != 'attestation_id'}
+        # A handoff through the checked export prints its inputs, its attestation and its assignment ID: it runs as
+        # printed. Otherwise the inputs and the attestation are choices that the executor fills.
+        printed = 'inputs' not in step['chooses']
+        if printed:
+            identifier = step['then'][-1]['payload']['id']
+            owner.assertEqual(payload['reviewer'], dict(reviewer, attestation_id='review-assignment:' + identifier))
+            minimum = copy.deepcopy(payload.get('openness', old['scientific_context']['openness_minimum']))
+        else:
+            if 'reviewer' in step['chooses']:
+                payload['reviewer'] = reviewer
+            owner.assertEqual(payload['reviewer'], reviewer)
+            payload['reviewer']['attestation_id'] = 'review-assignment:' + identifier
+            payload['inputs'] = copy.deepcopy(form.math_inputs)
+            minimum = copy.deepcopy(old['scientific_context']['openness_minimum'])
+        if 'openness' in step['chooses']:
+            owner.assertNotIn('openness', payload)
+            records = form.records()
+            for prerequisite in step['prerequisites']:
+                for search_id in prerequisite.get('search_ids', []):
+                    search = records['literature_search'][search_id]
+                    minimum['searches'].append(dict(formulation=search['question'], search_digest=digest(search)))
+            if any(row['condition'] == reading.MATH_V2_SMALLER_PREREQUISITE for row in step['prerequisites']):
+                minimum['reading_digests'] = []
+                payload['inputs'] = []
+            payload['openness'] = minimum
+        exported = form.math_controller.command('review-packet', payload, None, None)
+        native = exported['native_packet']
+        packet = protocol._read_json(form.case.artifacts, native)
+        owner.assertTrue(reading.is_math_openness_packet(packet))
+        owner.assertEqual(packet['subject'], old['subject'])
+        owner.assertEqual(packet['subject_digest'], old['subject_digest'])
+        owner.assertEqual(packet['claim_digest'], old['claim_digest'])
+        owner.assertEqual(packet['reviewer'], payload['reviewer'])
+        owner.assertEqual(packet['scientific_context']['openness_minimum'], minimum)
+        if not printed:
+            owner.assertIn('reviewer.attestation_id', step['chooses'])
     else:
-        # The math controller attests a new packet for the new first assignment (step 5); the fixture of the unit
-        # lane builds that packet as the controller does.
+        # Other guard fixtures focus on paged capacity with synthetic neighbours or a stored v1 chain.
         native = form.fixture.build_math_packet(name=identifier + '-export', assignment_id=identifier)
     commands = [step['command']]
     following = None
@@ -377,6 +515,24 @@ def execute_new_chain_step(owner, form, step, identifier, route_id, original=Non
         else:
             following = matrix.execute(form.case, child['command'], payload)
         commands.append(child['command'])
+    if hasattr(form, 'math_controller') and step['id'] == 5:
+        records = form.records()
+        request = protocol.build_assignment_request(records, form.case.artifacts, following)
+        sent = reading.review_excerpts.read_sent_packet(request)
+        # The new review runs in the protocol that its admission recorded: a math v2 chain, or a single math v1
+        # request when the admission of math v2 stops on this route.
+        selected = next(row['protocol'] for row in following['protocol_selection']['admissions']
+                        if row['state'] == 'record')
+        if selected == reading.MATH_PROTOCOL_V2:
+            owner.assertEqual(reading.find_protocol(sent), selected)
+            owner.assertEqual(following['reading_chain']['first_assignment_id'], identifier)
+            owner.assertEqual(following['reading_chain']['turn'], 1)
+        else:
+            owner.assertEqual(selected, reading.MATH_PROTOCOL)
+            owner.assertIsNone(reading.find_protocol(sent))
+        binding = reading.find_binding(sent)
+        for key in ('subject_digest', 'claim_digest', 'reviewer'):
+            owner.assertEqual(binding[key], packet[key])
     return following, commands
 
 
@@ -427,6 +583,8 @@ def execute_answer(owner, form, answer, index):
                 reason='Continue the retained review.', evidence=[evidence]))
             commands.append(step['command'])
         elif number == 7:
+            if 'model' in step.get('chooses', []) and form.family in OTHER_ROUTE_MODELS:
+                step = dict(step, payload=dict(step['payload'], model=OTHER_ROUTE_MODELS[form.family]))
             route_id, route_commands = execute_route_step(form, step, identifier + '-route')
             commands.extend(route_commands)
         elif number in (4, 5):
@@ -470,63 +628,44 @@ def describe_packet_kind(form, assignment):
     return 'problem-openness' if reading.is_openness_packet(native) else 'math'
 
 
-def execute_stop_answers(owner, form, stop, defect=None):
-    """Each answer runs on its own copy of the stopped store; the journeys must satisfy the stop contract, and an
-    answer that starts a new chain continues the review over a packet of its kind. A cell of
-    continuity_guard.FORM_DEFECTS holds the behaviour of the tree, which the report names for the supervisor."""
+def execute_stop_answers(owner, form, stop):
+    """Execute each answer on its own copy and check that a new chain keeps the packet kind."""
     owner.assertEqual(stop_classes.classify_stop(stop['code']), 'decision')
     owner.assertIn(stop['code'], stop_classes.STOP_REGISTRY)
     answers = stop['details']['decision']['then']
     owner.assertTrue(answers)
-    from ci.continuity_guard import FORM_DEFECTS, REPAIR_HISTORY_FINDING
     kind = describe_packet_kind(form, form.assignment())
-    journeys, refused = [], []
+    journeys = []
     for index, answer in enumerate(answers):
         with owner.subTest(answer=answer['answer']), fork_store(form):
-            if FORM_DEFECTS.get((form.family, form.turn, answer['answer'])) == REPAIR_HISTORY_FINDING:
-                with owner.assertRaises(ResearchError) as caught:
-                    execute_answer(owner, form, answer, index)
-                owner.assertEqual(caught.exception.code, 'review_context_repair_history_unrecorded')
-                refused.append(answer['answer'])
-                continue
             journey = execute_answer(owner, form, answer, index)
-            if journey['end'].get('packet_kind') is not None:
-                owner.assertEqual(journey['end']['packet_kind'] != kind, defect is not None, (defect, journey['end']))
+            if 'packet_kind' in journey['end']:
+                owner.assertEqual(journey['end']['packet_kind'], kind)
             journeys.append(journey)
-    executed = dict(stop, details=dict(stop['details'], decision=dict(stop['details']['decision'], then=[
-        answer for answer in answers if answer['answer'] not in refused])))
-    owner.assertEqual(validate_stop_journeys(executed, journeys, stop_classes.STOP_REGISTRY), [])
+    owner.assertEqual(validate_stop_journeys(stop, journeys, stop_classes.STOP_REGISTRY), [])
     return journeys
 
 
 def execute_handoff(owner, form, plan):
-    """A handoff with its step (or its steps in order) executed to an assignment that runs or a verified route."""
+    """Execute the handoff to a runnable new assignment or to a new run on the probed route."""
     steps = plan['details'].get('steps') or [plan['details']['step']]
     owner.assertEqual(plan['command'], steps[0]['command'])
-    journey = execute_answer(owner, form, dict(answer='handoff', steps=steps), 0) if any(
-        step.get('id') in (1, 2, 4, 5, 6, 14) for step in steps) else None
-    if journey is None:
-        from ci.continuity_guard import FORM_DEFECTS, RUNTIME_PROBE_FINDING
-        route_id, commands = execute_route_step(form, steps[0], 'handoff-route')
-        owner.assertEqual(protocol.route_state(form.records(), form.case.artifacts, route_id)['context_status'],
-                          'verified_for_route')
-        # The handoff names the time after which the first attempt starts a new sequence.
-        deadline = failures.datetime.fromisoformat(plan['not_before']) if plan.get('not_before') else None
-        with patch.object(failures, 'datetime', build_due_clock(deadline)) if deadline else nullcontext():
-            following = form.plan()
-            if FORM_DEFECTS.get(('handoff', plan['code'])) == RUNTIME_PROBE_FINDING:
-                owner.assertEqual((following['state'], following['code'], following['command']),
-                                  (plan['state'], plan['code'], plan['command']))
-                # The store accepts the first attempt after the probe, which starts a new sequence.
-                with patch.object(protocol.transport, 'send_request', side_effect=respond_with(form.answer())):
-                    receipt = matrix.execute(form.case, 'review-run', dict(id=form.head + '-after-probe',
-                                                                           assignment_id=form.head))
-                commands.append('review-run')
-                owner.assertNotEqual(form.plan().get('code'), plan['code'])
-                return dict(commands=commands, end=dict(kind='action', command='review-run', receipt=receipt))
-            owner.assertEqual(following['state'], 'run')
-        return dict(commands=commands, end=dict(kind='run', id=form.head))
-    return dict(commands=journey['accepted_commands'], end=journey['end'])
+    if any(step.get('id') in (1, 2, 4, 5, 6, 14) for step in steps):
+        journey = execute_answer(owner, form, dict(answer='handoff', steps=steps), 0)
+        return dict(commands=journey['accepted_commands'], end=journey['end'])
+
+    route_id, commands = execute_route_step(form, steps[0], 'handoff-route')
+    owner.assertEqual(protocol.route_state(form.records(), form.case.artifacts, route_id)['context_status'],
+                      'verified_for_route')
+    deadline = failures.datetime.fromisoformat(plan['not_before']) if plan.get('not_before') else None
+    with patch.object(failures, 'datetime', build_due_clock(deadline)) if deadline else nullcontext():
+        following = form.plan()
+        owner.assertEqual((following['state'], following['command'], following['head_id']),
+                          ('run', 'review-run', form.head))
+        receipt = run_head(form, respond_with(form.answer()))
+    owner.assertEqual(receipt['assignment_id'], form.head)
+    commands.append(following['command'])
+    return dict(commands=commands, end=dict(kind='action', command=following['command'], receipt=receipt))
 
 
 def refuse_provider(route, request, credential):
@@ -565,18 +704,16 @@ def describe_review_subject(form, assignment):
 def build_size_row(owner, form, outcome, detail):
     """K8: the size outcome on the head, to a replacement that passes the preflight or to the decision stop with every
     answer executed."""
-    from ci.continuity_guard import FORM_DEFECTS, SERIES_READ_COMPACTION_FINDING
     head = form.assignment()
     subject = describe_review_subject(form, head)
-    defect = FORM_DEFECTS.get((form.family, form.turn, outcome, detail))
-    classified_as = 'output_over_cap' if defect == SERIES_READ_COMPACTION_FINDING else outcome
-    plan, _, _ = drive_failures(owner, form, fail_size_request(outcome, detail), classified_as, limit=4)
+    # The commands named by a stop answer have their own reachable-code domains.
+    with record_reachable_errors('plan_next'):
+        plan, _, _ = drive_failures(owner, form, fail_size_request(outcome, detail), outcome, limit=4)
     records = form.records()
     attempt = max((row for row in records['review_attempt'].values() if row['assignment_id'] == form.head),
                   key=lambda row: row['recorded_revision'])
-    if classified_as == outcome:
-        classified = failures.classify_attempt(records, form.case.artifacts, attempt)
-        owner.assertEqual(classified['signal'].get('detail'), detail)
+    classified = failures.classify_attempt(records, form.case.artifacts, attempt)
+    owner.assertEqual(classified['signal'].get('detail'), detail)
     if plan['state'] == 'replace':
         boundary = check_replacement(owner, form, plan)
         boundary['subject'] = describe_review_subject(form, boundary['record'])
@@ -584,7 +721,7 @@ def build_size_row(owner, form, outcome, detail):
         owner.assertEqual(boundary['subject'], subject)
     else:
         owner.assertEqual(plan['state'], 'stop', plan)
-        journeys = execute_stop_answers(owner, form, plan, defect)
+        journeys = execute_stop_answers(owner, form, plan)
         boundary, commands = journeys[0]['end'], journeys[0]['accepted_commands']
     return dict(family=form.family, turn=form.turn, outcome=outcome, detail=detail, assignment_id=form.head,
                 subject=subject, attempt_id=attempt['id'], request_digest=attempt['request_digest'], call=attempt,
@@ -596,12 +733,14 @@ def walk_to_floor(owner, form, outcome='output_over_cap', limit=40):
     decision stop at the floor is executed with every answer. Returns the levels walked and the stop."""
     respond = fail_size_request(outcome, None)
     replacements, start = 0, form.head
+    next_run = None
     try:
         for _ in range(limit):
-            plan, _, _ = drive_failures(owner, form, respond, outcome, limit=4)
+            plan, _, _ = drive_failures(owner, form, respond, outcome, limit=4, first_plan=next_run)
             if plan['state'] == 'replace':
-                boundary = check_replacement(owner, form, plan)
+                boundary = check_replacement(owner, form, plan, include_run=True)
                 form.head = boundary['id']
+                next_run = boundary['run_plan']
                 replacements += 1
                 continue
             owner.assertEqual(plan['state'], 'stop', plan)
@@ -647,17 +786,9 @@ def refuse_below_floor(owner, family):
 def execute_admission_answers(owner, form, stop, refused):
     """Each answer of an admission stop, on its own copy of the store, to a first assignment of the same review
     that runs and passes the preflight."""
-    from ci.continuity_guard import FORM_DEFECTS
-    journeys, unserved = [], []
+    journeys = []
     for index, answer in enumerate(stop['details']['decision']['then']):
         with owner.subTest(answer=answer['answer']), fork_store(form):
-            if FORM_DEFECTS.get((form.family, form.turn, answer['answer'])) is not None:
-                with owner.assertRaises(ResearchError) as caught:
-                    execute_new_chain_step(owner, form, answer['steps'][0], 'admission-%d' % index,
-                                           refused['route_id'], original=refused)
-                owner.assertEqual(caught.exception.code, stop['code'])
-                unserved.append(answer['answer'])
-                continue
             commands, following = [], None
             route_id = refused['route_id']
             for step in answer['steps']:
@@ -678,9 +809,7 @@ def execute_admission_answers(owner, form, stop, refused):
             journeys.append(dict(answer=answer['answer'], accepted_commands=commands, end=dict(
                 kind='assignment', id=following['id'], prior_head=None, eligible=True,
                 preflight=matrix.check_preflight(form.case, following), record=following)))
-    served = dict(stop, details=dict(decision=dict(then=[answer for answer in stop['details']['decision']['then']
-                                                         if answer['answer'] not in unserved])))
-    owner.assertEqual(validate_stop_journeys(served, journeys, stop_classes.STOP_REGISTRY), [])
+    owner.assertEqual(validate_stop_journeys(stop, journeys, stop_classes.STOP_REGISTRY), [])
     return journeys
 
 

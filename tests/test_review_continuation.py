@@ -111,10 +111,13 @@ class ContinuationTests(unittest.TestCase):
         records['review_attempt'] = dict(failure=dict(id='failure', assignment_id='failed',
             status='failed', recorded_revision=101))
         for state in ('run', 'replace', 'wait', 'stop'):
+            # The copied continuation has no verified history, so the start admits it here only by this patch: the
+            # subject is the selection of the failure policy, and its admission has its own tests.
             with self.subTest(state=state), patch(
                     'research_harness.review_failure_class.plan_after_failure',
                     return_value=dict(state=state, not_before='2030-01-01T00:00:00+00:00',
-                                      code='fixture_failure', details={'bounded': True})):
+                                      code='fixture_failure', details={'bounded': True})), patch.object(
+                    protocol, 'prepare_assignment_call', return_value={}):
                 plan = self.plan(records)
                 self.assertEqual(plan['state'], state)
                 if state == 'replace':
@@ -291,6 +294,10 @@ class ContinuationTests(unittest.TestCase):
         self.assertEqual(fixture.store.snapshot(), before)
 
     def test_capacity_wait_names_existing_call_reconciliation(self):
+        from ci.reviewer_program_guard import use_absent_programs
+        from research_harness.review_call_admission import check_review_call_admission
+
+        use_absent_programs(self)
         records = self.case.read_records()
         records['review_route']['route']['adapter'] = 'codex_cli_v1'
         records['review_invocation'] = dict(other=dict(id='other', assignment_id='other-chain', route_id='route'))
@@ -298,9 +305,14 @@ class ContinuationTests(unittest.TestCase):
             dict(released=False, invocation_id='other', operation='review.invoke', state='running', children=[],
                  owner=dict(pid=987654321, pgid=987654321, started='gone'))}
         # The copy of the route record has no probe that matches it, so the read of the context of the present is
-        # replaced as the state is.
+        # replaced as the state is. The start of the run checks only its admission to the store's capacity: the copy
+        # of the route is not the route that the assignment recorded.
+        def admit(records, artifacts, *, payload, bounded_chain_checked=False):
+            return check_review_call_admission(records, 'review.invoke', payload['id'], 'route', invocation=payload)
+
         with patch.object(protocol, 'assignment_state', return_value=dict(output=None, obligations=[])), \
-                patch.object(protocol, 'find_unverified_context', return_value=None):
+                patch.object(protocol, 'find_unverified_context', return_value=None), \
+                patch.object(protocol, 'prepare_assignment_call', side_effect=admit):
             plan = self.plan(records)
         self.assertEqual(plan['state'], 'wait')
         self.assertEqual(plan['code'], 'review_capacity_wait')

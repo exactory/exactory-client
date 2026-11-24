@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from test_openness_final_pages import FinalPagesSupport
+from test_openness_unread_final import UnreadFinalSupport
 from openness_named_gap_fixtures import build_ground
 import test_openness_reading_v7_turns as turn_fixtures
 from codex_route_fixtures import build_codex_response, bind_codex_response
@@ -236,6 +237,153 @@ class PageReplacementTests(FinalPagesSupport):
         self.assertEqual(len(composite['closing']['condensing']), 2)
         self.assert_frozen(saved)
 
+    def test_capacity_split_of_refused_closing_runs_combine_with_the_frozen_notice(self):
+        """A refused closing needs the smallest two-page finding before it can split to combine."""
+        from research_harness import review_preflight, review_prompt_paragraphs as paragraphs
+        native = self.export_targets(9)
+        with patch.object(protocol, 'COMMON_VERSION', 3):
+            head, _ = self.start_final(native)
+        head, packet = self.reach_closing(native, head)
+        output = self.answer(packet)
+        output['grounds'] = [dict(kind='own_argument', text='g' * 601)]
+        self.assertEqual(self.invoke(head, output)['output_refusal']['details']['rule'], 'ground_bound')
+        refused = self.replace(head)
+        notice = self.read_packet(refused)['output_refusal']
+        self.assertEqual(notice['form'], 'whole')
+        self.fail_capacity(refused)
+        records = self.store.snapshot()['records']
+        with patch.object(review_preflight, 'build_assignment_report',
+                          wraps=review_preflight.build_assignment_report) as reports:
+            action = plan_next(records, self.artifacts, refused)
+        self.assertEqual((action['state'], action.get('command')), ('replace', 'review-assignment'), action)
+        proposed = next(call.args[2]['prompt'] for call in reports.call_args_list
+                        if call.args[2]['id'] == action['payload']['id'])
+        assignment = self.mutate(protocol.record_assignment, action['payload'])['result']
+        head = assignment['id']
+        packet = self.read_packet(head)
+        self.assertEqual(reading.find_stage(packet), 'combine')
+        self.assertEqual(packet['output_refusal'], notice)
+        self.assertEqual(assignment['prompt']['parameters'][paragraphs.PARAMETER],
+                         [paragraphs.REFUSAL_PARAGRAPH_VERSIONS['whole']])
+        self.assertEqual(protocol.find_common_prompt_version(assignment['prompt']), 3)
+        self.assertTrue(protocol._prompt_matches(assignment, packet))
+        self.assertEqual(assignment['prompt'], proposed)
+        records = self.store.snapshot()['records']
+        actual = review_preflight.build_assignment_report(records, self.artifacts, assignment)
+        self.assertEqual(action['details']['recovery']['preflight']['input_size'], actual['input_size'])
+        self.finish(native, head)
+
+    def refuse_closing_with_a_long_ground(self):
+        """Refuse a closing whose ground takes most of the room that its request leaves."""
+        native = self.export_targets(9)
+        head, _ = self.start_final(native)
+        head, packet = self.reach_closing(native, head)
+        records = self.store.snapshot()['records']
+        assignment = records['review_assignment'][head]
+        request = protocol.build_assignment_request(records, self.artifacts, assignment)
+        sizes = capacity.describe_plan_preflight(records, records['review_route']['route'], request,
+            capacity.read_chain_capacity_plan(self.artifacts, assignment), 'final')['plan_comparison']['sizes']
+        output = self.answer(packet)
+        room = sizes['text_characters']['bound'] - sizes['text_characters']['value']
+        output['grounds'] = [dict(kind='own_argument', text='g' * (room * 88 // 100))]
+        # On the merged release the bound of the closing total (16,000 characters) refuses this answer before the
+        # ground bound of the finding validator.
+        refusal = self.invoke(head, output)['output_refusal']
+        self.assertEqual((refusal['code'], refusal['check']), ('review_composition_conflict', 'review.shape'))
+        return native, head
+
+    def test_refused_closing_freezes_a_bounded_notice_that_its_combine_holds(self):
+        """The two pages, the closing, its split into combine turns and the recorded finding need the nine targets."""
+        native, head = self.refuse_closing_with_a_long_ground()
+        refused = self.replace(head)
+        notice = self.read_packet(refused)['output_refusal']
+        self.assertEqual(notice['form'], 'bounded')
+        self.fail_capacity(refused)
+        head = self.replace(refused)
+        packet = self.read_packet(head)
+        self.assertEqual(reading.find_stage(packet), 'combine')
+        self.assertEqual(packet['output_refusal'], notice)
+        self.finish(native, head)
+
+    def test_frozen_whole_notice_over_the_reserve_ends_in_the_capacity_decision(self):
+        """Two pages lead to the closing, and only a split of a closing gives the combine that cannot hold the notice."""
+        from research_harness import review_refusal_notice as notices
+        native, head = self.refuse_closing_with_a_long_ground()
+        select = notices.select_refusal_notice
+        # The selection of a release without the reserve rule froze the whole notice.
+        with patch.object(notices, 'select_refusal_notice',
+                          side_effect=lambda *args, **kwargs: select(*args, **dict(kwargs, forms=('whole', 'bounded')))):
+            refused = self.replace(head)
+        frozen = self.read_packet(refused)
+        self.assertEqual(frozen['output_refusal']['form'], 'whole')
+        self.fail_capacity(refused)
+        saved, revision = self.freeze_records(), self.store.revision
+        for _ in range(2):
+            action = plan_next(self.store.snapshot()['records'], self.artifacts, refused)
+            # The repeated run of the capacity decision is refused by the store, so the plan hands off to the export.
+            self.assertEqual((action['state'], action['command'], action['code']),
+                             ('handoff', 'export', 'review_slot_exhausted'), action)
+            self.assertEqual(action['details']['outcome'], 'output_over_cap')
+            self.assertEqual(action['details']['range_not_served'], v7.FINAL_PAGE_FLOOR_STATEMENT)
+            comparison = action['details']['plan_comparison']
+            self.assertEqual(comparison['kind'], 'final')
+            self.assertFalse(comparison['sizes']['text_characters']['fits'])
+        self.assertEqual(self.store.revision, revision)
+        self.assert_frozen(saved)
+        self.assertEqual(self.read_packet(refused), frozen)
+        self.take_export_step(action['details']['step'], refused, 'after-export')
+        successor = plan_next(self.store.snapshot()['records'], self.artifacts, 'after-export')
+        self.assertEqual((successor['state'], successor['command']), ('run', 'review-run'), successor)
+
+    def test_final_after_its_export_names_the_successor_and_offers_no_second_export(self):
+        """The final in one request: a refused final, its whole-notice replacement and an output cap end in the export
+        handoff. After the export and the new assignment, the plan of the old head names the successor, twice the
+        same, where release 0.92.1 planned the refused run again."""
+        released = patch.object(v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
+        native = self.export_targets(3)
+        head, packet = self.start_final(native)
+        bad = self.build_v7_finding(packet, packet['reading_final']['notes_handle'])
+        bad['findings']['openness']['grounds'][0]['refs'] = [dict(ref='m999999')]
+        self.assertEqual(self.invoke(head, bad)['output_refusal']['code'], 'invalid_reference_handle')
+        head = self.replace(head)
+        self.fail_capacity(head)
+        action = plan_next(self.store.snapshot()['records'], self.artifacts, head)
+        self.assertEqual((action['state'], action['command'], action['code']),
+                         ('handoff', 'export', 'review_slot_exhausted'), action)
+        self.take_export_step(action['details']['step'], head, 'after-export')
+        revision = self.store.revision
+        plans = [plan_next(self.store.snapshot()['records'], self.artifacts, head) for _ in range(2)]
+        self.assertEqual(plans[0], plans[1])
+        self.assertEqual((plans[0]['state'], plans[0]['details']['successor_assignment_id']), ('done', 'after-export'))
+        self.assertEqual(self.store.revision, revision)
+
+    def take_export_step(self, step, head, identifier):
+        """Take step 4 through its commands: the export, the check of the new assignment, then its write."""
+        from research_harness.check_mode import check_mutation
+        from research_harness.problem_openness import export_openness
+        self.assertEqual((step['id'], step['command'], step['payload']['kind']), (4, 'export', 'problem-openness'))
+        old = self.store.snapshot()['records']['review_assignment'][head]
+        payload = dict(step['payload'], assignment_id=identifier, reviewer_id=old['reviewer_id'],
+                       minimum=dict(searches=[dict(formulation=row['question'], search_id=row['id'])
+                                              for row in self.searches],
+                                    settling_work_id=None, duplicate_resolutions=[]))
+        del payload['kind']
+        native = export_openness(self.store, payload, self.root / (identifier + '-export'),
+                                 accept_gaps=True)['native_packet']
+        for child in step['then']:
+            value = copy.deepcopy(child['payload'])
+            value.update(id=identifier, context=dict(native_packet=native))
+            if child.get('check'):
+                result = check_mutation(self.store, protocol.record_assignment, value,
+                                        expected_revision=self.store.revision, request_id=identifier + '-check',
+                                        bounded_payload=value)
+                self.assertEqual(result['check'], 'accepted')
+            else:
+                self.mutate(protocol.record_assignment, value)
+        self.assertIn(identifier, self.store.snapshot()['records']['review_assignment'])
+
     def test_a7_condensing_refusal_keeps_block_and_authenticates(self):
         native = self.export_targets(9)
         head, _ = self.start_final(native)
@@ -292,7 +440,9 @@ class PageReplacementTests(FinalPagesSupport):
         self.assert_frozen(saved)
 
     def test_a14_condensing_capacity_splits_block_and_selects_only_replacements(self):
-        native = self.export_targets(9)
+        # Eleven rows give a first block of six, with three rows in each
+        # answerable replacement block.
+        native = self.export_targets(11)
         head, _ = self.start_final(native)
         head, _ = self.reach_closing(native, head)
         self.fail_capacity(head)
@@ -430,12 +580,16 @@ class PageReplacementTests(FinalPagesSupport):
         material = {key: binding[key] for key in v7.FINAL_MATERIAL_FIELDS}
         room = binding['capacity']['material_allowance']
         binding['notes'] += 'x' * (room - v7._measure_final_material(route, material))
+        binding['notes_cost']['used'] = (capacity.measure_capacity_value(route, binding['notes'])
+                                        - capacity.measure_capacity_value(route, ''))
         self.assertEqual(v7._measure_final_material(route, {key: binding[key] for key in v7.FINAL_MATERIAL_FIELDS}), room)
         notice = NoticeRoomTests().build_bounded_notice(turn_fixtures.MemoryArtifacts(), route=route)
         self.assertEqual(capacity.measure_capacity_value(route, notice), 45000)
         packet = notices.attach_refusal_notice(packet, notice)
-        prompt = protocol.canonical_prompt('native_math', reading_stage='page', reading_protocol=v7.PROTOCOL)
-        prompt = paragraphs.append_prompt_paragraphs(prompt, 'native_math', versions=[paragraphs.REFUSAL_PARAGRAPH_VERSIONS['bounded']])
+        prompt = protocol.canonical_prompt('native_math', reading_stage='page', reading_protocol=v7.PROTOCOL,
+            capacity=binding['capacity'], finding_version=2 if 'finding_index' in packet else 1,
+            **paragraphs.select_prompt_parameters('native_math', packet))
+        self.assertTrue(v7.matches_turn_prompt(dict(role='native_math', prompt=prompt), packet))
         request = protocol.transport.request_body(route, prompt['text'], packet)
         report = capacity.describe_plan_preflight(self.store.snapshot()['records'], route, request, plan, 'final')
         self.assertTrue(report['plan_comparison']['fits'], report['plan_comparison'])
@@ -534,7 +688,15 @@ class PageReplacementTests(FinalPagesSupport):
         head, _ = self.start_final(native)
         head, _ = self.reach_closing(native, head)
         saved = self.freeze_records()
+        route = self.store.snapshot()['records']['review_route']['route']
         for number in range(30):
+            binding = self.read_packet(head).get('reading_combine')
+            if binding is not None:
+                block = binding['block']
+                entry = block['entries'][0]
+                minimum = dict(block=block['handle'], summary='', refs=[entry.get('handle', entry.get('block'))])
+                self.assertGreaterEqual(binding['capacity']['answer_bound'],
+                                        capacity.measure_capacity_value(route, minimum))
             self.fail_capacity(head, attempt='closing-guard-%d' % number)
             action = plan_next(self.store.snapshot()['records'], self.artifacts, head)
             self.assertNotEqual(action['code'], 'review_route_capacity_plan_violated')
@@ -542,8 +704,6 @@ class PageReplacementTests(FinalPagesSupport):
                 head = self.replace(head)
             elif action['state'] == 'stop':
                 self.assertEqual(action['code'], 'review_output_over_cap')
-                block = self.read_packet(head)['reading_combine']['block']
-                self.assertEqual(len(block['entries']), 1)
                 self.assert_frozen(saved)
                 return
         self.fail('A closing or combination at every output limit must end in a decision.')
@@ -605,6 +765,80 @@ class PageReplacementTests(FinalPagesSupport):
         self.finish(native, head)
 
 
+
+class ClosingDeliveryTests(FinalPagesSupport):
+    """A closing over unread rows prices them with its decision rows, its material and a requested passage."""
+    # On this route the unread prefix and the whole passage together exceed the token bound at the byte measure.
+    capacity_probe_tokens = 373000
+    answer = PageReplacementTests.answer
+    build_v7_answer = PageReplacementTests.build_v7_answer
+    build_v7_finding = PageReplacementTests.build_v7_finding
+    invoke_usage = PageReplacementTests.invoke_usage
+    refuse_provider = UnreadFinalSupport.refuse_provider
+    # With 30 small units the unread rows of a closing that delivers the whole passage exceed that bound.
+    small_units = 30
+    stock_build_inventory = staticmethod(v7.build_inventory)
+
+    def build_inventory(self, records, artifacts, native, *, review=None):
+        """Add the small units, one long unit and one passage of four-byte characters to the stock inventory."""
+        result = self.stock_build_inventory(records, artifacts, native, review=review)
+        inventory = result['inventory']
+        material = {row['sha256']: row for row in inventory['material']}
+        bodies = [('%06d' % number + 'q' * 200).encode() for number in range(self.small_units)]
+        for number, data in enumerate(bodies + [b'a' * 1200000, ('\U0001f331' * 53000).encode()]):
+            reference = v7.describe_artifact(data, 'text/plain')
+            unit = v7._append_unit(inventory, dict(kind='record', record_kind='synthetic_required',
+                                                   record_id='r%d' % number, artifact=reference), data)
+            v7._bind_body(inventory, material, unit, reference, data, 'record')
+            result['bodies'][reference['sha256']] = data
+        return result
+
+    def test_closing_delivers_a_requested_passage_within_its_material_and_request_bounds(self):
+        """A run planned for the closing that delivers the passage passes its dispatch preflight."""
+        # The chain compares its units with the records at each step, so the records give the added units throughout.
+        with patch.object(v7, 'build_inventory', side_effect=self.build_inventory):
+            head, packet = self.request_passage_at_closing()
+            binding = packet['reading_final']
+            route = self.store.snapshot()['records']['review_route']['route']
+            used = (sum(capacity.measure_capacity_value(route, value) for value in
+                        (binding['closing'], binding['material'], binding['plan']['now'], packet['evidence']))
+                    + v7.compute_unread_rows_charge(route, binding['unread']))
+            self.assertLessEqual(used, binding['capacity']['material_allowance'])
+            self.assertTrue(binding['unread']['rows'])
+            self.assertTrue(packet['evidence'])
+            records = self.store.snapshot()['records']
+            assignment = records['review_assignment'][head]
+            request = protocol.build_assignment_request(records, self.artifacts, assignment)
+            plan = capacity.read_chain_capacity_plan(self.artifacts, assignment)
+            report = capacity.describe_plan_preflight(records, route, request, plan, 'final')
+            self.assertEqual(report['request_measure']['measure'], 'bytes')
+            self.assertTrue(report['plan_comparison']['fits'], report['plan_comparison'])
+            action = plan_next(records, self.artifacts, head)
+            self.assertEqual((action['state'], action.get('command')), ('run', 'review-run'), action)
+            self.invoke_usage(head, self.answer(packet), attempt=action['payload']['id'])
+            self.assertIn(action['payload']['id'], self.store.snapshot()['records']['review_attempt'])
+
+    def request_passage_at_closing(self):
+        """Exhaust the reading, answer the pages, request the whole passage at the closing and record its delivery."""
+        native = self.export_targets(9, assignment_id='first')
+        self.assign('first', native)
+        _, final, packet = UnreadFinalSupport.exhaust_head(self, native, 'first')
+        head = final['id']
+        while reading.find_stage(packet) != 'closing':
+            self.invoke_usage(head, self.answer(packet))
+            step = plan_next(self.store.snapshot()['records'], self.artifacts, head)
+            head = self.mutate(protocol.record_assignment, step['payload'])['result']['id']
+            packet = self.read_packet(head)
+        answer = self.build_v7_answer(packet)
+        records = self.store.snapshot()['records']
+        _, inventory, _ = v7.read_bound_state(self.artifacts, records['review_assignment'][head], packet)
+        passage = next(row for row in inventory['material'] if row['characters'] == 53000)
+        answer['passage_requests'] = [dict(id='pass', unit=passage['handle'], anchor=None, characters=53000)]
+        self.assertNotIn('output_refusal', self.invoke_usage(head, answer))
+        step = plan_next(self.store.snapshot()['records'], self.artifacts, head)
+        head = self.mutate(protocol.record_assignment, step['payload'])['result']['id']
+        return head, self.read_packet(head)
+
 class PageFloorTests(unittest.TestCase):
     def test_single_target_page_after_condensing_keeps_request_refusal_position(self):
         raw = dict(id='request', role='native_math', capacity_plan_kind='final',
@@ -662,11 +896,10 @@ class PageFloorTests(unittest.TestCase):
         closing[-1]['rows'] = [dict(handle='one-combination', characters=360)]
         self.assertIsNone(pages.split_final_turn(closing, closing[-1]['number'], 60000, condensing.plan_condensing))
 
-    def test_closing_with_three_rows_splits_even_when_each_half_is_one_small_block(self):
+    def test_closing_cannot_split_two_rows_into_unanswerable_blocks(self):
         from research_harness import review_final_pages as pages, review_condensing as condensing
         turns = pages.plan_final_turns(page_room=60000, target_allowance=1, target_minimum=6700, notes=0, pool=[],
-            targets=[dict(handle='t%d' % n, entries=[], rows=[]) for n in range(1, 4)],
+            targets=[dict(handle='t%d' % n, entries=[], rows=[]) for n in (1, 2)],
             closing_room=60000, row_characters=360, condense=condensing.plan_condensing)
         divided = pages.split_final_turn(turns, turns[-1]['number'], 60000, condensing.plan_condensing)
-        self.assertIsNotNone(divided)
-        self.assertEqual([row['kind'] for row in divided][-3:], ['combine', 'combine', 'closing'])
+        self.assertIsNone(divided)

@@ -44,7 +44,10 @@ def normalize_identifier(value):
     if value.startswith("url:"):
         return "url:" + safe_url(value[4:])
     if value.lower().startswith(("http://", "https://")):
-        parts = urlsplit(value)
+        try:
+            parts = urlsplit(value)
+        except ValueError:
+            raise ResearchError("invalid_identifier", "A supported exact identifier is required") from None
         if parts.username is not None or parts.password is not None or parts.query or parts.fragment:
             raise ResearchError("invalid_identifier", "Identifier URLs cannot contain credentials, queries or fragments")
         host, path = parts.netloc.lower(), unquote(parts.path)

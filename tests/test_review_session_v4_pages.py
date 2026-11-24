@@ -19,14 +19,16 @@ class SessionPagesTests(unittest.TestCase):
     respond = turn_fixtures.SessionTurnsTests.respond
     record_legacy_bars = turn_fixtures.SessionTurnsTests.record_legacy_bars
 
-    def start(self, role='bar', targets=9, request_answer=None, continuation_prefix='read-', check=False):
+    def start(self, role='bar', targets=9, request_answer=None, continuation_prefix='read-', check=False,
+              *, distinct_objections=False):
         if role != 'bar':
             self.record_legacy_bars()
         original = protocol.build_packet
         def build(*args, **kwargs):
             packet = original(*args, **kwargs)
             if packet['role'] == role:
-                objections = [dict(id='objection-%d' % n, claim='A synthetic material gap.',
+                objections = [dict(id='objection-%d' % n,
+                    claim='A synthetic material gap %d.' % n if distinct_objections else 'A synthetic material gap.',
                     evidence=[self.case.supporting], severity='material') for n in range(targets)]
                 packet['historical_reviews'] = [dict(id='history', objections=objections)]
                 packet['digest'] = digest({key: value for key, value in packet.items() if key != 'digest'})
@@ -419,6 +421,8 @@ class SessionPagesTests(unittest.TestCase):
         self.assertTrue(any('page' in row.get('session_final', {}) for row in packets))
 
     def test_astra_b10_spare_page_room_does_not_extend_exhausted_target_grants(self):
+        from research_harness.errors import ResearchError
+
         self.add_sources([600000])
         def answer(number, current, packet):
             _, inventory, state = session.read_bound_session(self.case.artifacts, current)
@@ -441,12 +445,13 @@ class SessionPagesTests(unittest.TestCase):
             _, _, before = session.read_bound_session(self.case.artifacts, current)
             output = dict(schema_version=1, stage='request', notes='Page notes.', settled_requests=[], requests=[],
                 excerpts=[dict(unit=unit['handle'], text=packet['evidence'][0]['content'][:6000], purpose='The page comparison.', targets=targets)])
-            current = self.advance(current, output)
+            with self.assertRaises(ResearchError) as caught:
+                session.validate_final_turn_output(self.case.read_records(), self.case.artifacts, current, packet, output)
+            self.assertEqual(caught.exception.details, dict(path='/excerpts', items=1, bound=0))
+            current = self.advance(current, dict(output, excerpts=[]))
             _, _, after = session.read_bound_session(self.case.artifacts, current)
-            entry = after['excerpts'][-1]
-            self.assertEqual(entry['status'], 'over_allowance')
+            self.assertEqual(after['excerpts'], before['excerpts'])
             self.assertEqual(after['allowances']['targets'], before['allowances']['targets'])
-            self.assertNotIn(entry['handle'], [row['handle'] for row in session.describe_session_final_entries(after, targets)])
         self.finish_pages(current)
 
     def test_astra_b9_pending_material_capacity_halves_text_without_splitting_targets(self):
@@ -574,13 +579,13 @@ class SessionPagesTests(unittest.TestCase):
 
     def test_single_request_v4_packet_prompt_and_plan_bytes_match_base(self):
         current = self.case.assign('bar', 'first', identifier='single')
-        self.assertEqual(digest(self.read_packet(current)), '8772dcc9a3cec0f7ecfd86db45a793e242faa6fa9f9093d26c184f0b880a79a6')
-        self.assertEqual(digest(current['prompt']), '2b91b5c42abdb555a2eb14ed885c396dae10b5585d5c72e3c147980283398e56')
-        self.assertEqual(current['capacity_plan']['digest'], '33bcee45a4619e6809eeea9c73764e88bcc347b553d46cd4d4d59d2eb1c123d2')
+        self.assertEqual(digest(self.read_packet(current)), '529f1ce6c61b64972e327f03033a645a6f59d6d3e05e93ee69693433574bd68a')
+        self.assertEqual(digest(current['prompt']), '3affb99c835a3c2df5cc6a607b1a66beecb76051488a57b31b5e10304c3b39ca')
+        self.assertEqual(current['capacity_plan']['digest'], 'cf0caa6c49beedcfe34174edb04a27c61afbef2318449e4a178bed2fabd58700')
         self.respond(current)
         final = self.case.assign('bar', 'first', identifier='single-final', prior_assignment_id=current['id'])
-        self.assertEqual(digest(self.read_packet(final)), 'd0185d01152c38b56050db2fa0d0ad1e91f214bd21a4a668ee708672d7ee9bac')
-        self.assertEqual(digest(final['prompt']), '95ac8663f1c94b90cbe60577ed3339532943e8da75ce389a0ace5db0ea254d30')
+        self.assertEqual(digest(self.read_packet(final)), 'e00daff39154c00f0255a932bc020c8ea790e6d30cd9956d25def9817c7ef00b')
+        self.assertEqual(digest(final['prompt']), '974a172a844426e617e902091f5f4e5eac4070d2c97e16648323e7ca0bc758d5')
 
     test_v2_and_v3_running_sessions_keep_exact_bytes = turn_fixtures.SessionTurnsTests.test_running_v2_and_v3_continuations_keep_exact_check_bytes
 

@@ -37,6 +37,9 @@ COMMON_CONFIGURATION_MEMBERS = (
 CLAUDE_CONFIGURATION_MEMBERS = (
     ('effort', 'key', 'Effort changes the model reasoning settings in the request.'),
 )
+CODEX_CONFIGURATION_MEMBERS = (
+    ('effort', 'key', 'Effort changes the model reasoning settings of the turn.'),
+)
 REQUIRED_RUNTIME_MEMBERS = (
     ('openai_responses_v1', ('adapter', 'implementation_sha256', 'input_contract')),
     ('claude_cli_v1', ('adapter', 'implementation_sha256', 'input_contract', 'credential_mode', 'flags')),
@@ -76,6 +79,7 @@ def describe_capacity_members(route):
             config_rules += CLAUDE_CONFIGURATION_MEMBERS
         else:
             runtime_rules += CODEX_RUNTIME_MEMBERS
+            config_rules += CODEX_CONFIGURATION_MEMBERS
     result = []
     for scope, members, rules in (('runtime', route.get('runtime', {}), runtime_rules),
                                   ('configuration', route['configuration'], config_rules)):

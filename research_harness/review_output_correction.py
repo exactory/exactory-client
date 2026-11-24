@@ -10,6 +10,7 @@ from .evidence import digest
 from .operations import fields, immutable_record, text
 from . import review_context_repair as repair, review_transport as transport
 from .review_answer_recovery import derive_output
+from .review_codex_transport import read_route_effort
 
 PROTOCOL = 'exactory-reassessment-disposition-correction-v1'
 PROMPT = (
@@ -218,8 +219,8 @@ def _authenticate_observation(records, artifacts, invocation, observation):
         contexts = [event['payload'] for event in events if event.get('type') == 'turn_context']
         if (digest(events) != response.get('context_evidence', {}).get('rollout_digest')
                 or len(contexts) != 1 or contexts[0].get('model') != route['model']
-                or contexts[0].get('effort') != 'high'):
-            raise ResearchError('review_correction_unverified', 'The captured native correction turn must use the exact model and high effort.')
+                or contexts[0].get('effort') != read_route_effort(route)):
+            raise ResearchError('review_correction_unverified', 'The captured native correction turn must use the exact model and the effort of its route.')
     return assignment, packet, output
 
 
@@ -242,7 +243,7 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
         packet, route, request = (built['packet'], built['route'], built['request'])
         # Rule PC3: the packet checks the context of the result itself; the earlier turns of its review also have a
         # verified context at the time of the call.
-        protocol.require_verified_context(records, artifacts, assignment)
+        protocol.require_verified_context(records, artifacts, assignment, route_id=route['id'])
         # The one correction of the assignment is recorded only for a call that can start: the route record pins the
         # installed runtime, and the reviewer program is installed. The Claude runtime reads no program, so the
         # program is read here as the sender reads it.

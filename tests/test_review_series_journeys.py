@@ -296,7 +296,7 @@ class SeriesJourneyTests(unittest.TestCase):
             return codex_fixtures.build_codex_response(route, request, output)
         with patch.object(protocol.transport, 'send_request', side_effect=provider), patch(
                 'research_harness.review_failure_class.plan_after_failure',
-                side_effect=lambda records, artifacts, identifier: dict(
+                side_effect=lambda records, artifacts, identifier, **options: dict(
                     state='replace' if any(row['assignment_id'] == identifier
                         for row in records.get('review_attempt', {}).values()) else 'run',
                     code='review_output_over_cap', details={})):

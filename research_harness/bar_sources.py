@@ -340,6 +340,7 @@ def validate_requested_artifacts(artifacts, packet, output):
     """Refuse binary or non-UTF-8 artifact requests at output admission."""
     from .review_transport import is_binary_evidence
     references = {row['sha256']: _reference(row) for row in collect_record_artifacts(packet)}
+    references.update(find_bound_text_forms(packet))
     for index, request in enumerate(output.get('source_requests', [])):
         if request['kind'] != 'artifact':
             continue
@@ -353,6 +354,11 @@ def validate_requested_artifacts(artifacts, packet, output):
         if not valid:
             raise ResearchError('invalid_review_source_request', ARTIFACT_REQUEST_MESSAGE,
                                 {'path': '/source_requests/' + str(index) + '/sha256'})
+
+
+def find_bound_text_forms(packet):
+    return {row['text_form_of']['sha256']: row['artifact'] for row in packet.get('evidence', [])
+            if 'text_form_of' in row}
 
 
 def pending(packet, output, *, manifest=None):
@@ -780,9 +786,10 @@ def _answer_fulltext(records, artifacts, request, original_rows, delivered_bodie
     return deliveries, used, remaining > 0 or not complete, remaining > 0
 
 
-def _answer_artifact(artifacts, request, references, delivered_bodies, characters_left):
+def _answer_artifact(artifacts, request, references, delivered_bodies, characters_left, *, text_forms=None):
     """Deliver referenced UTF-8 artifact text in consecutive budgeted parts."""
-    reference = _reference(next(row for row in references if row['sha256'] == request['sha256']))
+    original = next(row for row in references if row['sha256'] == request['sha256'])
+    reference = (text_forms or {}).get(original['sha256']) or _reference(original)
     data = artifacts.read(reference)
     content = data.decode('utf-8')
     spans = review_excerpts.compute_part_spans(content)
@@ -879,7 +886,8 @@ def continuation(records, artifacts, previous_packet, output, delivered_bodies=N
             continue
         if request['kind'] == 'artifact':
             found, characters, is_pending, is_waiting = _answer_artifact(
-                artifacts, request, collect_record_artifacts(previous_packet), delivered_bodies, characters_left)
+                artifacts, request, collect_record_artifacts(previous_packet), delivered_bodies, characters_left,
+                text_forms=find_bound_text_forms(previous_packet))
             deliveries.extend(found)
             characters_left = 0 if is_waiting else characters_left - characters
             if is_pending:

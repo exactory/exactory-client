@@ -147,15 +147,12 @@ def fill_closing_answer(output, binding):
         ground['text'] = ground['text'].ljust(min(590, len(ground['text']) + room), 'g')
 
 
-def build_math_final(packet, binding, closing):
+def build_math_final(packet, binding):
     native = packet['native']
-    notes = binding.get('notes') or ''
-    delivered = re.findall(r'(u\d+) ([0-9a-f]{64})', notes)
-    refs = [dict(ref=handle) for handle, _ in delivered]
+    refs = [dict(ref=row['handle']) for row in binding['evidence_units']['rows']]
     findings = dict(build_findings(), openness=dict(outcome='supported_open',
-        reason='The bound evidence leaves the formulation open.', searched_at=read_search_date(notes), evidence=refs))
-    if closing:
-        return dict(decision='approve', findings=findings)
+        reason='The bound evidence leaves the formulation open.', searched_at=binding['minimum']['searched_through'],
+        evidence=refs))
     findings['openness'].update(statement_digest=native['claim_digest'], coverage='Reviewed the bound evidence.')
     return dict(schema_version=2, decision='approve', findings=findings,
                 **{key: native[key] for key in ('subject_digest', 'claim_digest', 'reviewer')})
@@ -182,10 +179,13 @@ def build_answer(instructions, message, *, fill=False, over_bound=False, list_al
     elif stage == 'page':
         return build_page_answer(binding, math, fill)
     elif math:
-        output = build_math_final(packet, binding, stage == 'closing')
+        output = build_math_final(packet, binding)
         field = (output['findings'], 'statement')
     else:
         output = dict(build_findings(), outcome='unresolved', reason='A remaining gap.', grounds=[])
+        if stage == 'closing' and 'unread' in binding and 'x1' in instructions:
+            kind = 'packet_defect' if 'finding_index' in packet and 'packet_defect' in instructions else 'reviewer_gap'
+            output['grounds'].append(dict(kind=kind, text='The listed ranges could not be read.', refs=[dict(ref='x1')]))
         if fill:
             fill_closing_answer(output, binding)
         return output

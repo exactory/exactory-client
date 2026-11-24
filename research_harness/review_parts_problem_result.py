@@ -190,4 +190,5 @@ ADAPTER = dict(applies=applies, enumerate_units=list_units, targets=list_targets
                unit_rule=RECORD_UNIT_RULE, enumerate_record_units=list_record_units,
                series_key=compute_series_key, citations=list_citations, validate_final=validate_final,
                covers_items=covers_items, final_prompt=prompts.FINAL_RESULT,
+               final_prompt_v3=prompts.FINAL_RESULT_V3,
                source_requests=True)

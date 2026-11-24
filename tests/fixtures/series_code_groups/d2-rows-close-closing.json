@@ -106,6 +106,9 @@
         ],
         "research_harness/probe_provenance.py:read_import_identity#3": [
           "harness"
+        ],
+        "skills/math-solver/harness/search_controller/provenance.py:check_import_identity#1": [
+          "content"
         ]
       },
       "invalid_input": {
@@ -473,6 +476,9 @@
         "research_harness/review_route_capacity.py:prepare_assignment_capacity#9": [
           "content"
         ],
+        "research_harness/review_session_v4.py:_require_assignment_id#1": [
+          "limit"
+        ],
         "research_harness/review_stop.py:request_stop#1": [
           "form"
         ],
@@ -507,10 +513,10 @@
         "research_harness/review_task_execution.py:read_call_kinds#1": [
           "form"
         ],
-        "research_harness/review_task_execution.py:record_capacity.apply#1": [
+        "research_harness/review_task_execution.py:validate_capacity_policy#1": [
           "form"
         ],
-        "research_harness/review_task_execution.py:record_capacity.apply#2": [
+        "research_harness/review_task_execution.py:validate_capacity_policy#2": [
           "form"
         ],
         "research_harness/review_worker.py:launch_worker#1": [
@@ -623,6 +629,54 @@
         ],
         "research_harness/review_final_pages.py:split_final_turn#3": [
           "form"
+        ],
+        "skills/math-solver/harness/search_controller/adoption.py:build_import#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/adoption.py:build_import#2": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/evidence.py:audit_checkpoint#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/evidence.py:audit_local_delivery#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/evidence.py:import_inputs#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/integration.py:build_begin#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/problem_records.py:load_problem_before#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/problem_records.py:pin_problem#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:ContentSink.put_artifact#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.append#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.append_operation#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.append_operation#2": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.append_operation#3": [
+          "harness"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.initialize#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.put_artifact#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/strategy_refresh_io.py:_plan_files#1": [
+          "form"
         ]
       },
       "invalid_native_review_packet": {
@@ -713,6 +767,10 @@
           "form",
           "limit"
         ],
+        "research_harness/review_codex_framed_transport.py:validate_route#5": [
+          "form",
+          "limit"
+        ],
         "research_harness/review_codex_transport.py:validate_route#1": [
           "form"
         ],
@@ -724,6 +782,10 @@
           "limit"
         ],
         "research_harness/review_codex_transport.py:validate_route#4": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_codex_transport.py:validate_route#5": [
           "form",
           "limit"
         ],
@@ -746,30 +808,6 @@
         "research_harness/review_session_v4.py:_require_turn#1": [
           "form",
           "limit"
-        ],
-        "research_harness/review_session_v4.py:validate_request_output#1": [
-          "form"
-        ],
-        "research_harness/review_session_v4.py:validate_request_output#2": [
-          "form"
-        ],
-        "research_harness/review_session_v4.py:validate_request_output#3": [
-          "form"
-        ],
-        "research_harness/review_session_v4.py:validate_request_output#4": [
-          "form"
-        ],
-        "research_harness/review_session_v4.py:validate_request_output#5": [
-          "form"
-        ],
-        "research_harness/review_session_v4.py:validate_request_output#6": [
-          "form"
-        ],
-        "research_harness/review_session_v4.py:validate_request_output#7": [
-          "form"
-        ],
-        "research_harness/review_session_v4.py:validate_request_output#8": [
-          "form"
         ]
       },
       "invalid_target": {
@@ -948,19 +986,19 @@
         ]
       },
       "review_correction_duplicate": {
-        "research_harness/review_protocol.py:record_assignment.prepare#1": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#1": [
           "form"
         ]
       },
       "review_input_unreadable": {
+        "research_harness/review_continuation.py:_plan_next#1": [
+          "content"
+        ],
+        "research_harness/review_continuation.py:_plan_next#2": [
+          "content"
+        ],
         "research_harness/review_continuation.py:describe_context_failure#1": [
           "entry"
-        ],
-        "research_harness/review_continuation.py:plan_next#1": [
-          "content"
-        ],
-        "research_harness/review_continuation.py:plan_next#2": [
-          "content"
         ],
         "research_harness/review_delivered_evidence.py:_read_authenticated_delivery.project#1": [
           "record"
@@ -1069,6 +1107,30 @@
           "content"
         ],
         "research_harness/review_session_v4.py:_authenticate_session_binding#5": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:_authenticate_session_binding#6": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:_authenticate_session_binding#7": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:_require_bound_assignment#1": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:_require_session_members#1": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:authenticate_final_binding#1": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:authenticate_final_binding#2": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:authenticate_final_binding#3": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:read_composite_currency#1": [
           "content"
         ],
         "research_harness/review_session_v4.py:rebuild_session_state#1": [
@@ -1184,6 +1246,102 @@
         ],
         "research_harness/storage.py:Store._open#1": [
           "environment"
+        ],
+        "skills/math-solver/harness/search_controller/adoption.py:snapshot_workspace#1": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/adoption.py:snapshot_workspace#2": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/discovery.py:prepare#1": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/discovery.py:registry_path#1": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/discovery.py:registry_path#2": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/evidence.py:freeze_execution_inputs#1": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/execution.py:capture_input_modes#1": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/integration.py:native_snapshot#1": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/journal_io.py:acquire_journal_ownership#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/journal_io.py:acquire_journal_ownership#2": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/output_views.py:build_views#1": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/output_views.py:check_view_path#1": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/output_views.py:render_views#1": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/render.py:replace_bytes#1": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/research.py:validate_workspace#1": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/service.py:Controller._build#1": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/service.py:Controller._workspace_effect#1": [
+          "environment"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store._atomic_replace#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store._check_immutable#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store._check_lock_path#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store._check_root#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store._content_path#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store._content_path#2": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store._content_path#3": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store._ensure_directory#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store._ensure_directory#2": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store._prepare_root#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store._read_content#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store._read_document#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:safe_path#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:safe_path#2": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:safe_path#3": [
+          "form"
         ]
       }
     }

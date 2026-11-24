@@ -15,9 +15,15 @@ FINAL_PAGE_PLAN_PROTOCOL = 'exactory-final-page-plan-v1'
 INVALID_CONDENSING_MESSAGE = 'Condensing must provide exact blocks, rounds, output entries and a fitting remaining bound.'
 MISSING_CONDENSING_MESSAGE = 'Pass the chain policy condensing function to plan this reduction.'
 INVALID_SPLIT_MESSAGE = 'The turn to split must be a nonempty turn in this final plan, with a positive material floor.'
-INVALID_PROGRESS_MESSAGE = 'Completed and pending numbers must be distinct predecessor identities; only pages may be pending.'
+INVALID_PROGRESS_MESSAGE = (
+    'Completed and pending must be lists of distinct turn numbers of the plan that is replaced, with no number in '
+    'both; only a final, a page or a closing turn may be pending.')
 INVALID_REPLACEMENT_MESSAGE = 'A successor needs its predecessor digest and an exact split, level, ratio or inventory cause.'
-INVALID_PAGE_PLAN_MESSAGE = 'The final page plan does not replay from its predecessor, recorded state, currency and cause.'
+INVALID_PAGE_PLAN_MESSAGE = (
+    'A stored page plan of this final does not verify. The harness builds each page plan again from the plan '
+    'before it, its recorded state, its currency and its cause, and the plan that it builds is not the stored one. '
+    'details.index, where present, numbers the plan in the chain of page plans, from 0. The harness takes no turn '
+    'of the final from such a plan. Check the record with record-check.')
 INVALID_FINAL_SIZES_MESSAGE = 'Final rooms and target allowance must be positive integers; sizes are nonnegative and handles distinct.'
 
 
@@ -450,7 +456,8 @@ def _collect_preserved(turns, completed, pending):
 
 def repack_final_turns(turns, completed, pending, page_room, target_allowance, *, target_minimum=None, notes=None,
                        pool=None, targets=None, closing_room=None, row_characters=None, condense=None):
-    """Keep terminal, pending and split-held work; replan other assigned pages."""
+    """Keep terminal, pending and split-held work; replan other assigned pages. A room that cannot hold the carried
+    material raises review_route_capacity_below_floor."""
     _validate_progress(turns, completed, pending)
     selected = _collect_preserved(turns, completed, pending)
     if len(selected) == len(turns):
@@ -467,34 +474,41 @@ def repack_final_turns(turns, completed, pending, page_room, target_allowance, *
     kept = [turn for turn in turns if turn['number'] in completed]
     carried_pool = _apply_completed(original_pool, kept, 'pool')
     context = dict(values, pool=_sum_entries(carried_pool))
-    pool_turns, carried_pool = _prepare_pool(context, carried_pool, condense)
-    context['pool'] = _sum_entries(carried_pool)
-    by_handle = {}
-    for target in original_targets:
-        rows = _apply_completed(target['rows'], kept, 'target', target['handle'], 'rows')
-        entries = _apply_completed(target['entries'] + rows, kept, 'target', target['handle'], 'entries')
-        if entries != target['entries'] + rows:
-            by_handle[target['handle']] = dict(target, entries=entries, rows=[])
-        else:
-            by_handle[target['handle']] = dict(target, rows=rows)
-    result, pending = [], []
-    for turn in turns:
-        if turn['number'] in selected:
-            if pending:
-                result.extend(pool_turns)
-                pool_turns = []
-                result.extend(_pack_pages(context, carried_pool, original_pool, pending, condense))
-                pending = []
-            result.append(copy.deepcopy(turn))
-        elif turn['kind'] in ('final', 'page'):
-            pending.extend(by_handle[handle] for handle in turn['targets'])
-    if pending:
-        result.extend(pool_turns)
-        result.extend(_pack_pages(context, carried_pool, original_pool, pending, condense))
-    if not any(turn['kind'] in ('closing', 'final') for turn in result):
-        handles = [target['handle'] for target in original_targets]
-        rows = _build_decision_rows(handles, context['row_characters'])
-        result.extend(_plan_closing(context, handles, condense, _apply_completed(rows, kept, 'rows'), rows))
+    try:
+        pool_turns, carried_pool = _prepare_pool(context, carried_pool, condense)
+        context['pool'] = _sum_entries(carried_pool)
+        by_handle = {}
+        for target in original_targets:
+            rows = _apply_completed(target['rows'], kept, 'target', target['handle'], 'rows')
+            entries = _apply_completed(target['entries'] + rows, kept, 'target', target['handle'], 'entries')
+            if entries != target['entries'] + rows:
+                by_handle[target['handle']] = dict(target, entries=entries, rows=[])
+            else:
+                by_handle[target['handle']] = dict(target, rows=rows)
+        result, pending = [], []
+        for turn in turns:
+            if turn['number'] in selected:
+                if pending:
+                    result.extend(pool_turns)
+                    pool_turns = []
+                    result.extend(_pack_pages(context, carried_pool, original_pool, pending, condense))
+                    pending = []
+                result.append(copy.deepcopy(turn))
+            elif turn['kind'] in ('final', 'page'):
+                pending.extend(by_handle[handle] for handle in turn['targets'])
+        if pending:
+            result.extend(pool_turns)
+            result.extend(_pack_pages(context, carried_pool, original_pool, pending, condense))
+        if not any(turn['kind'] in ('closing', 'final') for turn in result):
+            handles = [target['handle'] for target in original_targets]
+            rows = _build_decision_rows(handles, context['row_characters'])
+            result.extend(_plan_closing(context, handles, condense, _apply_completed(rows, kept, 'rows'), rows))
+    except ResearchError as error:
+        # A condensing refusal with a minimum block: the measured room cannot hold the carried material at all, so
+        # the room of this chain is below its floor.
+        if error.code != 'invalid_input' or 'minimum' not in (error.details or {}):
+            raise
+        _raise_below_floor(error.details['room'], error.details['minimum'])
     next_number = max(turn['number'] for turn in turns) + 1
     for turn in result:
         if turn['number'] == 0:

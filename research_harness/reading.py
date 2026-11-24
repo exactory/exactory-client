@@ -383,9 +383,11 @@ def record_reading_batch(store, payload, *, expected_revision, request_id):
         for index, item in enumerate(items):
             try:
                 version = item.get("version_id") if isinstance(item, dict) else None
-                if version in seen:
-                    raise ResearchError("invalid_batch", "Each version appears once per batch")
-                seen.add(version)
+                # A version of another JSON type is refused by the item check of _batch_item.
+                if isinstance(version, str):
+                    if version in seen:
+                        raise ResearchError("invalid_batch", "Each version appears once per batch")
+                    seen.add(version)
                 record = _batch_item(records, evaluation, value["id"], item, sampled_tool=sampled_tool)
                 changes.append(immutable_record(records, "reading", record["id"], record))
                 results.append({"version_id": record["version_id"], "reading_id": record["id"],

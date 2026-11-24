@@ -25,6 +25,8 @@ class ProblemCandidateTransferTests(CheckCommandMixin, ProblemCase):
             deferred=[dict(candidate_id=value, evidence_needed="A proof.") for value in deferred],
             rejected=[dict(candidate_id=value, reason="Already known.") for value in rejected],
             candidate_ids=sorted(list(selected) + list(deferred) + list(rejected)),
+            bar_review_ids=["review-bar-first", "review-bar-second"], review_ids=[],
+            comparison="The candidates were compared.", reason="" if selected else "No candidate is selected.",
             recorded_revision=self.store.revision + 1))
 
     def transfer_candidate(self, **changes):

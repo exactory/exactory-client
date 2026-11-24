@@ -15,6 +15,7 @@ from research_harness import research_decisions as decisions, review_protocol as
 from research_harness.gates import gate_state
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
+from slate_refresh_fixtures import cite_in_refresh_chain
 from test_research_problem_delivery import ProblemDeliveryCase
 import test_research_problem_objections as objection_fixtures
 import test_research_problem_slate as slate_fixtures
@@ -72,6 +73,9 @@ class CarryFixture(ProblemDeliveryCase):
         output["value"]["objection_findings"] = [{"id": row["id"], "status": status,
             "reason": "The supplied theorem still settles this formulation.", "evidence": [self.supporting]}
             for row in packet.get("material_objections", [])]
+        if "session_refresh" in assignment["context"]:
+            # A slate refresh chain delivers the bars as records and replays no turn of the bar session.
+            output = cite_in_refresh_chain(output, self.supporting, packet["own_bars"][0]["record_reference"])
         with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
             self.mutate(protocol.invoke_assignment, {"id": "attempt-" + assignment["id"],
                 "assignment_id": assignment["id"]}, credential="test-only")

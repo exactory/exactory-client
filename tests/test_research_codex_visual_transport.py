@@ -241,6 +241,31 @@ class VisualNativeDeclarationTests(VisualRolloutCase):
         self.assertFalse(late['input_verified'])
         self.assertIn('late_developer_input', late['issues'])
 
+    def test_another_model_listing_keeps_the_context_verified(self):
+        from test_research_codex_transport import SYNTHETIC_LISTING, replace_model_listing
+        tools = replace_model_listing(self.FIXTURE['tool_declarations_0167'], SYNTHETIC_LISTING)
+        result = self.inspect_startup(self.startup_0167(tools=tools))
+        self.assertEqual((result['input_verified'], result['issues']), (True, []))
+        self.assertEqual(result['developer_digests'][0], hashlib.sha256(json.dumps(tools, sort_keys=True).encode()).hexdigest())
+
+
+class VisualRouteEffortTests(VisualRolloutCase):
+    def test_the_observed_effort_must_be_the_effort_of_the_route(self):
+        runtime = {'adapter': 'codex_cli_visual_v1', 'version': 'test fixture runtime'}
+        for configured, observed, verified in (('xhigh', 'xhigh', True), ('xhigh', 'high', False), (None, 'xhigh', False)):
+            with self.subTest(route=configured, turn=observed):
+                route = copy.deepcopy(self.route)
+                if configured is not None:
+                    route['configuration']['effort'] = configured
+                route['runtime'] = runtime
+                events = copy.deepcopy(self.events)
+                events[1]['payload']['effort'] = observed
+                evidence = self.adapter.inspect_rollout(events, self.request, 'thread-test', self.directory,
+                    ['EXCLUDED_CONTROL'], excluded_images=[png(150)], effort=observed)
+                evidence.update(inspected=True, route_digest=digest(route), event_digest='observed-events', runtime=runtime)
+                response = {'id': 'thread-test', 'context_evidence': evidence}
+                self.assertEqual(self.adapter.verify_context(route, self.request, response), verified)
+
 
 
 if __name__ == '__main__':

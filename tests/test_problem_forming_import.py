@@ -15,8 +15,8 @@ from test_research_problem_forming import build_forming, build_outcome
 class FormingImportTests(unittest.TestCase):
     def fixture(self, case_class=ProblemCase):
         case = case_class()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         case.initialize_problem()
         return case
 

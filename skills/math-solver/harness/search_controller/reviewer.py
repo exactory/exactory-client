@@ -357,44 +357,141 @@ def find_reviewed_claim(subject, state, claim_digest):
     return claim
 
 
-def export_packet(controller, spec):
-    """Write immutable common evidence objects, leaving native events unchanged."""
-    from research_harness.artifacts import ArtifactStore
-    from research_harness.native_review import KINDS, load_packet
-    from research_harness.storage import Store
-    from .evidence import import_inputs
+def _validate_export_spec(spec):
+    from research_harness.native_review import KINDS
     s.closed(spec, "kind subject claim_digest reviewer inputs" + (" openness" if "openness" in spec else ""))
     if isinstance(spec.get("openness"), dict) and spec["openness"].get("schema_version") == 2:
         raise SearchError("invalid_record", "Math-solver review packets require a version 1 openness minimum.")
     s.choice(spec["kind"], KINDS)
     s.require(isinstance(spec["subject"], dict), "Native review subject must be a record")
     s.validate_provenance(spec["reviewer"])
+
+
+def _prepare_export_inputs(controller, spec, state, content, common):
+    from .evidence import import_inputs
+    from .provenance import record_probe_origins
+    bindings = import_inputs(controller.root, spec["inputs"], content, state=state, common_workspace=common,
+                             allow_common_artifacts=True)
+    if bindings:
+        record_probe_origins(state, {"bindings": bindings})
+    prepare_subject(controller, state, content, spec["subject"])
+    content.put_blob(spec["subject"])
+    return {"schema_version": 1, "inputs": sorted(
+        [{"kind": item["kind"], "digest": item["digest"]} for item in spec["inputs"]],
+        key=lambda item: (item["kind"], item["digest"]))} if spec["inputs"] else None
+
+
+def _prepare_export(controller, spec, state, content, artifacts, records, supplementary, *, write):
+    from .openness import validate_minimum_bindings
+    if "openness" in spec:
+        claim = find_reviewed_claim(spec["subject"], state, spec["claim_digest"])
+        validate_minimum_bindings(spec["openness"], claim, records)
+    return packet(controller.root, state, content, spec["subject"], spec["kind"],
+                  spec["claim_digest"], spec["reviewer"], artifacts, write=write,
+                  openness=spec.get("openness"), common_records=records, supplementary=supplementary)
+
+
+def export_packet(controller, spec):
+    """Write immutable common evidence objects, leaving native events unchanged."""
+    from research_harness.artifacts import ArtifactStore
+    from research_harness.native_review import load_packet
+    from research_harness.storage import Store
+    _validate_export_spec(spec)
     with controller.store._writer_lock():
         state = controller.status()
-        content = ContentSink(controller.store)
         common = common_root(controller.root, state, spec["subject"])
-        from .provenance import record_probe_origins
-        bindings = import_inputs(controller.root, spec["inputs"], content, state=state, common_workspace=common)
-        if bindings:
-            record_probe_origins(state, {"bindings": bindings})
-        prepare_subject(controller, state, content, spec["subject"])
-        content.put_blob(spec["subject"])
+        content = ContentSink(controller.store)
+        supplementary = _prepare_export_inputs(controller, spec, state, content, common)
         records = Store(common, create=True).snapshot()["records"]
         artifacts = ArtifactStore(common)
-        if "openness" in spec:
-            from .openness import validate_minimum_bindings
-            claim = find_reviewed_claim(spec["subject"], state, spec["claim_digest"])
-            validate_minimum_bindings(spec["openness"], claim, records)
-        value = packet(controller.root, state, content, spec["subject"], spec["kind"],
-                       spec["claim_digest"], spec["reviewer"], artifacts, write=True,
-                       openness=spec.get("openness"), common_records=records,
-                       supplementary={"schema_version": 1, "inputs": sorted(
-                           [{"kind": item["kind"], "digest": item["digest"]} for item in spec["inputs"]],
-                           key=lambda item: (item["kind"], item["digest"]))} if spec["inputs"] else None)
+        value = _prepare_export(controller, spec, state, content, artifacts, records, supplementary, write=True)
         reference = artifacts.put(canonical_bytes(value), "application/json")
         load_packet(artifacts, reference, spec["reviewer"]["actor_id"])
         return {"workspace": str(common), "native_packet": reference,
                 "subject_digest": value["subject_digest"], "claim_digest": value["claim_digest"]}
+
+
+def check_export(controller, spec, state, artifacts, records):
+    """Check the native export inputs and evidence closure without publishing them."""
+    _validate_export_spec(spec)
+    s.require(common_root(controller.root, state, spec["subject"]) == artifacts.root,
+              "The native export would use a different common workspace", "review_workspace_mismatch")
+    state = copy.deepcopy(state)
+    content = ContentSink(controller.store)
+    supplementary = _prepare_export_inputs(controller, spec, state, content, artifacts.root)
+    return _prepare_export(controller, spec, state, content, artifacts, records, supplementary, write=False)
+
+
+def refresh_export_minimum(spec, state, records):
+    """Bind additional material searches reported by the controller's export validator."""
+    from .openness import validate_minimum_bindings
+    minimum = copy.deepcopy(spec["openness"])
+    claim = find_reviewed_claim(spec["subject"], state, spec["claim_digest"])
+    try:
+        validate_minimum_bindings(minimum, claim, records)
+    except SearchError as error:
+        if error.code != "openness_search_stale":
+            raise
+        formulations = [minimum["statement"], *minimum["neighbours"]]
+        for identifier in error.details["search_ids"]:
+            search = records["literature_search"][identifier]
+            formulation = next(item for item in formulations if search["question"] == item or item in search["queries"])
+            minimum["searches"].append(dict(formulation=formulation, search_digest=s.digest(search)))
+        return minimum, error.details["search_ids"]
+    return minimum, []
+
+
+def handoff_inputs(entries):
+    """Name the exact, already exported bytes for reuse as native inputs."""
+    return [dict(kind=item["kind"], digest=item["digest"], common_artifact=item["artifact"]) for item in entries]
+
+
+def check_result_command(controller, state, native, output):
+    """Return an exact acceptance or completion that the controller can record now.
+
+    The store's check mode builds and validates the event as the write does and writes nothing."""
+    from contextlib import ExitStack
+    from .model import apply_event, replay
+    from .proof import require_acceptable_checkpoint
+    from .service import refuse_native_nonapproval
+
+    def check(name, spec, target=None):
+        refuse_native_nonapproval(spec["review"])
+        identity = dict(command=name, target=target, spec_digest=s.digest(spec))
+        with ExitStack() as locks:
+            def build(document, content):
+                candidate = controller._build(name, spec, target, identity, document, content, operation_locks=locks)
+                validate_submitted(controller, replay(document), spec, candidate, content, locks)
+                return candidate
+            controller.store.append_operation(identity, state["revision"], "check:" + identity["spec_digest"], build,
+                                              lambda document, candidate: apply_event(replay(document), candidate),
+                                              check=True)
+        return name, dict(spec, target=target) if target is not None else spec
+
+    subject = native["subject"]
+    if "acceptance_ids" in subject:
+        deliverables = {item["digest"] for item in subject["deliverables"]}
+        entries = [entry for entry in native["evidence"] if entry["digest"] in deliverables]
+        return check("complete", dict(subject=subject, review=output, inputs=handoff_inputs(entries)))
+    target = subject.get("id")
+    s.require(state["checkpoints"].get(target) == subject, "The exact stored checkpoint is unavailable",
+              "review_subject_missing")
+    require_acceptable_checkpoint(subject)
+    s.require(subject["evidence_digests"], "Checkpoint has no evidence interpretation", "missing_evidence")
+    conclusion = controller.store.get_blob(subject["evidence_digests"][0])["conclusion"]
+    claim = s.claim_identity(subject["claim"])
+    targets = [oid for oid, row in state["obligations"].items() if s.claim_identity(row["claim"]) == claim]
+    targets.append(None)
+    failure = None
+    for obligation in targets:
+        try:
+            return check("accept", dict(conclusion, obligation_id=obligation, review=output, inputs=[]), target)
+        except SearchError as error:
+            if error.code in {"review_packet_mismatch", "openness_search_stale"}:
+                raise
+            if failure is None:
+                failure = error
+    raise failure
 
 
 def validate_packet_context(supplied, expected, state):
@@ -470,7 +567,13 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
         assignment = records["review_assignment"][identifier]
         replacement = find_replacement(records, assignment)
         capacity_series = replacement is not None and replacement.get('capacity_replacement_of') == identifier
-        s.require(current["ready"] or capacity_series,
+        replaced_reading = (replacement is not None
+            and replacement.get("context", {}).get("output_refusal", {}).get("assignment_id") == identifier
+            and assignment.get("reading_chain", {}).get("first_assignment_id") == identifier
+            and replacement.get("reading_chain", {}).get("first_assignment_id") == identifier
+            and replacement.get("reading_chain", {}).get("turn") == 1
+            and find_protocol(json.loads(artifacts.read(assignment["packet"]))) == MATH_PROTOCOL_V2)
+        s.require(current["ready"] or capacity_series or replaced_reading,
                   "The current reviewer route or invocation does not establish independence", "review_context_unverified")
         s.require(assignment["role"] == "native_math" and assignment["dossier_id"] is None,
                   "Native approval requires its native mathematical assignment", "review_assignment_mismatch")
@@ -510,7 +613,9 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
                       "The recorded reading turns changed",
                       "review_parts_incomplete" if review_parts.KEY in assignment else "openness_reading_incomplete")
             s.require(record.get('composite') == current.get('composite'),
-                      'The recorded composite changed', 'review_parts_incomplete')
+                      'The composite of the recorded review does not match the store: the record and the store '
+                      'name different composites, or only one of them names one. Report the record with its review',
+                      'review_parts_incomplete')
         supplied = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
         if review_parts.KEY in assignment:
             logical = review_parts.read_logical_packet(artifacts, header)

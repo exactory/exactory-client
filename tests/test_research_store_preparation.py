@@ -157,10 +157,16 @@ class ResearchStorePreparationTests(unittest.TestCase):
                 proof = kwargs.get("_preparation")
                 self.assertFalse(hasattr(proof, "records"), "Store.mutate received a preparation record view")
                 self.assertIsInstance(proof, storage._PreparationProof)
-                self.assertEqual(proof._fields, ("identity", "revision", "fingerprint"))
+                self.assertEqual(proof._fields, ("identity", "revision", "fingerprint", "verified"))
                 self.assertIsInstance(proof.identity, tuple)
                 self.assertIsInstance(proof.revision, int)
                 self.assertIsInstance(proof.fingerprint, bytes)
+                # The record of the replay of the preparation read holds digests, and no decoded value and no
+                # history index.
+                self.assertEqual(proof.verified.revision, proof.revision)
+                self.assertIsInstance(proof.verified.rows, bytes)
+                self.assertNotIn("values", proof.verified._fields)
+                self.assertIsNone(proof.verified.history)
                 for field in proof._fields:
                     with self.assertRaises(AttributeError):
                         setattr(proof, field, None)

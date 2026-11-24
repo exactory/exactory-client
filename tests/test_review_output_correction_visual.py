@@ -130,5 +130,44 @@ class VisualCorrectionTests(unittest.TestCase):
         self.assertEqual(protocol.retired_routes(records), {'route', 'visual-route'})
 
 
+
+class CorrectionTurnEffortTests(unittest.TestCase):
+    """The captured turn of a correction on a Codex route names the effort of its route. The subject is the last check
+    of the authentication; the checks before it read stand-ins that pass."""
+
+    def authenticate(self, configured, observed):
+        configuration = {'max_output_tokens': 1000, 'timeout_seconds': 5}
+        if configured is not None:
+            configuration['effort'] = configured
+        route = {'id': 'route', 'adapter': 'codex_cli_v1', 'model': 'fixture-model', 'endpoint': 'codex://local',
+                 'configuration': configuration, 'runtime': {'adapter': 'codex_cli_v1', 'version': 'fixture'}}
+        events = [{'type': 'turn_context', 'payload': {'model': 'fixture-model', 'effort': observed, 'cwd': '/fixture'}}]
+        packet, request, output = {'diagnostic': 'synthetic'}, {'instructions': 'synthetic'}, {}
+        stored = {'request': request, 'output': output, 'rollout': events,
+                  'response': {'model': 'fixture-model', 'context_evidence': {'rollout_digest': digest(events)}}}
+        invocation = dict(assignment_id='assignment', route_id='route', protocol=correction.PROTOCOL,
+                          packet_digest=digest(packet), prompt_hash=digest(correction.PROMPT), diagnostic='synthetic',
+                          route_digest=digest(route), request='request')
+        observation = dict(request_digest=digest(request), route_digest=digest(route), runtime=route['runtime'],
+                           status='completed', observed_model='fixture-model', request='request', response='response',
+                           output='output', native_rollout='rollout')
+        with patch.object(correction, '_route', return_value=route), \
+                patch.object(correction, 'prepare_packet', return_value=packet), \
+                patch.object(correction.transport, 'request_body', return_value=request), \
+                patch.object(correction, 'derive_output', return_value=output), \
+                patch.object(protocol, '_read_json', side_effect=lambda artifacts, reference: stored[reference]), \
+                patch.object(protocol, 'verify_route_context', return_value=True):
+            correction._authenticate_observation({'review_assignment': {'assignment': {'id': 'assignment'}}}, None,
+                                                 invocation, observation)
+
+    def test_the_turn_names_the_effort_of_the_route(self):
+        self.authenticate('xhigh', 'xhigh')
+        for configured, observed in (('xhigh', 'high'), (None, 'xhigh')):
+            with self.subTest(route=configured, turn=observed):
+                with self.assertRaises(ResearchError) as refused:
+                    self.authenticate(configured, observed)
+                self.assertEqual(refused.exception.code, 'review_correction_unverified')
+
+
 if __name__ == '__main__':
     unittest.main()

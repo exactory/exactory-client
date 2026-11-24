@@ -334,6 +334,18 @@ class FinalReplacementTests(FinalPageAssertions, unittest.TestCase):
         self.assertEqual(repacked, split)
         self.assertEqual([len(turn['targets']) for turn in repacked if turn['kind'] == 'page'], [4, 3])
 
+    def test_repack_into_a_room_that_no_block_can_condense_into_is_below_the_floor(self):
+        """Repairs A10. repack_final_turns raises the refusal below the floor itself when the condensing policy finds
+        no block of its minimum size for the measured room."""
+        def refuse_condensing(entries, room):
+            raise ResearchError('invalid_input', 'The overflowing list has no block large enough to condense.',
+                                dict(room=room, minimum=4000))
+        turns = build_turns(build_targets(9, 10000), target_allowance=2)
+        with self.assertRaises(ResearchError) as caught:
+            pages.repack_final_turns(turns, [], [], 30000, 1, condense=refuse_condensing)
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ('review_route_capacity_below_floor', dict(room=9000, minimum=4000, command='review-route')))
+
     def test_pending_request_and_argument_pages_keep_their_targets_and_identity(self):
         targets = build_targets(9, 10000)
         turns = build_turns(targets, target_allowance=2)

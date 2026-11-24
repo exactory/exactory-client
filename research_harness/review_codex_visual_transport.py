@@ -146,20 +146,22 @@ def native_user_parts(request, directory):
     return parts
 
 
-def inspect_rollout(events, request, thread_id, directory, excluded_controls, excluded_images=()):
+def inspect_rollout(events, request, thread_id, directory, excluded_controls, excluded_images=(), *,
+                    effort=text_route.DEFAULT_EFFORT):
     """Authenticate exact actual native parts, model, effort and isolated context."""
     expected = native_user_parts(request, directory)
     excluded_image_values = [base64.b64encode(data).decode('ascii') for data in excluded_images]
     meta = [event['payload'] for event in events if event.get('type') == 'session_meta']
     contexts = [event['payload'] for event in events if event.get('type') == 'turn_context']
     issues, users, developers, environments, outputs = [], [], [], [], []
+    listing_free_developers = []
     seen = False
     if (len(meta) != 1 or meta[0].get('id') != thread_id or meta[0].get('source') != 'exec'
             or meta[0].get('base_instructions', {}).get('text') != request['instructions']
             or meta[0].get('forked_from_id') or meta[0].get('parent_thread_id')):
         issues.append('session_identity_or_instructions')
     if (len(contexts) != 1 or contexts[0].get('model') != request['model']
-            or contexts[0].get('effort') != 'high'
+            or contexts[0].get('effort') != effort
             or contexts[0].get('cwd') != str(Path(directory).resolve())):
         issues.append('actual_model_effort_or_turn_context')
     for event in events:
@@ -180,6 +182,8 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls, ex
             if seen:
                 issues.append('late_developer_input')
             developers.append(text_route._native_digest(json.dumps(item['tools'], sort_keys=True), directory))
+            listing_free_developers.append(text_route._native_digest(
+                json.dumps(text_route.remove_model_listing(item['tools']), sort_keys=True), directory))
             continue
         if item.get('type') not in ('message', 'reasoning'):
             issues.append('unknown_or_tool_input')
@@ -203,6 +207,7 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls, ex
                 issues.append('late_developer_input')
             developers.append(text_route.DELIVERED_INSTRUCTIONS_ID if text == request['instructions']
                               else text_route._native_digest(text, directory))
+            listing_free_developers.append(developers[-1])
         elif role == 'assistant':
             if not seen:
                 issues.append('inherited_assistant_history')
@@ -217,7 +222,8 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls, ex
                 issues.append('unexpected_user_input')
         else:
             issues.append('unknown_input_role')
-    if tuple(developers) not in text_route.NATIVE_DECLARATION_SETS:
+    if (tuple(developers) not in text_route.NATIVE_DECLARATION_SETS
+            and tuple(listing_free_developers) not in text_route.LISTING_FREE_DECLARATION_SETS):
         issues.append('unknown_developer_input')
     if len(environments) > 1:
         issues.append('repeated_environment_input')
@@ -257,7 +263,9 @@ def send_request(route, request, credential=None):
         instructions.write_text(request['instructions'])
         command = [actual_runtime['executable'], 'exec', '--ignore-user-config', '--ignore-rules',
                    '--skip-git-repo-check', '--json', '--color', 'never', '-s', 'read-only', '-m', route['model']]
-        for value in text_route.CONTROLS + ('model_instructions_file=' + json.dumps(str(instructions)),):
+        effort = text_route.read_route_effort(route)
+        for value in text_route.CONTROLS + ('model_reasoning_effort=' + json.dumps(effort),
+                                            'model_instructions_file=' + json.dumps(str(instructions))):
             command.extend(('-c', value))
         for index, (_, data, _) in enumerate(images, 1):
             path = root / ('image-' + str(index).zfill(3) + '.png')
@@ -287,7 +295,8 @@ def send_request(route, request, credential=None):
         if thread_id:
             try:
                 evidence = inspect_rollout(text_route._rollout(thread_id, environment), request,
-                                           thread_id, directory, [control, image_control], [excluded_image])
+                                           thread_id, directory, [control, image_control], [excluded_image],
+                                           effort=effort)
             except (OSError, ValueError, ResearchError):
                 pass
         evidence.update(runtime=actual_runtime, route_digest=digest(route), event_digest=digest(event_log),
@@ -315,7 +324,7 @@ def verify_context(route, request, response):
             and evidence.get('request_digest') == digest(request) and evidence.get('route_digest') == digest(route)
             and evidence.get('input_contract') == INPUT_CONTRACT
             and evidence.get('observed_model') == route['model'] == request.get('model')
-            and evidence.get('observed_effort') == 'high'
+            and evidence.get('observed_effort') == text_route.read_route_effort(route)
             and evidence.get('image_digests') == [row['artifact']['sha256'] for row in request.get('exactory_image_inputs', [])]
             and len(evidence.get('excluded_image_digests', [])) == 1
             and evidence['excluded_image_digests'][0] not in evidence.get('image_digests', [])

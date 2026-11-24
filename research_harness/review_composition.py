@@ -7,10 +7,11 @@ checks. Composition never calls assignment_state or reads author files.
 import copy
 import re
 
-from .errors import ResearchError
+from .errors import ResearchError, describe_error_at
 from .evidence import digest
 from .operations import fields as check_fields
 from .problem_rubric import ADMISSION_ITEMS, GROUNDS, ITEMS, PROBLEM_CHECKS as ASSURANCES
+from .review_refusal import refuse_unreadable_answer
 from .storage import _canonical
 
 
@@ -818,15 +819,52 @@ INDIVIDUAL_CHECK_LIMITATIONS = (
     'review_context_repair.validate_reassessment: confirmation compares the complete scientific output',
     'research_decisions.validate_review_contract: new objections and support require assignment state',
 )
-FINAL_PAGE_INVALID_MESSAGE = 'Return exactly the assigned targets, their owned fields and a sentence of at most 300 characters.'
-FINAL_PAGE_BOUND_MESSAGE = 'The serialized fields or row of this page exceed the limits of its composition rule.'
-FINAL_OWNER_INVALID_MESSAGE = 'Every output field must have exactly one owner in the composition rule.'
-FINAL_CLOSING_INVALID_MESSAGE = 'Return only the closing fields and the optional harness field paths of this composition rule.'
-PACKET_ARTIFACT_MISSING_MESSAGE = 'The packet does not carry the bytes of this reference.'
+FINAL_PAGE_INVALID_MESSAGE = (
+    'The rows of this page answer are not the targets of the page. targets is an array with one row for each '
+    'target that the turn assigns, in the order of the turn and each once. A row names its target as the turn '
+    'names it, holds a nonblank sentence, and holds fields of its own target alone. Where details.target is '
+    'present, a row names a target that this review does not hold. Where path is not empty, it names a field '
+    'whose content belongs to another target. Return one row for each assigned target.')
+FINAL_PAGE_POINTERS_INVALID_MESSAGE = (
+    'The member fields of the row that path names does not hold the keys that page.fields of this turn gives for '
+    'the target of that row. details.unexpected_fields lists the keys of the row that page.fields does not give, '
+    'and details.missing_fields the pointers of page.fields that the row leaves out. Copy each pointer as '
+    'page.fields writes it: an index in a pointer is part of the pointer and stays as it is. Give a value at each '
+    'pointer and no other key.')
+FINAL_PAGE_BOUND_MESSAGE = (
+    'The harness could not build the decision row of a target for the closing turn. A decision row holds the '
+    'handle of the target, its grade or status, the sentence of its page answer and the handles that the answer '
+    'cites, within 360 characters, and this row is longer even without its sentence. The harness records no '
+    'closing turn. Run review-series on this review and do what its plan states.')
+FINAL_OWNER_INVALID_MESSAGE = (
+    'A field does not belong to the answer that gives it; where path is not empty, it names the field. Each field '
+    'of the final answer has one owner: a page answer gives the fields of its targets, the closing answer gives '
+    'the closing fields, and the harness fills the others. A pointer that page.fields gives for an empty '
+    'collection takes an empty list or object. Remove the field, or give it in the turn that owns it.')
+FINAL_CLOSING_INVALID_MESSAGE = (
+    'This closing answer is not {fields, bindings} as the instructions of this turn state it. fields is an object '
+    'of the closing fields. bindings is an array of pointers, each once, and each one that those instructions '
+    'list for the harness. The harness fills only the pointers that bindings names, so name each one that this '
+    'final needs.')
+PACKET_ARTIFACT_MISSING_MESSAGE = (
+    'A reference of this answer names an artifact whose bytes this packet does not carry; details.artifact gives '
+    'the reference. Cite an artifact that the packet delivers.')
 TARGET_WITHOUT_ASSESSMENT_SENTENCE = 'The output supplies no separate assessment for this target.'
-MATH_COVERAGE_INVALID_MESSAGE = 'Split only a math coverage string composed by this rule, with one labeled line for each formulation.'
-ANSWER_SCHEMA_INVALID_MESSAGE = 'This answer exceeds its versioned field schema. Cite longer supporting material by a recorded handle.'
-VALIDATOR_FIELDS_UNOWNED_MESSAGE = 'A validator accepts fields absent from this composition schema. Declare their owners and bounds.'
+MATH_COVERAGE_INVALID_MESSAGE = (
+    'The coverage of this math finding cannot be split into pages. A coverage that this rule composed holds one '
+    'line for each formulation, in their order, and each line starts with the label of its formulation and a '
+    'colon. This coverage has another number of lines or another label.')
+ANSWER_SCHEMA_INVALID_MESSAGE = (
+    'A member of this answer does not fit the schema of the answer; path names the member, or its nearest '
+    'container. The member has another type than the schema gives, holds a value outside a fixed set, lacks a '
+    'required member or holds a member that the schema does not have, holds more entries than its limit, or, '
+    'under fields, names a field that another turn owns. The instructions of this turn state the form of the '
+    'answer. Correct the member.')
+VALIDATOR_FIELDS_UNOWNED_MESSAGE = (
+    'A validator of this role accepts a field that the composition rule does not own, or the rule declares '
+    'another field set for a validator than its source accepts. details.path names the field without an owner; '
+    'details.validator, details.declared and details.accepted give the two field sets. Give the field an owner '
+    'and its bounds in the rule, or correct the declared set.')
 JSON_FIELD_CHARACTERS = 8000
 JSON_STRING_CHARACTERS = 4000
 JSON_COLLECTION_ITEMS = 64
@@ -979,7 +1017,11 @@ def list_targets(rule, packet):
     """Keep adapter identities and order; formulations have short page handles."""
     from . import native_review, review_parts_roles, research_decisions
     name = rule['id'][len(FINAL_RULE_PREFIX):]
-    if name in ('problem-openness', 'math-openness'):
+    header = packet.get('review_parts', {})
+    bound_parts = header.get('protocol') == 'exactory-review-parts-v3' and 'page_plan_digest' in header
+    if bound_parts and 'targets' in header:
+        targets = copy.deepcopy(header['targets'])
+    elif name in ('problem-openness', 'math-openness'):
         minimum = packet.get('native', packet)['scientific_context']['openness_minimum']
         targets = [dict(id=value, label=value) for value in [minimum['statement']] + minimum['neighbours']]
         if 'page_plan_digest' in packet.get('reading_final', {}):
@@ -1007,27 +1049,111 @@ def list_targets(rule, packet):
         if rule['role'] == 'slate':
             ids.extend(row['id'] for row in packet.get('candidates', []))
         ids.extend(packet.get('dossier', {}).get('work_items', []))
-        material = packet.get('dossier', {}).get('material_change') or {}
-        ids.extend(row['id'] for row in material.get('prior_objections', []))
-        ids.extend(row['id'] for row in packet.get('material_objections', []))
-        for entry in packet.get('historical_reviews', []):
-            review = entry.get('review', entry)
-            review = review.get('payload', review)
-            ids.extend(row['id'] for row in review.get('objections', []))
+        ids.extend(_list_value_objection_ids(rule, packet))
         targets = [dict(id=key, label=key) for key in dict.fromkeys(ids or ['bar'])]
-    if packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3' and 'page_plan_digest' in packet['review_parts']:
+    if bound_parts:
         for index, target in enumerate(targets, 1):
             target['handle'] = 't%d' % index
+            target['wire_handle'] = True
     if packet.get('session_targets'):
         by_id = {row['id']: row['handle'] for row in packet['session_targets']}
         for row in targets:
             row['handle'] = by_id[row['id']]
-            row['session_handle'] = True
+            row['wire_handle'] = True
     return targets
 
 
 def _escape_field(value):
     return str(value).replace('~', '~0').replace('/', '~1')
+
+
+def _list_value_objection_ids(rule, packet):
+    from .research_decisions import list_required_value_objection_ids
+    from .review_supplied_evidence import list_historical_review_objections
+    delivered = packet.get('material_objections', []) + list_historical_review_objections(packet)
+    return list_required_value_objection_ids(rule['role'], packet.get('dossier', {}),
+        problem=packet.get('subject', {}).get('kind') == 'problem', delivered=delivered)
+
+
+def _list_page_entry_ids(rule, packet):
+    """Get entry identities only for the indexed lists owned by this rule's pages."""
+    entries = {}
+    for field in rule['fields']:
+        root, indexed, _ = field['path'].removesuffix('/**').partition('/*/')
+        if field['owner'] == 'page' and indexed:
+            entries[root] = set()
+    for root in entries:
+        if root == '/value/assurances':
+            from . import research_decisions
+            if rule['role'] != 'bar':
+                entries[root].update(ASSURANCES if packet.get('subject', {}).get('kind') == 'problem'
+                                     else research_decisions.ALL_CHECKS)
+        elif root == '/value/work_items':
+            entries[root].update(packet.get('dossier', {}).get('work_items', []))
+        elif root == '/value/objection_findings':
+            entries[root].update(_list_value_objection_ids(rule, packet))
+        elif root == '/support/checks':
+            from .development import _REVIEW_CHECKS
+            entries[root].update(_REVIEW_CHECKS)
+        elif root == '/checks':
+            from .review_parts_study import VERIFICATION_CHECKS
+            entries[root].update(VERIFICATION_CHECKS)
+        elif root == '/reassessment/findings':
+            entries[root].update(row['id'] for row in packet.get('historical_reviews', []))
+    return entries
+
+
+def _build_page_pointers(rule, packet, definitions, target_ids, entry_ids):
+    indices = {root: {} for root in entry_ids}
+    for target in definitions:
+        identifier = target['id']
+        for root, ids in entry_ids.items():
+            if identifier in ids:
+                indices[root].setdefault(identifier, len(indices[root]))
+    empty = {root: [] for root, by_id in indices.items() if not by_id}
+    first = definitions[0]['id'] if definitions else None
+    fields = [(field['path'].removesuffix('/**'), field['target']) for field in rule['fields']
+              if field['owner'] == 'page']
+    candidate_root = '/value/rubric_potential'
+    candidate_path = candidate_root + '/*'
+    candidates = set()
+    if (candidate_path, 'candidate') in fields:
+        candidates.update(row['id'] for row in packet.get('candidates', []))
+        if not candidates:
+            empty[candidate_root] = {}
+    pointers = {}
+    for identifier in target_ids:
+        owned = []
+        for path, field_target in fields:
+            root, indexed, member = path.partition('/*/')
+            if indexed:
+                index = indices[root].get(identifier)
+                if index is not None:
+                    owned.append(root + '/' + str(index) + '/' + member)
+                elif identifier == first and root in empty and root not in owned:
+                    owned.append(root)
+            elif path == candidate_path:
+                if identifier in candidates:
+                    owned.append(candidate_root + '/' + _escape_field(identifier))
+                elif identifier == first and candidate_root in empty:
+                    owned.append(candidate_root)
+            elif field_target == identifier:
+                owned.append(path)
+        pointers[identifier] = owned
+    return pointers, empty
+
+
+def list_page_pointers(rule, packet, targets):
+    """List final-answer pointers in rule order for the specified page handles."""
+    if rule['id'].endswith(('/problem-openness', '/math-openness')):
+        return {}
+    definitions = list_targets(rule, packet)
+    lookup = _index_target_ids(definitions)
+    requested = [(target, _resolve_target_id(definitions, target, lookup)) for target in targets]
+    pointers, _ = _build_page_pointers(rule, packet, definitions, [identifier for _, identifier in requested],
+                                      _list_page_entry_ids(rule, packet))
+    return {(target.get('handle', target['id']) if isinstance(target, dict) else target): pointers[identifier]
+            for target, identifier in requested}
 
 
 def _read_path(value, path):
@@ -1037,10 +1163,19 @@ def _read_path(value, path):
     return value
 
 
-def _write_path(value, path, content):
-    keys = path.strip('/').split('/')
+def _write_path(value, path, content, *, fields_path=None, items=JSON_COLLECTION_ITEMS):
+    keys = path.strip('/').split('/') if fields_path is None else path[1:].split('/')
+    if fields_path is not None and (not path.startswith('/') or any(
+            _escape_field(key.replace('~1', '/').replace('~0', '~')) != key for key in keys)):
+        _refuse_field_path(fields_path, path)
     for index, key in enumerate(keys):
         key = key.replace('~1', '/').replace('~0', '~')
+        if fields_path is not None:
+            if not isinstance(value, (dict, list)):
+                _refuse_field_path(fields_path, path)
+            if isinstance(value, list) and (not key.isascii() or not key.isdigit()
+                    or len(key) > len(str(items)) or len(key) > 1 and key.startswith('0') or int(key) >= items):
+                _refuse_field_path(fields_path, path)
         address = int(key) if isinstance(value, list) else key
         if isinstance(value, list):
             while len(value) <= address:
@@ -1051,6 +1186,29 @@ def _write_path(value, path, content):
             if (address >= len(value) if isinstance(value, list) else address not in value) or value[address] is None:
                 value[address] = [] if keys[index + 1].isdigit() and key != 'rubric_potential' else {}
             value = value[address]
+
+
+def _refuse_field_path(fields_path, path):
+    from .review_refusal import contract_check
+    with contract_check('review.shape'):
+        raise ResearchError('review_composition_conflict',
+                            'Use field pointers that match their containers and do not overlap.',
+                            _answer_location(fields_path + '/' + _escape_field(path)))
+
+
+def _compute_page_item_limit(definitions):
+    """A page pointer indexes an array of target entries, which can hold more entries than one answer's collection."""
+    return max(JSON_COLLECTION_ITEMS, len(definitions))
+
+
+def _validate_closing_field_paths(fields):
+    """Reject ancestor/descendant pairs regardless of their order in the submitted map."""
+    for path in fields:
+        ancestor = path.rpartition('/')[0]
+        while ancestor:
+            if ancestor in fields:
+                _refuse_field_path('/fields', path)
+            ancestor = ancestor.rpartition('/')[0]
 
 
 def _list_output_fields(value, path=''):
@@ -1167,6 +1325,11 @@ def _build_harness_fields(rule, packet):
     return values
 
 
+def build_harness_fields(rule, packet):
+    """Return complete-packet values for fields filled by composition."""
+    return _build_harness_fields(rule, packet)
+
+
 def split_output(rule, packet, output, pages):
     """Project stored output without normalizing, validating or altering its bytes."""
     if rule['id'].endswith('/math-openness'):
@@ -1195,32 +1358,47 @@ def split_output(rule, packet, output, pages):
         elif field['owner'] == 'closing':
             closing['fields'][path] = copy.deepcopy(value)
         else:
-            target = (ids[0] if isinstance(value, (dict, list)) and not value
-                      and (not packet.get('session_targets') or path.count('/') <= 2) else
-                      _find_target_id(rule, packet, output, field, path))
+            target = (_find_target_id(rule, packet, output, field, path)
+                      if _matches_field(field['path'], path) else ids[0])
             if target not in rows:
                 raise ResearchError('review_composition_conflict', FINAL_OWNER_INVALID_MESSAGE, dict(path=path, target=target))
             rows[target]['fields'][path] = copy.deepcopy(value)
     for row in rows.values():
         row['sentence'] = _describe_target_sentence(row['fields'])
-    return [_wrap_page_output(page, [copy.deepcopy(rows[_resolve_target_id(targets, key)]) for key in page])
+    lookup = _index_target_ids(targets)
+    return [_wrap_page_output(page, [copy.deepcopy(rows[_resolve_target_id(targets, key, lookup)]) for key in page])
             for page in pages], closing
 
 
-def _resolve_target_id(targets, value):
-    key = value.get('id') if isinstance(value, dict) else value
-    if not isinstance(value, dict):
-        for row in targets:
-            if row.get('session_handle') and row['handle'] == key:
-                return row['id']
-    ids = [row['id'] for row in targets]
-    if key in ids:
-        return key
-    by_handle = {row['handle']: row['id'] for row in targets if 'handle' in row}
-    if key in by_handle:
-        return by_handle[key]
-    if isinstance(key, str) and re.fullmatch(r't[0-9]+', key) and int(key[1:]) < len(ids):
-        return ids[int(key[1:])]
+def _index_target_ids(targets):
+    by_id, by_handle, wire_handles = {}, {}, {}
+    for row in targets:
+        identifier = row['id']
+        by_id[identifier] = identifier
+        if 'handle' in row:
+            by_handle[row['handle']] = identifier
+            if row.get('wire_handle'):
+                wire_handles.setdefault(row['handle'], identifier)
+    return by_id, {**by_handle, **by_id, **wire_handles}
+
+
+def _resolve_target_id(targets, value, lookup=None):
+    by_id, by_name = lookup if lookup is not None else _index_target_ids(targets)
+    if isinstance(value, dict):
+        key = value.get('id')
+        if isinstance(key, str) and key in by_id:
+            return by_id[key]
+    elif isinstance(value, str):
+        key = value
+        if key in by_name:
+            return by_name[key]
+        # Compare the length of the position before its conversion, so a long digit string is refused as a target.
+        position = key[1:].lstrip('0') or '0'
+        if (re.fullmatch(r't[0-9]+', key) and len(position) <= len(str(len(targets)))
+                and int(position) < len(targets)):
+            return targets[int(position)]['id']
+    else:
+        key = value
     raise ResearchError('review_composition_conflict', FINAL_PAGE_INVALID_MESSAGE, dict(target=key))
 
 
@@ -1243,10 +1421,12 @@ def _compose_math_output(rule, packet, pages, closing):
                   for key in ('subject_digest', 'claim_digest', 'reviewer')})
     targets = list_targets(rule, packet)
     entries = [row for page in pages for row in page['output']['targets']]
+    lookup = _index_target_ids(targets)
+    by_id = {target['id']: target for target in targets}
     lines = []
     for row in entries:
-        identity = _resolve_target_id(targets, row['formulation'])
-        target = next(target for target in targets if target['id'] == identity)
+        identity = _resolve_target_id(targets, row['formulation'], lookup)
+        target = by_id[identity]
         lines.append(_render_formulation_label(target) + ': ' + row['coverage'])
     output['findings']['openness'].update(
         statement_digest=native['claim_digest'],
@@ -1274,10 +1454,12 @@ def _split_math_output(rule, packet, output, pages):
     closing = dict(decision='approve', findings=copy.deepcopy(output['findings']))
     for key in ('statement_digest', 'minimum', 'coverage'):
         closing['findings']['openness'].pop(key)
-    return [_wrap_page_output(page, [copy.deepcopy(rows[_resolve_target_id(targets, key)]) for key in page])
+    lookup = _index_target_ids(targets)
+    return [_wrap_page_output(page, [copy.deepcopy(rows[_resolve_target_id(targets, key, lookup)]) for key in page])
             for page in pages], closing
 
 
+@refuse_unreadable_answer()
 def compose_output(rule, packet, page_outputs, closing_output):
     """Assemble only owned fields. Authentication and edge validation are callers' work."""
     if rule['id'].endswith('/math-openness'):
@@ -1287,15 +1469,17 @@ def compose_output(rule, packet, page_outputs, closing_output):
     if 'assessment' in closing_output:
         return copy.deepcopy(closing_output['assessment'])
     output = {}
+    _validate_closing_field_paths(closing_output['fields'])
     for path, value in closing_output['fields'].items():
-        _write_path(output, path, value)
+        _write_path(output, path, value, fields_path='/fields')
     harness = _build_harness_fields(rule, packet)
     for path in closing_output['bindings']:
         _write_path(output, path, harness[path])
+    items = _compute_page_item_limit(list_targets(rule, packet))
     for page in page_outputs:
-        for row in page['output']['targets']:
+        for index, row in enumerate(page['output']['targets']):
             for path, value in row['fields'].items():
-                _write_path(output, path, value)
+                _write_path(output, path, value, fields_path='/targets/%d/fields' % index, items=items)
     return output
 
 
@@ -1312,7 +1496,8 @@ def _split_finding(rule, packet, output, pages):
     # Legacy findings allow one unstructured string; keep this inverse exact.
     if isinstance(coverage, str):
         closing['coverage_format'] = 'text'
-    return [_wrap_page_output(page, [copy.deepcopy(rows[_resolve_target_id(targets, key)]) for key in page])
+    lookup = _index_target_ids(targets)
+    return [_wrap_page_output(page, [copy.deepcopy(rows[_resolve_target_id(targets, key, lookup)]) for key in page])
             for page in pages], closing
 
 
@@ -1332,8 +1517,34 @@ def _compose_finding(rule, packet, page_outputs, closing):
 
 
 def _measure_final_value(value):
+    """Count compact JSON characters. For answers, callers first expand citations."""
     import json
     return len(json.dumps(value, ensure_ascii=False, separators=(',', ':')))
+
+
+def _answer_location(path):
+    """Keep the nearest submitted container that fits in refusal metadata."""
+    if _measure_final_value(path) <= 1024:
+        return dict(path=path)
+    parent = ''
+    for component in path.split('/')[1:]:
+        child = parent + '/' + component
+        if _measure_final_value(child) > 1024:
+            break
+        parent = child
+    return dict(path=parent, path_sha256=digest(path))
+
+
+def _check_answer_size(characters, maximum, path, size, *, code='review_composition_conflict', **details):
+    if characters > maximum:
+        raise ResearchError(code, 'The %s size is %d characters, above the limit of %d.'
+                            % (size.replace('_', ' '), characters, maximum),
+                            dict(_answer_location(path), size=size, characters=characters,
+                                 maximum_characters=maximum, **details))
+
+
+def _check_serialized_size(value, maximum, path, size='serialized_value', **diagnosis):
+    _check_answer_size(_measure_final_value(value), maximum, path, size, **diagnosis)
 
 
 def _compose_coverage_text(values):
@@ -1368,9 +1579,19 @@ class _PacketArtifacts:
         raise ResearchError('artifact_missing', PACKET_ARTIFACT_MISSING_MESSAGE, dict(artifact=reference))
 
 
+@refuse_unreadable_answer()
 def _validate_packet_evidence(packet, values, **kwargs):
-    from .review_refusal import validate_evidence_contract
-    return validate_evidence_contract({}, _PacketArtifacts(packet), values, packets=[packet], **kwargs)
+    from .review_refusal import contract_check, validate_evidence_contract
+    try:
+        return validate_evidence_contract({}, _PacketArtifacts(packet), values, packets=[packet], **kwargs)
+    except ResearchError as error:
+        # The session view contains the frozen delivered bodies. Failure of
+        # this packet-only read says nothing about the availability of stored bytes.
+        if error.code != 'artifact_missing' or 'session_targets' not in packet:
+            raise
+        with contract_check('review.evidence_delivery'):
+            raise ResearchError('review_evidence_undelivered', 'Cite only bodies delivered to this review.',
+                                dict(sha256=error.details['artifact']['sha256']))
 
 
 def _build_neutral_value(rule, packet):
@@ -1395,7 +1616,8 @@ def _build_neutral_value(rule, packet):
     return value
 
 
-def _validate_value_fields(rule, packet, fields, required=None):
+def _validate_value_fields(rule, packet, fields, required=None, *, entry_ids=None, fields_path=None,
+                           items=JSON_COLLECTION_ITEMS):
     from . import research_decisions
     from .review_refusal import contract_check
     value = _build_neutral_value(rule, packet)
@@ -1411,37 +1633,67 @@ def _validate_value_fields(rule, packet, fields, required=None):
     output = dict(value=value)
     # Collections are replaced, so a malformed/missing member is not repaired by
     # neutral siblings. Other targets' collections are unnecessary to this check.
-    for name in ('assurances', 'work_items', 'objection_findings'):
+    collections = ('assurances', 'work_items', 'objection_findings')
+    for name in collections:
         if any(path.startswith('/value/' + name + '/') or path == '/value/' + name for path in fields):
             value[name] = []
     for path, item in fields.items():
         if path.startswith('/value/'):
-            _write_path(output, path, item)
-    for name in ('assurances', 'work_items', 'objection_findings'):
+            _write_path(output, path, item, fields_path=fields_path, items=items)
+    original_indices = {}
+    for name in collections:
         if isinstance(value[name], list):
+            if required is not None:
+                original_indices[name] = [index for index, row in enumerate(value[name]) if row is not None]
             value[name] = [row for row in value[name] if row is not None]
+    neutral_count = 0
     if any(path.startswith('/value/assurances') for path in fields):
         changed_kinds = [row.get('kind') for row in value['assurances'] if isinstance(row, dict)]
-        value['assurances'] = [row for row in neutral_checks if row['kind'] not in changed_kinds] + value['assurances']
+        neutral = [row for row in neutral_checks if row['kind'] not in changed_kinds]
+        neutral_count = len(neutral)
+        value['assurances'] = neutral + value['assurances']
     problem = packet.get('subject', {}).get('kind') == 'problem'
     expected = tuple(row['kind'] for row in neutral_checks)
     work_ids = [row.get('id') for row in value['work_items'] if isinstance(row, dict)]
-    if required in packet.get('dossier', {}).get('work_items', []) and required not in work_ids:
+    entry_ids = entry_ids or {}
+    if required in entry_ids.get('/value/work_items', ()) and required not in work_ids:
         work_ids.append(required)
-    objections = [dict(id=row.get('id')) for row in value['objection_findings'] if isinstance(row, dict)]
-    from .review_parts_problem_result import list_historical_objections
-    prior = list(packet.get('material_objections', []))
-    prior.extend(row for row, path in list_historical_objections(packet))
-    prior.extend((packet.get('dossier', {}).get('material_change') or {}).get('prior_objections', []))
-    if required in {row['id'] for row in prior} and required not in [row['id'] for row in objections]:
-        objections.append(dict(id=required))
-    dossier = dict(payload=dict(work_items=work_ids, material_change=dict(prior_objections=objections)))
+    if required is not None:
+        expected_ids = [required] if required in entry_ids.get('/value/objection_findings', ()) else []
+    elif any(field['owner'] == 'closing' and field['path'].startswith('/value/objection_findings/')
+             for field in rule['fields']):
+        expected_ids = _list_value_objection_ids(rule, packet)
+    else:
+        expected_ids = []
+    objections = [dict(id=identifier) for identifier in expected_ids]
+    dossier = dict(payload=dict(work_items=work_ids, material_change=None))
     with contract_check('review.value'):
-        research_decisions._validate_value({}, None, value, rule['role'], dossier,
-            expected_checks=expected, problem={} if problem else None,
-            problem_objections=objections if problem else (), slate_packet=packet,
-            evidence_validator=lambda records, artifacts, values, **kwargs: _validate_packet_evidence(packet, values, **kwargs),
-            require_two_bars=False)
+        try:
+            research_decisions._validate_value({}, None, value, rule['role'], dossier,
+                expected_checks=expected, problem={} if problem else None,
+                problem_objections=objections, slate_packet=packet,
+                evidence_validator=lambda records, artifacts, values, **kwargs: _validate_packet_evidence(packet, values, **kwargs),
+                require_two_bars=False, rubric_path='/value/rubric' if required is not None else None)
+        except ResearchError as error:
+            path = (error.details or {}).get('path')
+            parts = path.split('/', 4) if required is not None and isinstance(path, str) else ()
+            if len(parts) >= 4 and parts[1] == 'value' and parts[3].isdigit():
+                name = parts[2]
+                index = int(parts[3]) - (neutral_count if name == 'assurances' else 0)
+                indices = original_indices.get(name, ())
+                if 0 <= index < len(indices):
+                    parts[3] = str(indices[index])
+                    error.details['path'] = '/'.join(parts)
+            if fields_path is not None:
+                # The refused place is named in the answer: inside the field that gave it, or, for a value that the
+                # harness composed, at the fields of the answer.
+                path = (error.details or {}).get('path')
+                field = next((key for key in sorted(fields, key=len, reverse=True) if isinstance(path, str)
+                              and (path == key or path.startswith(key + '/'))), None)
+                location = (fields_path if field is None
+                            else fields_path + '/' + _escape_field(field) + path[len(field):])
+                error.details = dict(error.details or {}, **_answer_location(location))
+            raise
 
 
 def _build_neutral_native(packet):
@@ -1459,14 +1711,14 @@ def _build_neutral_native(packet):
     return output
 
 
-def _validate_native_fields(packet, fields, required=None):
+def _validate_native_fields(packet, fields, required=None, *, fields_path=None):
     from . import native_review
     from .review_refusal import contract_check
     output = _build_neutral_native(packet)
     if required is not None:
         output['findings'].pop(required, None)
     for path, value in fields.items():
-        _write_path(output, path, value)
+        _write_path(output, path, value, fields_path=fields_path)
     if output.get('schema_version') == 2 and 'openness' not in output['findings']:
         output['findings']['openness'] = dict(outcome='unresolved',
             statement_digest=packet.get('native', packet)['claim_digest'], evidence=['0' * 64],
@@ -1478,21 +1730,53 @@ def _validate_native_fields(packet, fields, required=None):
         native_review.validate_output(packet.get('native', packet), output)
 
 
-def _validate_finding_fields(packet, rows=None, closing=None, *, finding_version=1):
+def _check_finding_ground_sizes(grounds, path):
+    if isinstance(grounds, list):
+        for index, ground in enumerate(grounds):
+            if isinstance(ground, dict) and isinstance(ground.get('text'), str):
+                _check_answer_size(len(ground['text']), GROUND_TEXT_CHARACTERS, path + '/%d/text' % index,
+                                   'text_characters', code='openness_finding_invalid', rule='ground_bound')
+
+
+def _strip_ground_formulations(row):
+    """The page row as it is measured: a named gap's formulation that the handles expanded is not counted."""
+    if not isinstance(row, dict) or not isinstance(row.get('grounds'), list):
+        return row
+    return dict(row, grounds=[{name: value for name, value in ground.items() if name != 'formulation'}
+                              if isinstance(ground, dict) else ground for ground in row['grounds']])
+
+
+def _validate_finding_fields(packet, rows=None, closing=None, *, finding_version=1, row_formulations=()):
     from . import native_review
+    from .review_refusal import contract_check
     # The full finding validator is the only home of these checks. A blocked
     # neutral forecast admits either ground presence for a page or no grounds.
     neutral = copy.deepcopy(packet)
     native = neutral.get('native', neutral)
+    v7 = packet.get('reading_final', {}).get('protocol') == 'exactory-openness-reading-v7'
     if rows is not None:
-        from .review_refusal import contract_check
-        for row in rows:
-            with contract_check('openness.finding'):
+        from .errors import describe_error_at
+        forecast = native['scientific_context']['audit_forecast']
+        with contract_check('openness.finding'):
+            for row_index, (row, formulation) in enumerate(zip(rows, row_formulations)):
                 native_review._require_finding(isinstance(row['grounds'], list), 'grounds_list',
-                    '/findings/openness/grounds', native['scientific_context']['audit_forecast'])
+                    '/targets/%d/grounds' % row_index, forecast)
+                if v7:
+                    path = '/targets/%d/coverage' % row_index
+                    with describe_error_at(path, rule='coverage_bound'):
+                        _check_serialized_size(row['coverage'], COVERAGE_CHARACTERS, path, 'coverage',
+                                               code='openness_finding_invalid')
+                    _check_finding_ground_sizes(row['grounds'], '/targets/%d/grounds' % row_index)
+                if finding_version == 2:
+                    for ground_index, ground in enumerate(row['grounds']):
+                        if isinstance(ground, dict) and ground.get('kind') == 'reviewer_gap':
+                            named = ground.get('formulation')
+                            if native_review._nonempty(named):
+                                native_review._require_finding(named == formulation, 'gap_formulation',
+                                    '/targets/%d/grounds/%d/formulation' % (row_index, ground_index), forecast)
     native['scientific_context']['audit_forecast']['outcomes'] = dict(supported_open='blocked', already_solved='blocked')
     count = len(rows) if rows is not None else 1
-    if packet.get('reading_final', {}).get('protocol') == 'exactory-openness-reading-v7':
+    if v7:
         neutral['reading_final'] = dict(neutral['reading_final'], page=dict(targets=list(range(count))))
         # Unread-set relations concern the complete composed answer. Keep the
         # checked excerpts here for named gaps, without running that final check.
@@ -1504,6 +1788,12 @@ def _validate_finding_fields(packet, rows=None, closing=None, *, finding_version
     openness = dict(outcome='unresolved', coverage=[row['coverage'] for row in rows] if rows is not None else ['Checked.'],
                     reason='Shape check.', grounds=[ground for row in rows for ground in row['grounds']] if rows is not None else [])
     if closing is not None:
+        if v7:
+            with contract_check('openness.finding'):
+                if isinstance(closing['reason'], str):
+                    _check_answer_size(len(closing['reason']), FINDING_REASON_CHARACTERS, '/reason',
+                                       'text_characters', code='openness_finding_invalid', rule='reason_bound')
+                _check_finding_ground_sizes(closing['grounds'], '/grounds')
         findings.update({key: closing[key] for key in native_review.RESULT_FINDINGS})
         openness.update({key: closing[key] for key in ('outcome', 'reason', 'grounds')})
         # Preserve the actual outcome vocabulary, while testing its relation to
@@ -1513,36 +1803,64 @@ def _validate_finding_fields(packet, rows=None, closing=None, *, finding_version
             native['scientific_context']['audit_forecast']['outcomes'] = dict(supported_open='blocked', already_solved='blocked')
     findings['openness'] = openness
     output = dict(schema_version=3, findings=findings, **{key: native[key] for key in ('subject_digest', 'claim_digest', 'reviewer')})
-    native_review.validate_finding(neutral, output, finding_version=finding_version)
+    try:
+        native_review.validate_finding(neutral, output, finding_version=finding_version)
+    except ResearchError as error:
+        path = (error.details or {}).get('path')
+        parts = path.split('/') if rows is not None and closing is None and isinstance(path, str) else []
+        if parts[1:4] in (['findings', 'openness', 'grounds'], ['findings', 'openness', 'coverage']):
+            # A page answer holds rows: the refusal names the row of the page that holds the refused ground or
+            # coverage, counted as the neutral finding counts the grounds of the rows in their order.
+            places = [(row_index, ground_index) for row_index, row in enumerate(rows)
+                      for ground_index in range(len(row['grounds']))]
+            if len(parts) == 4:
+                error.details['path'] = '/targets'
+            elif parts[3] == 'coverage' and parts[4].isdigit():
+                error.details['path'] = '/'.join(['', 'targets', parts[4], 'coverage'] + parts[5:])
+            elif parts[4].isdigit() and int(parts[4]) < len(places):
+                row_index, ground_index = places[int(parts[4])]
+                error.details['path'] = '/'.join(['', 'targets', str(row_index), 'grounds', str(ground_index)]
+                                                 + parts[5:])
+        raise
 
 
 def _validate_readiness_fields(packet, output, required=None):
     from . import development
+    from .operations import fields
+    from .artifacts import validate_reference
+    from .source_links import read_locator
     from .review_refusal import contract_check
+    root = '/support/checks'
     with contract_check('review.support'):
         checks = output.get('support', {}).get('checks', [])
-        if required in development._REVIEW_CHECKS and not checks:
-            development._fields({}, ('kind', 'status', 'reason', 'evidence'))
-        for check in development._items(checks, 'Independent candidate checks'):
-            development._fields(check, ('kind', 'status', 'reason', 'evidence'))
-            development._choice(check['kind'], development._REVIEW_CHECKS, 'Readiness check')
-            development._choice(check['status'], ('passed', 'failed', 'unresolved'), 'Independent check outcome')
-            development._text(check['reason'], 'Independent check reasoning')
-            for reference in development._items(check['evidence'], 'Independent review evidence', True):
-                if not isinstance(reference, dict) or reference.get('kind') not in ('source', 'result'):
-                    raise ResearchError('invalid_development', 'Evidence must identify an actual source Link or an execution output and locator')
-                if reference['kind'] == 'source':
-                    development._fields(reference, ('kind', 'link'))
-                    _validate_packet_evidence(packet, [reference])
-                else:
-                    # The result grammar and locator are checked by their owner;
-                    # execution currency remains with the ordinary role validator.
-                    from .operations import fields
-                    from .artifacts import validate_reference
-                    from .source_links import read_locator
-                    fields(reference, ('kind', 'execution_id', 'output_id', 'artifact', 'locator'), code='invalid_development')
-                    validate_reference(reference['artifact'])
-                    read_locator(_PacketArtifacts(packet), reference['artifact'], reference['locator'], result=True)
+        with describe_error_at(root):
+            if required in development._REVIEW_CHECKS and not checks:
+                development._fields({}, ('kind', 'status', 'reason', 'evidence'))
+            checks = development._items(checks, 'Independent candidate checks')
+        for index, check in enumerate(checks):
+            if check is None:
+                continue
+            path = root + '/' + str(index)
+            with describe_error_at(path):
+                development._fields(check, ('kind', 'status', 'reason', 'evidence'))
+            with describe_error_at(path + '/kind'):
+                development._choice(check['kind'], development._REVIEW_CHECKS, 'Readiness check')
+            with describe_error_at(path + '/status'):
+                development._choice(check['status'], ('passed', 'failed', 'unresolved'), 'Independent check outcome')
+            with describe_error_at(path + '/reason'):
+                development._text(check['reason'], 'Independent check reasoning')
+            with describe_error_at(path + '/evidence'):
+                for reference in development._items(check['evidence'], 'Independent review evidence', True):
+                    if not isinstance(reference, dict) or reference.get('kind') not in ('source', 'result'):
+                        raise ResearchError('invalid_development', 'Evidence must identify an actual source Link or an execution output and locator')
+                    if reference['kind'] == 'source':
+                        development._fields(reference, ('kind', 'link'))
+                        _validate_packet_evidence(packet, [reference])
+                    else:
+                        # The ordinary role validator checks execution currency.
+                        fields(reference, ('kind', 'execution_id', 'output_id', 'artifact', 'locator'), code='invalid_development')
+                        validate_reference(reference['artifact'])
+                        read_locator(_PacketArtifacts(packet), reference['artifact'], reference['locator'], result=True)
 
 
 def _validate_verification_fields(packet, output, required=None):
@@ -1552,20 +1870,27 @@ def _validate_verification_fields(packet, output, required=None):
     with contract_check('review.shape'):
         seen = set()
         checks = output.get('checks', [])
-        if required in VERIFICATION_CHECKS and not checks:
-            fields({}, ('dimension', 'reason', 'evidence'), code='invalid_value_review')
-        for check in checks:
-            fields(check, ('dimension', 'reason', 'evidence'), code='invalid_value_review')
-            if check['dimension'] not in VERIFICATION_CHECKS or check['dimension'] in seen:
-                raise ResearchError('invalid_value_review', 'Assess each verification dimension exactly once')
-            seen.add(check['dimension'])
-            text(check['reason'], 'Verification reasoning', code='invalid_value_review')
-            if not isinstance(check['evidence'], list):
-                raise ResearchError('invalid_value_review', 'Verification evidence is an array of source links')
-            _validate_packet_evidence(packet, [dict(kind='source', link=link) for link in check['evidence']])
-            if check['dimension'] == 'soundness' and not any(link['version_id'] == packet['paper']['target']['id']
-                                                            for link in check['evidence']):
-                raise ResearchError('invalid_value_review', 'Soundness evidence includes the exact target')
+        with describe_error_at('/checks'):
+            if required in VERIFICATION_CHECKS and not checks:
+                fields({}, ('dimension', 'reason', 'evidence'), code='invalid_value_review')
+        for index, check in enumerate(checks):
+            if check is None:
+                continue
+            path = '/checks/' + str(index)
+            fields(check, ('dimension', 'reason', 'evidence'), code='invalid_value_review', path=path)
+            with describe_error_at(path + '/dimension'):
+                if check['dimension'] not in VERIFICATION_CHECKS or check['dimension'] in seen:
+                    raise ResearchError('invalid_value_review', 'Assess each verification dimension exactly once')
+                seen.add(check['dimension'])
+            with describe_error_at(path + '/reason'):
+                text(check['reason'], 'Verification reasoning', code='invalid_value_review')
+            with describe_error_at(path + '/evidence'):
+                if not isinstance(check['evidence'], list):
+                    raise ResearchError('invalid_value_review', 'Verification evidence is an array of source links')
+                _validate_packet_evidence(packet, [dict(kind='source', link=link) for link in check['evidence']])
+                if check['dimension'] == 'soundness' and not any(link['version_id'] == packet['paper']['target']['id']
+                                                                for link in check['evidence']):
+                    raise ResearchError('invalid_value_review', 'Soundness evidence includes the exact target')
 
 
 def _validate_adjudicator_fields(packet, output):
@@ -1575,47 +1900,56 @@ def _validate_adjudicator_fields(packet, output):
         allowed = ('upheld', 'not_upheld', 'unresolved')
         if packet.get('subject', {}).get('kind') == 'problem' and 'rubric_definition' not in packet:
             allowed += ('not_binding',)
-        if output.get('disposition') not in allowed:
-            raise ResearchError('invalid_review_adjudication', 'Use a focused objection disposition, not a third vote')
-        if output.get('correction_admissible') is not None and type(output['correction_admissible']) is not bool:
-            raise ResearchError('invalid_review_adjudication', 'Correction admissibility must be null or a boolean finding')
-        text(output.get('reason'), 'Adjudication reason')
+        with describe_error_at('/disposition'):
+            if output.get('disposition') not in allowed:
+                raise ResearchError('invalid_review_adjudication', 'Use a focused objection disposition, not a third vote')
+        with describe_error_at('/correction_admissible'):
+            if output.get('correction_admissible') is not None and type(output['correction_admissible']) is not bool:
+                raise ResearchError('invalid_review_adjudication', 'Correction admissibility must be null or a boolean finding')
+        with describe_error_at('/reason'):
+            text(output.get('reason'), 'Adjudication reason')
 
 
 def _validate_historical_fields(packet, output, required=None):
     from .operations import fields, text
     from .strategy import choice
     from .review_refusal import contract_check
+    root = '/reassessment/findings'
     with contract_check('review.reassessment'):
         findings = output.get('reassessment', {}).get('findings', [])
         identities = {row['id'] for row in packet.get('historical_reviews', [])}
-        if required in identities and not findings:
-            raise ResearchError('review_reassessment_incomplete', 'Address every inherited final review')
+        with describe_error_at(root):
+            if required in identities and not findings:
+                raise ResearchError('review_reassessment_incomplete', 'Address every inherited final review')
         seen = set()
-        for finding in findings:
-            fields(finding, ('review_id', 'disposition', 'reason', 'evidence'), code='review_reassessment_mismatch')
-            text(finding['review_id'], 'Historical review ID', code='review_reassessment_mismatch')
-            if finding['review_id'] in seen or finding['review_id'] not in identities:
-                raise ResearchError('review_reassessment_incomplete', 'Address each inherited final review exactly once')
-            seen.add(finding['review_id'])
-            choice(finding['disposition'], ('confirmed', 'revised', 'unresolved'), 'Reassessment disposition', 'review_reassessment_mismatch')
-            text(finding['reason'], 'Reassessment scientific reasoning', code='review_reassessment_mismatch')
-            _validate_packet_evidence(packet, finding['evidence'], review_binding=packet.get('subject', {}).get('kind') == 'problem')
+        for index, finding in enumerate(findings):
+            if finding is None:
+                continue
+            path = root + '/' + str(index)
+            fields(finding, ('review_id', 'disposition', 'reason', 'evidence'),
+                   code='review_reassessment_mismatch', path=path)
+            with describe_error_at(path + '/review_id'):
+                text(finding['review_id'], 'Historical review ID', code='review_reassessment_mismatch')
+                if finding['review_id'] in seen or finding['review_id'] not in identities:
+                    raise ResearchError('review_reassessment_incomplete', 'Address each inherited final review exactly once')
+                seen.add(finding['review_id'])
+            with describe_error_at(path + '/disposition'):
+                choice(finding['disposition'], ('confirmed', 'revised', 'unresolved'),
+                       'Reassessment disposition', 'review_reassessment_mismatch')
+            with describe_error_at(path + '/reason'):
+                text(finding['reason'], 'Reassessment scientific reasoning', code='review_reassessment_mismatch')
+            with describe_error_at(path + '/evidence'):
+                _validate_packet_evidence(packet, finding['evidence'],
+                                          review_binding=packet.get('subject', {}).get('kind') == 'problem')
 
 
-def _compact_page_lists(value):
-    if isinstance(value, list):
-        return [_compact_page_lists(item) for item in value if item is not None]
-    if isinstance(value, dict):
-        return {key: _compact_page_lists(item) for key, item in value.items()}
-    return value
-
-
+@refuse_unreadable_answer()
 def validate_page_output(rule, packet, targets, output, *, finding_version=1):
-    """Refuse page-owned fields here under the original role's check name."""
+    """Check the expanded page size before scientific validation reads evidence."""
     from .review_refusal import contract_check
     definitions = list_targets(rule, packet)
-    expected = [_resolve_target_id(definitions, key) for key in targets]
+    lookup = _index_target_ids(definitions)
+    expected = [_resolve_target_id(definitions, key, lookup) for key in targets]
     finding = rule['id'].endswith('/problem-openness')
     math = rule['id'].endswith('/math-openness')
     key = 'formulation' if finding or math else 'target'
@@ -1624,62 +1958,95 @@ def validate_page_output(rule, packet, targets, output, *, finding_version=1):
         if not isinstance(output['targets'], list):
             raise ResearchError('review_composition_conflict', FINAL_PAGE_INVALID_MESSAGE)
         actual = []
-        for row in output['targets']:
+        for index, row in enumerate(output['targets']):
             check_fields(row, (key, 'coverage', 'grounds', 'sentence') if finding else
-                         (key, 'coverage', 'sentence') if math else ('target', 'fields', 'sentence'),
-                         code='review_composition_conflict')
-            actual.append(_resolve_target_id(definitions, row[key]))
-            if not isinstance(row['sentence'], str) or not row['sentence'].strip() or len(row['sentence']) > SENTENCE_CHARACTERS:
+                         (key, 'coverage', 'sentence') if math else ('target', 'sentence'),
+                         () if finding or math else ('fields',), code='review_composition_conflict')
+            actual.append(_resolve_target_id(definitions, row[key], lookup))
+            if not isinstance(row['sentence'], str) or not row['sentence'].strip():
                 raise ResearchError('review_composition_conflict', FINAL_PAGE_INVALID_MESSAGE)
+            _check_answer_size(len(row['sentence']), SENTENCE_CHARACTERS, '/targets/%d/sentence' % index, 'text_characters')
         if actual != expected or len(set(actual)) != len(actual):
             raise ResearchError('review_composition_conflict', FINAL_PAGE_INVALID_MESSAGE)
+        for index, row in enumerate(output['targets']):
+            if finding:
+                row = _strip_ground_formulations(row)
+            values = {k: v for k, v in row.items() if k not in ('sentence', key)}
+            path = '/targets/' + str(index)
+            _check_serialized_size(values, PAGE_FIELDS_CHARACTERS, path if finding or math else path + '/fields',
+                                   'page_fields')
+            _check_serialized_size(row, PAGE_ROW_CHARACTERS, path, 'page_row')
     if finding:
-        _validate_finding_fields(packet, output['targets'], finding_version=finding_version)
+        _validate_finding_fields(packet, output['targets'], finding_version=finding_version, row_formulations=actual)
     elif math:
         from . import native_review
         with contract_check('native.output'):
-            for row in output['targets']:
+            for index, row in enumerate(output['targets']):
                 coverage = row['coverage']
-                native_review._require(native_review._nonempty(coverage) and len(coverage) <= COVERAGE_CHARACTERS
+                if isinstance(coverage, str):
+                    _check_answer_size(len(coverage), COVERAGE_CHARACTERS, '/targets/%d/coverage' % index,
+                                       'text_characters', code='invalid_native_review')
+                native_review._require(native_review._nonempty(coverage)
                     and not any(character in COVERAGE_LINE_BREAKS for character in coverage),
                     'Formulation coverage is nonempty text of at most 800 characters on one line',
                     path='/findings/openness/coverage')
     else:
-        for target, row in zip(actual, output['targets']):
-            if not isinstance(row['fields'], dict):
-                raise ResearchError('review_composition_conflict', FINAL_PAGE_INVALID_MESSAGE)
+        entry_ids = _list_page_entry_ids(rule, packet)
+        pointers, empty = _build_page_pointers(rule, packet, definitions, expected, entry_ids)
+        with contract_check('review.shape'):
+            for position, (target, row) in enumerate(zip(actual, output['targets'])):
+                allowed = set(pointers[target])
+                required = allowed & empty.keys()
+                if rule['role'] == 'adjudicator' and target == 'objection':
+                    required.add('/evidence')
+                fields = row.get('fields')
+                keys = fields.keys() if isinstance(fields, dict) else set()
+                missing = allowed - keys
+                unexpected = keys - allowed
+                if not isinstance(fields, dict) or unexpected or missing & required:
+                    raise ResearchError('review_composition_conflict', FINAL_PAGE_POINTERS_INVALID_MESSAGE,
+                        dict(path='/targets/%d/fields' % position, missing_fields=sorted(missing),
+                             unexpected_fields=sorted(unexpected, key=str)))
+        items = _compute_page_item_limit(definitions)
+        for index, (target, row) in enumerate(zip(actual, output['targets'])):
             projected = {}
-            for path, value in row['fields'].items():
-                owners = _find_field_owners(rule, path, value)
-                if len(owners) != 1 or owners[0]['owner'] != 'page':
-                    raise ResearchError('review_composition_conflict', FINAL_OWNER_INVALID_MESSAGE, dict(path=path))
-                _write_path(projected, path, value)
+            fields_path = '/targets/%d/fields' % index
+            with contract_check('review.shape'):
+                for path, value in row['fields'].items():
+                    owners = _find_field_owners(rule, path, value)
+                    if len(owners) != 1 or owners[0]['owner'] != 'page' or (path in empty and value != empty[path]):
+                        raise ResearchError('review_composition_conflict', FINAL_OWNER_INVALID_MESSAGE,
+                                            _answer_location(fields_path + '/' + _escape_field(path)))
+                    _write_path(projected, path, value, fields_path=fields_path, items=items)
             if rule['role'] in ('bar', 'slate', 'result'):
-                _validate_value_fields(rule, packet, row['fields'], required=target)
+                _validate_value_fields(rule, packet, row['fields'], required=target, entry_ids=entry_ids,
+                                       fields_path=fields_path, items=items)
             if rule['role'] == 'native_math':
-                _validate_native_fields(packet, row['fields'], required=target if target != 'openness' else None)
+                _validate_native_fields(packet, row['fields'], required=target if target != 'openness' else None,
+                                        fields_path=fields_path)
             adapter = rule.get('base_adapter', rule['adapter'])
             if adapter == 'study_verification':
-                _validate_verification_fields(packet, _compact_page_lists(projected), required=target)
+                _validate_verification_fields(packet, projected, required=target)
             if adapter == 'study_readiness':
-                _validate_readiness_fields(packet, _compact_page_lists(projected), required=target)
+                _validate_readiness_fields(packet, projected, required=target)
             if rule['role'] == 'adjudicator' and target == 'objection':
                 _validate_adjudicator_fields(packet, dict(disposition='unresolved', correction_admissible=None, **projected))
-                _validate_packet_evidence(packet, projected['evidence'], review_binding=packet.get('subject', {}).get('kind') == 'problem')
+                with describe_error_at('/evidence'):
+                    _validate_packet_evidence(packet, projected['evidence'],
+                                              review_binding=packet.get('subject', {}).get('kind') == 'problem')
             if 'context_repair' in packet:
-                _validate_historical_fields(packet, _compact_page_lists(projected), required=target)
+                _validate_historical_fields(packet, projected, required=target)
             for path, value in row['fields'].items():
                 owner = _find_field_owners(rule, path, value)[0]
                 assigned = (target if isinstance(value, (dict, list)) and not value else
                             _find_target_id(rule, packet, projected, owner, path))
                 if assigned not in (target, 'formulation') and not isinstance(value, (dict, list)):
-                    raise ResearchError('review_composition_conflict', FINAL_PAGE_INVALID_MESSAGE, dict(path=path))
+                    with contract_check('review.shape'):
+                        raise ResearchError('review_composition_conflict', FINAL_PAGE_INVALID_MESSAGE,
+                                            _answer_location(fields_path + '/' + _escape_field(path)))
     with contract_check('review.shape'):
-        for row in output['targets']:
-            values = {k: v for k, v in row.items() if k not in ('sentence', key)}
-            if _measure_final_value(values) > PAGE_FIELDS_CHARACTERS or _measure_final_value(row) > PAGE_ROW_CHARACTERS:
-                raise ResearchError('review_composition_conflict', FINAL_PAGE_BOUND_MESSAGE)
-        _validate_answer_schema(rule, rule['page_schema'], output)
+        measured = dict(output, targets=[_strip_ground_formulations(row) for row in output['targets']]) if finding else output
+        _validate_answer_schema(rule, rule['page_schema'], measured)
 
 
 def describe_page_answer_bound(rule, targets):
@@ -1687,9 +2054,9 @@ def describe_page_answer_bound(rule, targets):
     return PAGE_ENVELOPE_CHARACTERS + (rule['limits']['row'] + 1) * targets
 
 
-def _collect_reference_handles(packet, value):
+def _collect_reference_handles(packet, value, prefixes=()):
     references = {digest(entry['reference']): handle for handle, entry in packet.get('handle_table', {}).items()
-                  if 'reference' in entry}
+                  if 'reference' in entry and (not prefixes or handle[:1] in prefixes)}
     found = set()
     pending = [value]
     while pending:
@@ -1698,7 +2065,7 @@ def _collect_reference_handles(packet, value):
         if handle is not None:
             found.add(handle)
         if isinstance(item, dict):
-            if isinstance(item.get('ref'), str):
+            if isinstance(item.get('ref'), str) and (not prefixes or item['ref'][:1] in prefixes):
                 found.add(item['ref'])
             pending.extend(item.values())
         elif isinstance(item, list):
@@ -1709,19 +2076,21 @@ def _collect_reference_handles(packet, value):
 def build_decision_rows(rule, packet, page_outputs, *, measure=None):
     """Rows are [target handle, grade/status, sentence, evidence handles].
 
-    Select the largest number of whole handles that fits each actual row, with
-    shorter handles first. JSON escapes count. A sentence is retained up to the
-    space left by the target and status; the page answer remains unchanged.
+    Use the page's citation order where supplied. Otherwise search the page
+    values and try shorter handles first. JSON escapes count toward the bound.
     """
+    from .review_handles import GROUND_REFERENCE_PREFIXES
     from .review_route_capacity import DECISION_ROW_CHARACTERS
     measure = measure or _measure_final_value
     definitions = list_targets(rule, packet)
+    prefixes = GROUND_REFERENCE_PREFIXES if rule['id'].endswith('/problem-openness') else ()
     handles = {target['id']: target.get('handle', 't' + str(index)) for index, target in enumerate(definitions)}
+    lookup = _index_target_ids(definitions)
     result = []
     for page in page_outputs:
-        for item in page['output']['targets']:
+        for index, item in enumerate(page['output']['targets']):
             formulation = 'formulation' in item
-            target = _resolve_target_id(definitions, item['formulation'] if formulation else item['target'])
+            target = _resolve_target_id(definitions, item['formulation'] if formulation else item['target'], lookup)
             if formulation and 'grounds' in item:
                 status = sorted({ground['kind'] for ground in item['grounds']})
             elif formulation:
@@ -1733,10 +2102,12 @@ def build_decision_rows(rule, packet, page_outputs, *, measure=None):
             row = [handles[target], status, item['sentence'], []]
             while measure(row) > DECISION_ROW_CHARACTERS and row[2]:
                 row[2] = row[2][:-1]
-            for handle in _collect_reference_handles(packet, item.get('grounds', item.get('fields'))):
+            citations = (page['citation_handles'][index] if 'citation_handles' in page
+                         else _collect_reference_handles(packet, item.get('grounds', item.get('fields')), prefixes))
+            for handle in citations:
                 if measure(row[:3] + [row[3] + [handle]]) <= DECISION_ROW_CHARACTERS:
                     row[3].append(handle)
-                else:
+                elif 'citation_handles' not in page:
                     break
             if measure(row) > DECISION_ROW_CHARACTERS:
                 raise ResearchError('review_composition_conflict', FINAL_PAGE_BOUND_MESSAGE)
@@ -1744,11 +2115,14 @@ def build_decision_rows(rule, packet, page_outputs, *, measure=None):
     return result
 
 
+@refuse_unreadable_answer()
 def validate_closing_output(rule, packet, rows, output, *, finding_version=1):
     """Check closing fields; cross-page scientific checks run on composition."""
     from . import native_review
     from .operations import strings
     from .review_refusal import contract_check
+    with contract_check('review.shape'):
+        _check_serialized_size(output, CLOSING_FIELDS_CHARACTERS, '', 'closing_total')
     if rule['id'].endswith('/math-openness'):
         _validate_math_closing(rule, packet, output)
         return
@@ -1756,16 +2130,14 @@ def validate_closing_output(rule, packet, rows, output, *, finding_version=1):
         check_fields(output, native_review.RESULT_FINDINGS + ('outcome', 'reason', 'grounds'), ('coverage_format',),
                      code='review_composition_conflict')
         _validate_finding_fields(packet, closing=output, finding_version=finding_version)
-        if _measure_final_value(output) > CLOSING_FIELDS_CHARACTERS:
-            raise ResearchError('review_composition_conflict', FINAL_PAGE_BOUND_MESSAGE)
         with contract_check('review.shape'):
             _validate_answer_schema(rule, rule['closing_schema'], output)
         return
     if rule.get('native_kind') in ('result', 'recovery') and 'assessment' in output:
-        with contract_check('native.output'):
-            native_review.validate_output(packet.get('native', packet), output['assessment'])
         with contract_check('review.shape'):
             _validate_answer_schema(rule, rule['closing_schema'], output)
+        with contract_check('native.output'):
+            native_review.validate_output(packet.get('native', packet), output['assessment'])
         return
     with contract_check('review.shape'):
         check_fields(output, ('fields', 'bindings'), code='review_composition_conflict')
@@ -1776,15 +2148,18 @@ def validate_closing_output(rule, packet, rows, output, *, finding_version=1):
                 or len(set(output['bindings'])) != len(output['bindings'])
                 or any(path not in harness for path in output['bindings'])):
             raise ResearchError('review_composition_conflict', FINAL_CLOSING_INVALID_MESSAGE)
+        _validate_closing_field_paths(output['fields'])
         for path, value in output['fields'].items():
             owners = _find_field_owners(rule, path, value)
             if len(owners) != 1 or owners[0]['owner'] != 'closing':
-                raise ResearchError('review_composition_conflict', FINAL_OWNER_INVALID_MESSAGE, dict(path=path))
+                raise ResearchError('review_composition_conflict', FINAL_OWNER_INVALID_MESSAGE,
+                                    _answer_location('/fields/' + _escape_field(path)))
+        _validate_answer_schema(rule, rule['closing_schema'], output)
     fields = output['fields']
     if rule['role'] == 'native_math':
-        _validate_native_fields(packet, fields)
+        _validate_native_fields(packet, fields, fields_path='/fields')
     elif rule['role'] in ('bar', 'slate', 'result'):
-        _validate_value_fields(rule, packet, fields)
+        _validate_value_fields(rule, packet, fields, fields_path='/fields')
         with contract_check('review.value'):
             strings(fields.get('/limitations', []), 'Independent assessment limitations', nonempty=True)
         if '/objections' in fields:
@@ -1814,18 +2189,14 @@ def validate_closing_output(rule, packet, rows, output, *, finding_version=1):
         from .verification import validate_verdict_body
         projected = {}
         for path, value in fields.items():
-            _write_path(projected, path, value)
+            _write_path(projected, path, value, fields_path='/fields')
         with contract_check('review.shape'):
-            validate_verdict_body(projected['verdict'])
+            validate_verdict_body(projected.get('verdict'))
     elif rule['role'] == 'adjudicator':
         projected = dict(reason='Shape check.')
         for path, value in fields.items():
-            _write_path(projected, path, value)
+            _write_path(projected, path, value, fields_path='/fields')
         _validate_adjudicator_fields(packet, projected)
-    if _measure_final_value(output) > CLOSING_FIELDS_CHARACTERS:
-        raise ResearchError('review_composition_conflict', FINAL_PAGE_BOUND_MESSAGE)
-    with contract_check('review.shape'):
-        _validate_answer_schema(rule, rule['closing_schema'], output)
 
 
 def _make_json_schema(characters):
@@ -1942,15 +2313,15 @@ def _describe_output_variants(rule):
 
 
 def _raise_schema_error(path):
-    raise ResearchError('review_composition_conflict', ANSWER_SCHEMA_INVALID_MESSAGE, dict(path=path))
+    raise ResearchError('review_composition_conflict', ANSWER_SCHEMA_INVALID_MESSAGE, _answer_location(path))
 
 
 def _validate_json_limits(schema, value, path, depth=0):
     if depth > schema['max_depth']:
         _raise_schema_error(path)
-    if isinstance(value, str) and _measure_final_value(value) > schema['max_string_serialized_characters']:
-        _raise_schema_error(path)
-    if isinstance(value, list):
+    if isinstance(value, str):
+        _check_serialized_size(value, schema['max_string_serialized_characters'], path, 'serialized_string')
+    elif isinstance(value, list):
         if len(value) > schema['max_items']:
             _raise_schema_error(path)
         for index, item in enumerate(value):
@@ -1959,22 +2330,25 @@ def _validate_json_limits(schema, value, path, depth=0):
         if len(value) > schema['max_properties']:
             _raise_schema_error(path)
         for key, item in value.items():
-            if _measure_final_value(key) > schema['max_key_serialized_characters']:
-                _raise_schema_error(path)
-            _validate_json_limits(schema, item, path + '/' + _escape_field(key), depth + 1)
+            characters = _measure_final_value(key)
+            maximum = schema['max_key_serialized_characters']
+            if characters > maximum:
+                _check_answer_size(characters, maximum, path, 'serialized_key', key_sha256=digest(key))
+            item_path = path + '/' + _escape_field(key)
+            _validate_json_limits(schema, item, item_path, depth + 1)
     elif value is not None and type(value) not in (str, int, float, bool):
         _raise_schema_error(path)
 
 
 def _validate_answer_schema(rule, schema, value, path=''):
-    if _measure_final_value(value) > schema['max_serialized_characters']:
-        _raise_schema_error(path)
+    _check_serialized_size(value, schema['max_serialized_characters'], path)
     kind = schema['type']
     if kind == 'json':
         _validate_json_limits(schema, value, path)
     elif kind == 'string':
-        if not isinstance(value, str) or len(value) > schema['max_characters']:
+        if not isinstance(value, str):
             _raise_schema_error(path)
+        _check_answer_size(len(value), schema['max_characters'], path, 'text_characters')
     elif kind == 'enum':
         if value not in schema['values']:
             _raise_schema_error(path)
@@ -1996,7 +2370,7 @@ def _validate_answer_schema(rule, schema, value, path=''):
             owners = _find_field_owners(rule, field_path, item)
             if len(owners) != 1 or owners[0]['owner'] != schema['owner']:
                 _raise_schema_error(path + '/' + _escape_field(field_path))
-            _validate_answer_schema(rule, owners[0]['schema'], item, field_path)
+            _validate_answer_schema(rule, owners[0]['schema'], item, path + '/' + _escape_field(field_path))
     elif kind in ('native_closing', 'native_math_closing'):
         assessment = 'assessment' in value if kind == 'native_closing' else value.get('decision') != 'approve'
         _validate_answer_schema(rule, schema['assessment' if assessment else 'approval'], value, path)
@@ -2007,8 +2381,10 @@ def _split_native_assessment(rule, packet, output, pages):
     rows = {}
     for index, target in enumerate(targets):
         fields = {} if target['id'] == 'openness' else {'/findings/' + target['id']: output['reason']}
-        rows[target['id']] = dict(target='t' + str(index), fields=fields, sentence=output['reason'][:SENTENCE_CHARACTERS])
-    return [_wrap_page_output(page, [copy.deepcopy(rows[_resolve_target_id(targets, key)]) for key in page])
+        rows[target['id']] = dict(target=target.get('handle', 't' + str(index)), fields=fields,
+                                  sentence=output['reason'][:SENTENCE_CHARACTERS])
+    lookup = _index_target_ids(targets)
+    return [_wrap_page_output(page, [copy.deepcopy(rows[_resolve_target_id(targets, key, lookup)]) for key in page])
             for page in pages], dict(assessment=copy.deepcopy(output))
 
 

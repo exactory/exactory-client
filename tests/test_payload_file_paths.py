@@ -295,7 +295,9 @@ class PayloadFilePathTests(CheckCommandMixin, unittest.TestCase):
         self.assertEqual(normalize_payload_paths(self.root, 'bind-run', payload), payload)
         for command, field in (('forming-import', 'source_workspace'),
                                ('problem-objections-carry', 'source_workspace'),
-                               ('problem-candidate-transfer', 'destination_workspace')):
+                               ('problem-candidate-transfer', 'destination_workspace'),
+                               ('problem-search-step', 'successor_workspace'),
+                               ('problem-search-origin', 'source_workspace')):
             payload = {field: str(self.root.parent / 'other-study')}
             self.assertEqual(normalize_payload_paths(self.root, command, payload), payload)
 

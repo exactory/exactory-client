@@ -257,6 +257,9 @@ class RecordedSeriesStopTests(unittest.TestCase):
     def test_malformed_packet_keeps_the_cli_terminal_stop_and_exit_code(self):
         import io
         from contextlib import redirect_stdout, redirect_stderr
+        from ci.reviewer_program_guard import use_absent_programs
+        # The plan observes the installed runtime of each route adapter; the stored history names a Codex route.
+        use_absent_programs(self)
         from test_review_failed_request_history import FailedRequestHistoryTests, read_cases
         history = FailedRequestHistoryTests()
         history.setUp()

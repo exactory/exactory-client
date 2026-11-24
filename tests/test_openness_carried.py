@@ -312,6 +312,7 @@ class CarriedSelectionCases(CarriedSelectionSupport):
                 self.assertEqual(caught.exception.message, v7.ORIGIN_VERIFICATION_MESSAGE)
 
     def test_chain_recorded_later_does_not_change_a_stored_selection(self):
+        """Contract that passes on the base. A genuinely later origin leaves the stored selection unchanged."""
         first, inventory, identity, selection = start_v7(self)
         self.assertEqual(first['carried_selection']['protocol'], SELECTION_V3)
         later = self.export(name='later-export', assignment_id='later')
@@ -581,21 +582,23 @@ class V6CarriedSelectionTests(CarriedSelectionCases, OpennessReadingCase):
         self.assertTrue(reading.verify_chain(self.store.snapshot()['records'], self.artifacts, final))
 
     def test_native_packet_whose_openness_minimum_is_no_object_is_no_candidate(self):
-        # The commands cannot record such a native packet, so the earlier first assignment is built in memory.
+        # The commands cannot record such a native packet. Keep authenticated chronology by using the storage API.
         expected = self.select_readings()
         self.assertEqual([row['origin']['assignment_id'] for row in expected], ['turn-1'])
         first = self.records['review_assignment']['turn-1']
         native = json.loads(self.artifacts.read(first['context']['native_packet']))
+        creation = self.store.revision + 1
         for minimum in (['not', 'an', 'object'], 'text', None):
             with self.subTest(minimum=minimum):
                 native['scientific_context']['openness_minimum'] = minimum
-                records = copy.deepcopy(self.records)
-                malformed = dict(copy.deepcopy(first), id='malformed', recorded_revision=first['recorded_revision'] - 1,
+                malformed = dict(copy.deepcopy(first), id='malformed', recorded_revision=creation,
                                  reading_chain=dict(first_assignment_id='malformed', turn=1))
                 malformed['context']['native_packet'] = self.artifacts.put(serialize_record(native), 'application/json')
-                records['review_assignment']['malformed'] = malformed
-                self.assertEqual(self.select_readings(records=records), expected)
-                self.assertIsNone(self.carried._describe_chain(records, self.artifacts, malformed, self.identity))
+                self.put('review_assignment', 'malformed', malformed)
+                records = self.store.snapshot()['records']
+                identity = dict(self.identity, recorded_revision=self.store.revision + 1)
+                self.assertEqual(self.select_readings(records=records, identity=identity), expected)
+                self.assertIsNone(self.carried._describe_chain(records, self.artifacts, malformed, identity))
 
 
 # A refusal that states nothing about a turn of the earlier chain: a stop of the class harness_defect.
@@ -703,6 +706,7 @@ class CarriedRefusalTests(CarriedSelectionSupport, OpennessReadingCase):
         with self.assertRaises(ResearchError) as refused:
             self.carried.build_carried_selection(dict(self.records), self.artifacts, self.inventory, self.identity)
         self.assertEqual(refused.exception.code, 'claim_reassessment_required')
+        self.assertEqual(refused.exception.details['record_id'], 'review_assignment:turn-1')
         for stamp in (self.first['recorded_revision'] - 1, self.first['recorded_revision'] + 1):
             with self.subTest(spoofed_stamp=stamp):
                 changed = copy.copy(self.records)
@@ -711,6 +715,65 @@ class CarriedRefusalTests(CarriedSelectionSupport, OpennessReadingCase):
                 with self.assertRaises(ResearchError) as refused:
                     self.carried.build_carried_selection(changed, self.artifacts, self.inventory, self.identity)
                 self.assertEqual(refused.exception.code, 'claim_reassessment_required')
+
+    def test_null_and_string_origin_stamps_give_the_history_refusal(self):
+        """The base compares or subtracts the malformed stamp and raises TypeError."""
+        original = self.records['review_assignment']['turn-1']
+        for stamp in (None, '2', True):
+            with self.subTest(stamp=stamp):
+                first = dict(original, recorded_revision=stamp)
+                self.put('review_assignment', 'turn-1', first)
+                records = self.store.snapshot()['records']
+                for read in (lambda: self.select_readings(records=records),
+                             lambda: self.carried.read_chain_records(records, first, SELECTION_V3)):
+                    with self.assertRaises(ResearchError) as caught:
+                        read()
+                    self.assertEqual(caught.exception.code, 'claim_reassessment_required')
+                    self.assertEqual(caught.exception.details['record_id'], 'review_assignment:turn-1')
+
+    def test_postdated_continuation_and_attempt_keep_the_newest_reading(self):
+        """The base omits a ready continuation when its assignment or attempt stamp moves past the cutoff."""
+        second = self.assign('turn-2', self.native, prior='turn-1')
+        self.invoke('turn-2', self.build_reading_response(self.read_packet('turn-2'), excerpts=[]))
+        records = self.store.snapshot()['records']
+        identity = dict(self.identity, recorded_revision=self.store.revision + 1)
+        turns = self.select_readings(identity=identity, records=records)
+        self.assertEqual([row['origin']['assignment_id'] for row in turns], ['turn-1', 'turn-2'])
+        attempt_id = turns[-1]['origin']['attempt_id']
+        selection = dict(protocol=SELECTION_V3, inventory_digest=digest(self.inventory), turns=turns)
+        for kind, identifier in (('review_assignment', second['id']), ('review_attempt', attempt_id)):
+            with self.subTest(kind=kind):
+                row = records[kind][identifier]
+                self.put(kind, identifier, dict(row, recorded_revision=identity['recorded_revision'] + 100))
+                changed = self.store.snapshot()['records']
+                self.assertEqual(self.select_readings(identity=identity, records=changed), turns)
+                self.assertEqual(len(self.carried.verify_carried_selection(
+                    changed, self.artifacts, self.inventory, identity, selection)), 2)
+                self.put(kind, identifier, row)
+
+    def test_backdated_attempt_and_invocation_stay_after_the_cutoff(self):
+        """The base cutoff view includes the later invocation and answer after their stamps are backdated."""
+        self.assign('turn-2', self.native, prior='turn-1')
+        cutoff = self.store.revision + 1
+        self.invoke('turn-2', self.build_reading_response(self.read_packet('turn-2'), excerpts=[]))
+        records = self.store.snapshot()['records']
+        for kind in ('review_attempt', 'review_invocation'):
+            for key, row in records[kind].items():
+                if row['assignment_id'] == 'turn-2':
+                    self.put(kind, key, dict(row, recorded_revision=cutoff - 1))
+        identity = dict(self.identity, recorded_revision=cutoff)
+        turns = self.select_readings(identity=identity, records=self.store.snapshot()['records'])
+        self.assertEqual([row['origin']['assignment_id'] for row in turns], ['turn-1'])
+
+    def test_backdated_later_origin_stays_outside_the_cutoff(self):
+        """The base admits the later head to qualification and refuses its forged stamp."""
+        identity = dict(self.identity, recorded_revision=self.store.revision + 1)
+        turns = self.select_readings(identity=identity)
+        native = self.export(name='later-export', assignment_id='later')
+        self.assign('later', native)
+        later = self.store.snapshot()['records']['review_assignment']['later']
+        self.put('review_assignment', 'later', dict(later, recorded_revision=identity['recorded_revision'] - 1))
+        self.assertEqual(self.select_readings(identity=identity, records=self.store.snapshot()['records']), turns)
 
     def test_report_for_a_v6_chain_states_the_refusal_and_does_not_raise(self):
         from research_harness.native_review import load_packet
@@ -1027,6 +1090,11 @@ def build_rule_fixture(protocol='exactory-openness-reading-v5', *, complete_sear
 
 
 def select_rule_fixture(carried, artifacts, inventory, chains, records):
+    if carried.SELECTION_PROTOCOL == SELECTION_V3:
+        from research_harness.storage import _PostCreationSnapshot
+        revisions = {(kind, key): row['recorded_revision'] for kind, rows in records.items()
+                     for key, row in rows.items()}
+        records = _PostCreationSnapshot(records, creation_revisions=revisions, revision=99)
     observations = dict(chains)
     candidates = [dict(chain=chain, protocol=turns[0]['origin']['protocol'],
         recorded_revision=records['review_assignment'][chain]['recorded_revision']) for chain, turns in chains]

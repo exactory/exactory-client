@@ -538,7 +538,8 @@ class CallContextCorrectionTests(unittest.TestCase):
         self.addCleanup(case.doCleanups)
         case.setUp()
         case.prepare_refused()
-        lost = dict(assignment_id='earlier-turn', events=['exposure'],
+        binding = case.case.assignment['context']['context_repair']
+        lost = dict(assignment_id=binding['assignment_id'], events=binding['event_ids'],
                     route=dict(id='route', context_status='verified_for_route'), count=1)
         with patch.object(protocol, 'find_unverified_context', return_value=lost), \
                 patch.object(transport, 'send_request', side_effect=AssertionError('a call started')), \
@@ -580,10 +581,8 @@ class CallContextStaleRouteTests(unittest.TestCase):
     def test_planned_replacement_on_a_stale_route_record_with_a_failed_probe_keeps_the_stale_route_handoff(self):
         """A v7 reading turn whose call ended over the input limit plans its capacity replacement. The latest probe
         of its route record then returns no answer, and the installed runtime changes. The planner simulates the
-        replacement on its overlay of the artifacts, and the check of the continued turn (rule PC7) reads the
-        standing of the route record through that overlay (rule PC6). The plan of the head stays the handoff of
-        the stale route record. Before the repair the overlay passed no runtime reading on, and the plan ended
-        with an AttributeError."""
+        replacement on its artifact overlay. The destination's standing (PC6) still gives the stale-route handoff.
+        The original incident was an AttributeError while reading runtime standing through the overlay."""
         from test_openness_reading_v7_refusal import V7RefusalTests
         from test_review_output_profile import build_row
         from research_harness import review_route_capacity as capacity
@@ -694,7 +693,9 @@ class CallContextChainTests(V7ChainSupport, OpennessReadingCase):
         # The retry of the lost call waits for the first provider wait; the test does not spend that time.
         with patch('research_harness.review_series.time.sleep'):
             code, lines, calls = self.drive('new-t2')
-        self.assertEqual((code, len(calls)), (0, 3))
+        # The second turn again, three more reading turns and the final. The frame of a v7 turn reserves its notes
+        # cost and its list rows, so each reading turn of this fixture takes 60,000 characters of material.
+        self.assertEqual((code, len(calls)), (0, 5))
         self.assertTrue(read_records(self).get('problem_openness'))
 
     def test_w13_refused_turn_is_not_replaced_after_a_contamination_of_an_own_earlier_turn(self):

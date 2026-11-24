@@ -883,15 +883,17 @@ calls and form outcomes as records. The retired kinds `phenomenon` and
 kind of a forming question, only in a record that already holds the kind
 (`problem_start_kind_removed` otherwise), and a `phenomenon` candidate cites at
 least one forming call (`problem_candidate_forming_missing` otherwise). Two
-blind problem bars fix the
-field's standard before any candidate is shown to a reviewer, and the slate
-(`problem-slate`) records the decision: every current candidate is selected,
-deferred with the evidence that would raise it, or rejected with the reason. A
-selected candidate needs `max(B1, B2) >= 2` and readiness `pass` in its potential
-grades. Selection authorizes further research; it establishes neither openness
-nor significance. A slate that selects no candidate records the reason and is the
-legitimate no-post outcome: `next` reports `problem_no_post` until a new slate
-selects a candidate.
+blind problem bars fix the field's standard before any candidate is shown to a
+reviewer, and the slate (`problem-slate`) records the decision: every current
+candidate is selected, deferred with the evidence that would raise it, or
+rejected with the reason. A selected candidate needs `max(B1, B2) >= 2` and
+readiness `pass` in its potential grades. Selection authorizes further research;
+it establishes neither openness nor significance. A slate that selects no
+candidate records the reason. It does not end the run. While the record holds no
+post, `next` names the next search step (`problem_search_step_required`), and
+the search goes on until a problem is posted
+([Search steps](research-cli.md#search-steps)). In a record that holds a post,
+`next` reports `problem_no_post` until a new slate selects a candidate.
 
 The slate cites bars that state the calibration of levels 2 and 3. A bar recorded
 on the version 1 template returns `problem_bar_calibration_required`, and so
@@ -911,8 +913,11 @@ keeps the paragraphs of that review. The
 review is bound to the exact candidate set,
 the current bars and the imported set. After a candidate is added or superseded,
 a bar is refreshed or a carry changes the imported set, assigning
-the slate again to the same reviewer refreshes the review in its session, with the
-earlier findings in the history. A slate objection names the candidates it
+the slate again to the same reviewer refreshes the review. Since 0.93.0 the
+refresh is a new chain in the slot of that review, with each review of the
+slot in its history. A slate review that a context repair, a series of the
+parts protocol or a staged review recorded outside a session under the source
+rules v4 is refreshed in its session, as before. A slate objection names the candidates it
 concerns, or none for the slate as a whole. It binds the result reviews and the
 post like the bars' objections, whether or not the slate cites the review: it
 follows each named candidate through its later versions, a whole-slate objection
@@ -934,8 +939,8 @@ Formulate a selected candidate with `problem-statement` and its `candidate_id`;
 the post gate requires the latest slate to select the current statement's
 candidate. The latest slate must still cover exactly the current candidates;
 otherwise the gate reports `problem_slate_stale`, `next` names it instead of
-`problem_no_post`, and the milestone is `exploration` until a new slate is
-recorded.
+`problem_no_post` or a search code, and the milestone is `exploration` until a
+new slate is recorded.
 
 Record the attempt with `problem-attempt`: `{id, statement_id, kind, solver,
 literature, outcomes, proportion}` becomes immutable `problem_attempt/<id>` with
@@ -1226,26 +1231,38 @@ source changed, until a new import is recorded. In the source,
 `problem-candidate-transfer` records the candidate, the destination and the
 reason ([Imported forming history](research-cli.md#imported-forming-history)).
 
-An exploration has ended when its current slate selects nothing, or every
-candidate that it selects is posted, withdrawn or taken up in another record.
-`problem-report` records how it ended. The author gives the finding that would
-make the exploration worth reopening, and the harness computes the rest: the
-start, every form with its standing, its disposition and the evidence of its
-outcome, the imports, the candidates with their endings, the statements with
-their publication and the classification of each post kept apart, what
-changed after each post, the proved consequences, the counts, what was spent,
-and one of six outcomes. A post through the gate is classified from the
-accounts of the value record that its decision covered: a gain was
-established, or ordinary. A post outside the gate, and a post whose value
-record holds no accounts, is kind unassessed. The report is due for a record
-of a retired start, a phenomenon or a thought experiment, and for every record
-that holds a forming call. `status` and `next` then show the advisory
-`problem_report_due`, and they show `problem_report_stale` when the records
-that a report read changed after its cutoff. Neither changes a gate, an
-obligation or the next action, and the command refuses a due report while a
-form is open (`problem_report_forms_open`). The report passes no gate and
-receives no review
+An exploration has ended in one of two cases. In the first case, its current
+slate selects nothing, and the record holds a post or the search continues in
+another record. The search continues in another record when the latest search
+step after that slate has the way `next_exploration`. In the second case, every
+candidate that the current slate selects is posted, withdrawn or taken up in
+another record. `problem-report` records how it ended. The author gives the
+finding that would make the exploration worth reopening, and the harness
+computes the rest: the start, every form with its standing, its disposition and
+the evidence of its outcome, the imports, the candidates with their endings, the
+statements with their publication and the classification of each post kept
+apart, what changed after each post, the proved consequences, the counts, what
+was spent, and one of six outcomes. A post through the gate is classified from
+the accounts of the value record that its decision covered: a gain was
+established, or ordinary. A post outside the gate, and a post whose value record
+holds no accounts, is kind unassessed. The report is due for a record of a
+retired start, a phenomenon or a thought experiment, and for every record that
+holds a forming call. `status` and `next` then show the advisory
+`problem_report_due`, and they show `problem_report_stale` when the records that
+a report read changed after its cutoff. Neither changes a gate, an obligation or
+the next action, and the command refuses a due report while a form is open
+(`problem_report_forms_open`). The report passes no gate and receives no review
 ([The report of an exploration](research-cli.md#the-report-of-an-exploration)).
+
+A run ends when a problem is posted. When the current slate selects nothing and
+the record holds no post, `status` and `next` name the next search step, and
+`problem-search-step` records it. A step has one of five ways in a fixed order:
+`raise_deferred`, `pose_stated_item`, `study_refutation`,
+`attack_stated_question` and `next_exploration`. It holds what the record
+learned, the evidence, the plan and a reason for each earlier way that it passes
+over. A step with the way `next_exploration` names the workspace of the next
+record. In that record, `problem-search-origin` keeps what the earlier
+exploration learned ([Search steps](research-cli.md#search-steps)).
 
 ## Initiate and resume
 

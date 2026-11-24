@@ -404,6 +404,8 @@ REFUSED_OUTCOMES = {
     "problem-post-external": "problem_statement_mismatch",
     "problem-post-fact": "problem_post_missing",
     "problem-post-time": "problem_post_missing",
+    "problem-search-origin": "problem_search_source_unavailable",
+    "problem-search-step": "problem_search_slate_mismatch",
     "problem-slate": "problem_slate_incomplete",
     "publication-scope": "publication_scope_stale",
     "read-batch": "invalid_batch",

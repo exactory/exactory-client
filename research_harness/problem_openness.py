@@ -38,6 +38,7 @@ FAMILY_READING_AUTHOR_COMPARISON_FIELD = "authors_compared"
 FAMILY_READING_V1_REFUSAL = "Family readings require a version 2 openness minimum delivered with protocol v6."
 FAMILY_READING_LIST_REFUSAL = ("minimum.family_readings is not a list. Give a list of "
                                "{search_digest, work_id, version_id} entries, or leave the field out.")
+SEARCH_BINDING_LIST_REFUSAL = "minimum.searches is not a list. Give a list of {formulation, search_id} entries."
 
 
 def describe_gap_fact(gap, packet, family_failures):
@@ -133,6 +134,7 @@ def collect_reading_artifacts(records, artifacts, reading):
 def prepare_openness(records, artifacts, value, revision):
     require_problem(records)
     fields(value, ("assignment_id",))
+    text(value["assignment_id"], "Openness assignment ID")
     from .review_protocol import assignment_state
     assignment = records.get("review_assignment", {}).get(value["assignment_id"])
     from .native_review import find_finding_version
@@ -552,6 +554,10 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
            ("text_priority", "family_readings", "supporting_reading_ids", "results"))
     if "family_readings" in spec["minimum"] and not isinstance(spec["minimum"]["family_readings"], list):
         raise ResearchError("invalid_input", FAMILY_READING_LIST_REFUSAL, {"field": "family_readings"})
+    if not isinstance(spec["minimum"]["searches"], list):
+        raise ResearchError("invalid_input", SEARCH_BINDING_LIST_REFUSAL, {"field": "searches"})
+    if spec["minimum"]["settling_work_id"] is not None:
+        text(spec["minimum"]["settling_work_id"], "Settling work ID")
     strings(spec["minimum"].get("supporting_reading_ids", []), "Supporting reading IDs")
     missing = sorted(set(spec["minimum"].get("supporting_reading_ids", [])) - set(records.get("reading", {})))
     if missing:
@@ -568,6 +574,7 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
 
     for binding in spec["minimum"]["searches"]:
         fields(binding, ("formulation", "search_id"))
+        text(binding["search_id"], "Openness search ID")
         search = records.get("literature_search", {}).get(binding["search_id"])
         if search is None:
             raise ResearchError("openness_search_missing", "Bind this store's exact search", binding)

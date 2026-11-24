@@ -1149,18 +1149,29 @@ class RouteRenewalStoredShapeTests(unittest.TestCase):
     def run_with_membership_check(self, test_class, method, *, set_up=True):
         from research_harness import review_failure_class as failures
         from review_legacy_fixtures import list_turn_assignments_as_0_91_2
-        installed = failures.list_turn_assignments
+        installed, installed_position = failures.list_turn_assignments, failures.list_failure_position_assignments
         compared = []
         def compare(records, assignment):
             result = installed(records, assignment)
             self.assertEqual(result, list_turn_assignments_as_0_91_2(records, assignment))
             compared.append(assignment['id'])
             return result
+        def compare_position(records, artifacts, assignment):
+            result = installed_position(records, artifacts, assignment)
+            if failures.identify_paged_chain(assignment) is not None:
+                # A final in pages counts each page position apart: the members of the rule of 0.91.2 at this page.
+                position = failures.read_paged_position(artifacts, assignment)
+                self.assertEqual(sorted(result), sorted(
+                    identifier for identifier in list_turn_assignments_as_0_91_2(records, assignment)
+                    if failures.read_paged_position(artifacts, records['review_assignment'][identifier]) == position))
+                compared.append(assignment['id'])
+            return result
         fixture = test_class(method)
         if set_up:
             fixture.setUp()
         try:
-            with patch.object(failures, 'list_turn_assignments', side_effect=compare):
+            with patch.object(failures, 'list_turn_assignments', side_effect=compare), patch.object(
+                    failures, 'list_failure_position_assignments', side_effect=compare_position):
                 getattr(fixture, method)()
         finally:
             fixture.doCleanups()

@@ -30,7 +30,9 @@ class StudySeriesSecondTurnTests(unittest.TestCase):
 
     def test_study_series_below_v4_floor_reaches_a_recorded_final(self):
         """A combined result review records the exact bindings after evidence overflows the frame."""
-        case = self.build_readiness(127000)
+        # The admission of the parts protocol v3 charges the prompt and the target table of each turn, so the route
+        # needs a final room above 129,896 characters; release 0.92.1 observed 127,000 here.
+        case = self.build_readiness(140000)
         reviewer = 'r' * 520
         case.logical['assessor']['id'] = reviewer
         case.logical['support_contract']['evidence'] = [dict(reference='r' * 4100)]
@@ -130,12 +132,13 @@ class StudySeriesSecondTurnTests(unittest.TestCase):
                     paths = {tuple(row['frame_path']) for row in admission['inventory']['units'] if 'frame_path' in row}
                     self.assertTrue(unit_paths <= paths, paths)
 
-    def test_base_capacity_stop_lists_a_serving_route(self):
-        """The excerpt-bearing readiness packet forces one measured search for a serving route."""
+    def refuse_base_assignment(self, serving_probe_tokens):
+        """The capacity stop of a first assignment on the route below its floor, beside a route record 'serving' whose
+        probe observed serving_probe_tokens. Returns the refusal, the fixture and the revision before the call."""
         case = self.build_readiness(60000)
         case.logical[review_excerpts.KEY] = review_excerpts.carry_session(case.records(), case.case.artifacts, {}, {})
         limit_codex_input(case, case.measure(case.logical) // 2)
-        with patch.object(case.case, 'capacity_probe_tokens', 255000, create=True):
+        with patch.object(case.case, 'capacity_probe_tokens', serving_probe_tokens, create=True):
             record_codex_route(case.case, 'serving', output_tokens=128000, model='serving-model')
         records, artifacts = case.records(), case.case.artifacts
         packet = dict(case.logical)
@@ -149,9 +152,23 @@ class StudySeriesSecondTurnTests(unittest.TestCase):
                 patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts_v3.PROTOCOL,)), \
                 self.assertRaises(ResearchError) as raised:
             capacity.require_covered_assignment(records, artifacts, assignment, packet, prompt, request)
-        error = raised.exception
+        return raised.exception, case, revision
+
+    def test_base_capacity_stop_lists_a_serving_route(self):
+        """The excerpt-bearing readiness packet forces one measured search for a serving route."""
+        # The charged admission of the parts protocol v3 needs a probe of more than 255,000 tokens (release 0.92.1).
+        error, case, revision = self.refuse_base_assignment(280000)
         self.assertEqual(error.code, 'review_route_capacity_below_floor')
         self.assertEqual(error.details['reason'], 'no_parts_delivery')
         self.assertEqual([(row['route_id'], row['delivery']) for row in error.details['serving_routes']],
                          [('serving', 'parts')])
+        self.assertEqual(case.case.store.revision, revision)
+
+    def test_base_capacity_stop_lists_no_route_whose_probe_holds_no_charged_series(self):
+        """At the probe of release 0.92.1 (255,000 tokens) the series of the parts protocol v3 with its charged prompt
+        and target table does not fit the route 'serving', so the stop lists no serving route."""
+        error, case, revision = self.refuse_base_assignment(255000)
+        self.assertEqual((error.code, error.details['reason']),
+                         ('review_route_capacity_below_floor', 'no_parts_delivery'))
+        self.assertEqual(error.details['serving_routes'], [])
         self.assertEqual(case.case.store.revision, revision)

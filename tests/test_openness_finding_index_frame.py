@@ -28,8 +28,9 @@ from v7_capacity_fixtures import build_route
 STATED_CHARACTERS = 100000
 # Bound searches of the store whose index fits in no form with unit references.
 SEARCHES = 40
-# The registered version of the paragraph of G8.11, written out for the same reason.
-FINDING_UNITS_VERSION = 'exactory-openness-finding-units-v1'
+# The registered version of the paragraph of G8.11 that a chain with the frame members of 0.93.0 selects, written out
+# for the same reason.
+FINDING_UNITS_VERSION = 'exactory-openness-finding-units-v2'
 
 
 def measure_json(value):
@@ -623,7 +624,7 @@ def assert_reading_turns_name_values(test, turns, count):
         with test.subTest(turn=assignment['id']):
             test.assertEqual(packet['reading_turn']['finding_units'], count)
             test.assertIn(FINDING_UNITS_VERSION, assignment['prompt']['parameters']['problem_paragraphs'])
-            test.assertIn(paragraphs.FINDING_UNITS_PROMPT, assignment['prompt']['text'])
+            test.assertIn(paragraphs.FINDING_UNITS_PROMPT_V2, assignment['prompt']['text'])
             test.assertTrue(protocol._prompt_matches(assignment, packet))
     return reading_turns
 
@@ -699,8 +700,9 @@ class FindingUnitsTests(unittest.TestCase):
                 assignment = case.store.snapshot()['records']['review_assignment'][current]
                 prompt = assignment['prompt']
                 self.assertEqual(prompt['parameters']['problem_paragraphs'],
-                                 [FINDING_UNITS_VERSION, paragraphs.REFUSAL_PARAGRAPH_VERSIONS[form]])
-                self.assertLess(prompt['text'].index(paragraphs.FINDING_UNITS_PROMPT), prompt['text'].index(texts[form]))
+                                 [FINDING_UNITS_VERSION, paragraphs.NOTES_COST_PARAGRAPH_VERSION,
+                                  paragraphs.LIST_ROWS_PARAGRAPH_VERSION, paragraphs.REFUSAL_PARAGRAPH_VERSIONS[form]])
+                self.assertLess(prompt['text'].index(paragraphs.FINDING_UNITS_PROMPT_V2), prompt['text'].index(texts[form]))
                 self.assertTrue(protocol._prompt_matches(assignment, packet))
                 current, packet = continue_chain(case, reference, current, 'after-' + form)
                 LongValueChainTests.record_supported_open(self, case, reference, current)
@@ -728,7 +730,7 @@ class FindingUnitsTests(unittest.TestCase):
         self.assertEqual(packet['reading_turn']['finding_units'], 2)
         self.assertLess(packet['reading_turn']['capacity']['material_allowance'],
                         case.read_packet('turn-1')['reading_turn']['capacity']['material_allowance'])
-        self.assertIn(paragraphs.FINDING_UNITS_PROMPT, replacement['prompt']['text'])
+        self.assertIn(paragraphs.FINDING_UNITS_PROMPT_V2, replacement['prompt']['text'])
         records = case.store.snapshot()['records']
         report = review_preflight.build_assignment_report(records, case.artifacts,
                                                           records['review_assignment'][replacement['id']])
@@ -737,12 +739,13 @@ class FindingUnitsTests(unittest.TestCase):
     def test_g8_the_paragraph_and_its_member_fit_the_reserve_that_the_reading_frame_holds(self):
         from research_harness import review_transport as transport
         for adapter, model in (('codex_cli_v1', 'gpt-6-astra'), ('claude_cli_v1', 'claude-opus-5-5')):
-            with self.subTest(adapter=adapter):
-                route = build_route(adapter, model)
-                base = capacity.measure_request(route, transport.request_body(route, '', {}))['text_characters']
-                request = transport.request_body(route, paragraphs.FINDING_UNITS_PROMPT, dict(finding_units=999999999))
-                self.assertLessEqual(capacity.measure_request(route, request)['text_characters'] - base,
-                                     v7.FINDING_UNITS_CHARACTERS)
+            for text in (paragraphs.FINDING_UNITS_PROMPT, paragraphs.FINDING_UNITS_PROMPT_V2):
+                with self.subTest(adapter=adapter, version=len(text)):
+                    route = build_route(adapter, model)
+                    base = capacity.measure_request(route, transport.request_body(route, '', {}))['text_characters']
+                    request = transport.request_body(route, text, dict(finding_units=999999999))
+                    self.assertLessEqual(capacity.measure_request(route, request)['text_characters'] - base,
+                                         v7.FINDING_UNITS_CHARACTERS)
         route, artifacts = build_route('codex_cli_v1', 'gpt-6-astra'), MemoryArtifacts()
         for reason in (None, build_reason('long', 30000)):
             with self.subTest(reason=reason is not None):
@@ -777,7 +780,8 @@ class FindingUnitsTests(unittest.TestCase):
                                                 admission=admission)
         self.assertEqual(packet['reading_turn']['finding_units'], 1)
         self.assertEqual(paragraphs.select_prompt_parameters('native_math', packet),
-                         dict(problem_paragraphs=[FINDING_UNITS_VERSION]))
+                         dict(problem_paragraphs=[FINDING_UNITS_VERSION, paragraphs.NOTES_COST_PARAGRAPH_VERSION,
+                                                 paragraphs.LIST_ROWS_PARAGRAPH_VERSION]))
 
     def test_g8_outside_the_reading_band_version_2_admits_wherever_version_1_does(self):
         route, artifacts = build_route('codex_cli_v1', 'gpt-6-astra'), MemoryArtifacts()
@@ -1029,7 +1033,8 @@ class CarriedChainTests(unittest.TestCase):
                           for _, packet in reading_turns], STOPPED_BOTH_OBSERVED_DELIVERIES)
         for assignment, packet in reading_turns:
             self.assertNotIn('finding_units', packet['reading_turn'])
-            self.assertNotIn('problem_paragraphs', assignment['prompt']['parameters'])
+            self.assertEqual(assignment['prompt']['parameters']['problem_paragraphs'],
+                             [paragraphs.NOTES_COST_PARAGRAPH_VERSION, paragraphs.LIST_ROWS_PARAGRAPH_VERSION])
 
 
 def load_queries():

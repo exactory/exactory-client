@@ -11,7 +11,9 @@ PLAN_STEPS = {
             chooses=('id', 'route_id', 'reviewer_id', 'context.context_repair.probe_id',
                      'context.context_repair.reason', 'context.context_repair.event_ids',
                      'context.context_repair.evidence'),
-            prerequisites=('Record the cause events.', 'Verify the new route after the latest cause event.')),
+            prerequisites=('Record the cause events.',
+                           'Verify the route record of the repair with a probe that is recorded after the latest '
+                           'cause event.')),
     2: dict(command='review-assignment', roles=('slate', 'result'),
             chooses=('id', 'route_id', 'context.context_repair.probe_id', 'context.context_repair.reason'),
             prerequisites=('Verify the new route with a probe recorded after the last bound refusal, correction '
@@ -71,7 +73,8 @@ def list_excluded_reviewers(records, assignment, *, include_slot=True):
     return sorted(reviewers)
 
 
-def describe_step(records, artifacts, assignment, number, *, stop_id=None, reading=None):
+def describe_step(records, artifacts, assignment, number, *, stop_id=None, reading=None, repair_events=None,
+                  open_minimum=False, checked_export=False):
     """Fill the known payload and leave reviewer choices explicit."""
     row = PLAN_STEPS[number]
     payload = _build_identity_payload(assignment)
@@ -81,8 +84,10 @@ def describe_step(records, artifacts, assignment, number, *, stop_id=None, readi
     result = dict(id=number, command=row['command'], chooses=list(row['chooses']),
                   prerequisites=[dict(condition=condition) for condition in row['prerequisites']])
     if number in (1, 2):
-        lineage = protocol.context_repair._exposure_lineage(records, assignment)
-        events = protocol.context_repair.cause_events(records, {item['id'] for item in lineage})
+        events = repair_events
+        if events is None:
+            lineage = protocol.context_repair._exposure_lineage(records, assignment)
+            events = protocol.context_repair.cause_events(records, {item['id'] for item in lineage})
         binding = dict(assignment_id=assignment['id'], event_ids=[event['id'] for event in events],
                        evidence=[item for event in events for item in event['evidence']])
         if number == 2:
@@ -103,18 +108,27 @@ def describe_step(records, artifacts, assignment, number, *, stop_id=None, readi
             chooses=['id', 'route_id', 'reviewer_id', 'context.native_packet'])]
         if number == 5:
             from . import review_parts
+            from .openness_successor import MATH_PROTOCOLS, bind_math_export
             packet = protocol._read_json(artifacts, assignment['packet'])
+            reading_protocol = protocol.openness_reading.find_protocol(packet)
+            math_chain = reading_protocol in MATH_PROTOCOLS
             if review_parts.find_kind(packet) is not None:
                 packet = review_parts.read_logical_packet(artifacts, packet[review_parts.KEY])
             native = packet.get('native', {})
-            if packet.get('reading_turn'):
+            if math_chain or packet.get('reading_turn'):
                 from .native_review import load_packet
                 native = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
-            payload = {key: copy.deepcopy(native[key]) for key in ('kind', 'subject', 'claim_digest')
-                       if key in native}
-            result['root'] = native.get('root')
-            result['objective_id'] = native.get('objective_id')
-            result['checkpoint'] = copy.deepcopy(native.get('scientific_context', {}).get('checkpoint'))
+            if math_chain:
+                result['payload'] = payload
+                bind_math_export(result, native, assignment['reviewer_id'], records,
+                                 fresh_attestation=reading_protocol == protocol.openness_reading.MATH_PROTOCOL_V2,
+                                 open_minimum=open_minimum, checked_export=checked_export)
+            else:
+                payload = {key: copy.deepcopy(native[key]) for key in ('kind', 'subject', 'claim_digest')
+                           if key in native}
+                result['root'] = native.get('root')
+                result['objective_id'] = native.get('objective_id')
+                result['checkpoint'] = copy.deepcopy(native.get('scientific_context', {}).get('checkpoint'))
     elif number == 6:
         payload['context'] = context
     elif number == 7:
@@ -155,50 +169,214 @@ def describe_step(records, artifacts, assignment, number, *, stop_id=None, readi
     return result
 
 
-CAPACITY_ROUTE_RETIRE_REASON = 'This route cannot deliver the review within its limits. The preserved review continues on a route that can.'
+CAPACITY_ROUTE_RETIRE_REASON = 'This route is retired so that the retained review is reassessed on a serving route.'
+CAPACITY_PROBE_RETRY_CONDITION = (
+    'The harness measured the reassessment on this route record, and the reassessment needs a probe of the record '
+    'that is recorded after its cause event. The steps end at that probe. Then run the stopped command again: when '
+    'the probe verifies enough capacity, the next stop names the reassessment.')
+CAPACITY_REPAIR_CONDITION = (
+    'The harness measured this reassessment before the members that the step leaves to you were chosen. The store '
+    'records it when the completed assignment fits this route record.')
+CAPACITY_RETIRE_REPAIR_CONDITION = (
+    'The harness measured the reassessment on this route record, and the reassessment needs a cause event and a '
+    'probe that is recorded after it. The steps retire the route record of the retained review, which gives the '
+    'cause event, and end at the probe. Then run the stopped command again: when the probe verifies enough '
+    'capacity, the next stop names the reassessment.')
+CAPACITY_NEW_ENTRY_CONDITION = (
+    'The harness measured the review on the route record that route_id of this answer names. The steps record a '
+    'new route record with the same adapter, model, endpoint and configuration and start the review there with a '
+    'new assignment. The store records that assignment when the new route record is verified and the assignment '
+    'fits it.')
+CAPACITY_CAPTURE_CONDITION = ('In the context of the assignment, put the text artifact that the first step stores in '
+                              'the place of the body that the member body of that step names.')
+CAPACITY_REASSESS_ANSWER = 'Reassess the retained review'
+CAPACITY_NEW_ENTRY_ANSWER = 'Prepare a new entry'
+# The conditions of the answer "Probe this route": what follows the probe for a stopped command without a bound repair,
+# and for a stopped repair, whose command binds an earlier probe.
+CAPACITY_PROBE_CONDITION = (
+    'The steps end at the probe. Then run the stopped command again: when the probe verifies enough capacity, the '
+    'store records the assignment; otherwise the next stop names the next step.')
+CAPACITY_PROBE_REPAIR_CONDITION = (
+    'The steps end at the probe. The stopped command binds an earlier probe, so the store refuses it again. Then run '
+    'review-series on the review that context.context_repair.assignment_id of the stopped command names: its plan '
+    'names the repair, which can bind the new probe.')
 
 
 def find_capacity_parent(records, assignment, packet):
     context = assignment.get('context', {})
+    if 'session_refresh' in context:
+        # Rule F5: a refresh is a new chain and replays no turn of a predecessor, so it has no capacity parent.
+        return None
     parent_id = context.get('prior_assignment_id') or context.get('context_repair', {}).get('assignment_id')
     if parent_id is None and (packet or {}).get('own_bars'):
         parent_id = packet['own_bars'][-1]['assignment_id']
     return records.get('review_assignment', {}).get(parent_id)
 
 
-def describe_capacity_steps(records, artifacts, assignment, serving_routes, probe_tokens=None, *, body=None, packet=None):
+def find_capacity_repair_binding(assignment, parent):
+    """Read the stopped payload's repair binding when it is for this predecessor."""
+    binding = assignment.get('context', {}).get('context_repair', {})
+    return binding if binding.get('assignment_id') == parent['id'] else {}
+
+
+def describe_capacity_repair(records, artifacts, assignment, packet):
+    """Read the cause and binding once for this stop, including an empty result."""
+    from . import review_context_repair
+    parent = find_capacity_parent(records, assignment, packet)
+    numbers = select_route_steps(records, artifacts, parent) if parent is not None else []
+    lineage, events, cause = [], [], None
+    if 1 in numbers:
+        lineage = review_context_repair._exposure_lineage(records, parent)
+        identifiers, _ = review_context_repair.find_repair_scope(records, lineage)
+        events = review_context_repair.cause_events(records, identifiers)
+        binding = find_capacity_repair_binding(assignment, parent)
+        cause = review_context_repair.find_repair_cause(records, artifacts, parent,
+                                                         exhaustion=binding.get('exhaustion'), events=events)
+    return dict(parent=parent, numbers=numbers, lineage=lineage, events=events, cause=cause, probes={})
+
+
+def find_capacity_repair_probe(records, state, cause):
+    """Return the verified probe when it follows the bound events."""
+    if cause is not None and state['context_status'] == 'verified_for_route':
+        probe = records['review_route_probe'][state['probe_id']]
+        if probe['recorded_revision'] > cause['after_revision']:
+            return state['probe_id']
+    return None
+
+
+def reconcile_capacity_routes(serving_routes, repair_plan):
+    """Keep the direct entry when another answer would retire its route."""
+    parent = repair_plan['parent']
+    if parent is None or 1 not in repair_plan['numbers']:
+        return serving_routes
+    if repair_plan['cause'] is None and any(
+            row['route_id'] == parent['route_id'] and row.get('delivery') in ('single', 'parts', 'session')
+            for row in serving_routes):
+        return [row for row in serving_routes if row.get('delivery') in ('single', 'parts', 'session')]
+    return serving_routes
+
+
+def describe_capacity_assignment(records, artifacts, assignment, route_id, *, repair_probe=None):
+    """Assign the stopped payload on this route, choosing the new probe for a repair when needed."""
+    step = describe_step(records, artifacts, dict(assignment, route_id=route_id), 14)
+    if 'scheduler' in assignment:
+        step['payload']['scheduler'] = copy.deepcopy(assignment['scheduler'])
+    binding = step['payload']['context'].get('context_repair')
+    if binding is not None:
+        step['payload']['context'] = dict(context_repair=binding)
+        if repair_probe is None:
+            binding.pop('probe_id', None)
+            step['chooses'].append('context.context_repair.probe_id')
+        else:
+            binding['probe_id'] = repair_probe
+    return step
+
+
+def describe_serving_repair_steps(records, artifacts, assignment, route, repair_plan):
+    """Move the preserved slot to a serving record after the required cause and probe."""
+    parent, cause = repair_plan['parent'], repair_plan['cause']
+    route_id = route['route_id']
+    steps = []
+    probe_id = None
+    if cause is None:
+        retirement = describe_step(records, artifacts, parent, 8)
+        retirement['payload']['reason'] = CAPACITY_ROUTE_RETIRE_REASON
+        retirement['chooses'].remove('reason')
+        steps.append(retirement)
+    elif route_id in repair_plan['probes']:
+        probe_id = repair_plan['probes'][route_id]
+    else:
+        probe_id = find_capacity_repair_probe(records, protocol.route_state(records, artifacts, route_id), cause)
+    if probe_id is None:
+        steps.append(describe_route_probe_step(records, artifacts, parent, route_id))
+    if find_capacity_repair_binding(assignment, parent):
+        repair = describe_capacity_assignment(records, artifacts, assignment, route_id, repair_probe=probe_id)
+    else:
+        repair = describe_step(records, artifacts, parent, 1, repair_events=repair_plan['events'])
+        repair['payload']['route_id'] = route_id
+        repair['chooses'].remove('route_id')
+        if probe_id is not None:
+            repair['payload']['context']['context_repair']['probe_id'] = probe_id
+            repair['chooses'].remove('context.context_repair.probe_id')
+    steps.append(repair)
+    return steps
+
+
+def describe_capacity_steps(records, artifacts, assignment, serving_routes, probe_tokens=None, *, body=None,
+                            packet=None, series_body=False, repair_plan=None, public_assignment=None):
     """Resume a refused first assignment without inventing a slot or a repair event."""
     answers = []
+    if public_assignment is None:
+        public_assignment = assignment
+    if repair_plan is None:
+        repair_plan = describe_capacity_repair(records, artifacts, assignment, packet) if serving_routes else {
+            'parent': None, 'numbers': [], 'cause': None}
+    conditional = repair_plan.get('conditional_routes', [])
+    choices = reconcile_capacity_routes(serving_routes + conditional, repair_plan)
+    parent, numbers = repair_plan['parent'], repair_plan['numbers']
     if body is not None:
         capture = describe_step(records, artifacts, assignment, 15)
         capture['body'] = copy.deepcopy(body)
-        resume = describe_step(records, artifacts, assignment, 14)
-        resume['chooses'] = ['context']
-        resume['prerequisites'].append(dict(condition='Replace the body in the inputs of the review with its stored text form.'))
-        answers.append(dict(answer='Capture a text form', steps=[capture, resume]))
-    if probe_tokens is not None:
+        if series_body:
+            # The slate planner reads the text form under its fixed ID; the next assignment is checked once it exists.
+            from .review_parts_slate import derive_text_capture_id
+            capture['payload'].update(id=derive_text_capture_id(body), text_form_of=copy.deepcopy(body))
+            capture['chooses'].remove('id')
+            answers.append(dict(answer='Capture a text form', steps=[capture]))
+        else:
+            resume = describe_capacity_assignment(records, artifacts, public_assignment, assignment['route_id'])
+            resume['chooses'] = ['context']
+            resume['prerequisites'].append(dict(condition=CAPACITY_CAPTURE_CONDITION))
+            answers.append(dict(answer='Capture a text form', condition=CAPACITY_CAPTURE_CONDITION, steps=[capture, resume]))
+    retires_original = (parent is not None and 1 in numbers and repair_plan['cause'] is None
+                        and parent['route_id'] == assignment['route_id']
+                        and any(row.get('delivery') == 'reassessment' for row in choices))
+    if probe_tokens is not None and not retires_original:
         probe = describe_step(records, artifacts, assignment, 16)
         probe['payload']['capacity'] = dict(input_tokens=probe_tokens)
-        answers.append(dict(answer='Probe this route', steps=[probe, describe_step(records, artifacts, assignment, 14)]))
-    for route in serving_routes:
-        parent = find_capacity_parent(records, assignment, packet)
-        if parent is None:
-            steps = [describe_step(records, artifacts, dict(assignment, route_id=route['route_id']), 14)]
+        # The assignment that follows depends on the result of the probe; the condition names the command that plans it.
+        bound_repair = parent is not None and bool(find_capacity_repair_binding(assignment, parent))
+        answers.append(dict(answer='Probe this route', steps=[probe],
+                            condition=CAPACITY_PROBE_REPAIR_CONDITION if bound_repair else CAPACITY_PROBE_CONDITION))
+    for route in choices:
+        probe_at = None
+        if parent is None or (route.get('delivery') in ('single', 'parts', 'session') and route not in conditional):
+            steps = [describe_capacity_assignment(records, artifacts, public_assignment, route['route_id'])]
+        elif 1 in numbers:
+            # The reassessment ends with its first probe: the next stop of the same payload names the repair.
+            steps = describe_serving_repair_steps(records, artifacts, public_assignment, route, repair_plan)
+            probe_at = next((index for index, step in enumerate(steps) if step['command'] == 'review-probe'), None)
+            if probe_at is not None:
+                steps = steps[:probe_at + 1]
         else:
-            steps = [describe_step(records, artifacts, parent, number)
-                     for number in select_route_steps(records, artifacts, parent)]
-            serving = records['review_route'][route['route_id']]
-            for step in steps:
-                if step['id'] == 8:
-                    step['payload']['reason'] = CAPACITY_ROUTE_RETIRE_REASON
-                    step['chooses'].remove('reason')
-                if step['command'] == 'review-route':
-                    step['payload'] = {key: copy.deepcopy(serving[key]) for key in
-                                       ('adapter', 'model', 'endpoint', 'configuration')}
-                if step['id'] == 6:
-                    step['payload']['context'].pop('prior_assignment_id', None)
-        answers.append(dict(answer='Use a serving route', route_id=route['route_id'], steps=steps))
+            steps = describe_new_entry_steps(records, artifacts, parent, numbers, route['route_id'])
+        answer = dict(answer='Use a serving route', route_id=route['route_id'], steps=steps)
+        if route in conditional:
+            if route['delivery'] == 'reassessment':
+                condition = (CAPACITY_RETIRE_REPAIR_CONDITION if repair_plan['cause'] is None
+                             else CAPACITY_PROBE_RETRY_CONDITION if probe_at is not None else CAPACITY_REPAIR_CONDITION)
+                answer['answer'] = CAPACITY_REASSESS_ANSWER
+            else:
+                condition = CAPACITY_NEW_ENTRY_CONDITION
+                answer['answer'] = CAPACITY_NEW_ENTRY_ANSWER
+            answer['condition'] = condition
+            if probe_at is None:
+                steps[-1]['prerequisites'].append(dict(condition=condition))
+        answers.append(answer)
     return answers
+
+
+def describe_new_entry_steps(records, artifacts, parent, numbers, route_id):
+    """The role steps that move the review of parent to a new route record with the configuration of route_id."""
+    steps = [describe_step(records, artifacts, parent, number) for number in numbers]
+    serving = records['review_route'][route_id]
+    for step in steps:
+        if step['command'] == 'review-route':
+            step['payload'] = {key: copy.deepcopy(serving[key]) for key in
+                               ('adapter', 'model', 'endpoint', 'configuration')}
+        if step['id'] == 6:
+            step['payload']['context'].pop('prior_assignment_id', None)
+    return steps
 
 
 def select_route_steps(records, artifacts, assignment):
@@ -215,6 +393,42 @@ def select_route_steps(records, artifacts, assignment):
         return [7, 3]
     # A cause must precede the probe that authenticates the repair.
     return [8, 7, 1]
+
+
+def find_unserved_repair_routes(records, artifacts, assignment, step):
+    """The verified routes after the cause events when none of them serves the repair of a recorded v3 series."""
+    from . import review_parts
+    from .review_route_capacity import find_serving_routes
+    protocols, recorded = review_parts.select_series_protocols(records, artifacts, {}, head=assignment)
+    if not recorded or protocols != ('exactory-review-parts-v3',):
+        return None
+    lineage = protocol.context_repair._exposure_lineage(records, assignment)
+    events = protocol.context_repair.cause_events(records, {item['id'] for item in lineage})
+    after_revision = max((event['recorded_revision'] for event in events), default=0)
+    exhaustion = step['payload']['context']['context_repair'].get('exhaustion')
+    if exhaustion is not None:
+        # The probe of an exhaustion repair follows the last bound refusal, correction and cause event.
+        cause = protocol.context_repair.find_repair_cause(records, artifacts, assignment, exhaustion=exhaustion,
+                                                          events=events)
+        after_revision = cause['after_revision']
+    retired = protocol.retired_routes(records)
+    eligible = []
+    for route_id in sorted(records.get('review_route', {})):
+        state = protocol.route_state(records, artifacts, route_id)
+        probe = records.get('review_route_probe', {}).get(state.get('probe_id'))
+        if (route_id not in retired and state['context_status'] == 'verified_for_route'
+                and probe is not None and probe['recorded_revision'] > after_revision):
+            eligible.append(route_id)
+    if not eligible:
+        return None
+    prospect = dict(step['payload'], id=assignment['id'] + '-repair')
+    if 'subject' in assignment:
+        prospect['subject'] = assignment['subject']
+    serving = find_serving_routes(records, assignment['role'], protocol._read_json(artifacts, assignment['packet']),
+                                  artifacts=artifacts, assignment=prospect, prompt=assignment['prompt'])
+    if any(row['route_id'] in eligible and row['delivery'] == 'reassessment' for row in serving):
+        return None
+    return eligible
 
 
 def describe_route_probe_step(records, artifacts, assignment, route_id):
@@ -245,7 +459,7 @@ def describe_renewal_step(records, artifacts, assignment, renewal):
     return step
 
 
-def describe_route_steps(records, artifacts, assignment, numbers, details):
+def describe_route_steps(records, artifacts, assignment, numbers, details, *, repair_cause=None):
     """The steps of the stale-route procedure for these step numbers, in the order to take them, with
     details.renewal. The step that gives the slot a route record with the installed runtime is step 7 when the
     store holds no such record of the same identity, the probe of that record when it lacks one, and no step when
@@ -253,7 +467,9 @@ def describe_route_steps(records, artifacts, assignment, numbers, details):
     from .review_route_plan import select_current_route
     route = records['review_route'][assignment['route_id']]
     after_revision = 0
-    if 1 in numbers:
+    if repair_cause is not None:
+        after_revision = repair_cause['after_revision']
+    elif 1 in numbers:
         lineage = protocol.context_repair._exposure_lineage(records, assignment)
         events = protocol.context_repair.cause_events(records, {item['id'] for item in lineage})
         after_revision = max((event['recorded_revision'] for event in events), default=0)
@@ -265,7 +481,8 @@ def describe_route_steps(records, artifacts, assignment, numbers, details):
     steps = []
     for number in numbers:
         if number != 7:
-            steps.append(describe_step(records, artifacts, assignment, number))
+            steps.append(describe_step(records, artifacts, assignment, number,
+                                       repair_events=repair_cause['events'] if repair_cause else None))
         elif found['route_id'] is None:
             steps.append(describe_step(records, artifacts, assignment, 7))
         elif found['lacks'] == 'probe':
@@ -298,7 +515,9 @@ def describe_role_handoff(records, artifacts, assignment, code, details=None):
         details['decision'] = dict(owner_decides='Whether to retire this route and repair the preserved review slot.',
             then=[dict(answer='Retire the route', steps=steps)])
         return dict(state='stop', code=code, details=details)
-    return dict(state='handoff', code=code, command=steps[0]['command'], details=details)
+    handoff = dict(state='handoff', code=code, command=steps[0]['command'], details=details)
+    stop = _plan_unserved_repair(records, artifacts, assignment, handoff) if numbers == [2] else None
+    return handoff if stop is None else stop
 
 
 def _describe_session_route_steps(records, artifacts, assignment):
@@ -310,17 +529,90 @@ def _describe_session_route_steps(records, artifacts, assignment):
     return steps
 
 
-REFRESH_ROUTE_CHOICE = 'Choose a route record that is verified and not retired, and set route_id to its id.'
+REFRESH_ROUTE_CHOICE = (
+    'Choose a route record that is verified, is not retired, pins the installed runtime and is no visual route, '
+    'and set route_id to its id. When review-assignment refuses the choice, do what that refusal states.')
+
+
+def _plan_unserved_repair(records, artifacts, assignment, plan):
+    """Give the capacity decision in place of the repair step of a recorded v3 series that no verified route serves."""
+    details = plan['details']
+    unserved = find_unserved_repair_routes(records, artifacts, assignment, details['step'])
+    if unserved is None:
+        return None
+    # No verified route can take the repair that the recorded v3 series keeps: the owner moves the slot to a
+    # route that can, before any repair is offered.
+    from .review_route_capacity import describe_capacity_decision
+    decision = describe_capacity_decision(records, artifacts, assignment, 'input_over_limit',
+        dict(details, refusal='review_route_capacity_below_floor', unserved_route_ids=unserved))
+    for answer in decision['then']:
+        # After the route steps, an answer names the repair that this stop replaces (step 1 or 2).
+        answer['steps'] = [copy.deepcopy(details['step']) if step.get('id') == 1 else step
+                           for step in answer['steps'] if step.get('id') != 8]
+    chosen = {key: decision[key] for key in ('owner_decides', 'then')}
+    # The recovery member keeps the decision when a caller completes the plan again (a context handoff is
+    # completed where it is planned and again by plan_next).
+    details.update(decision['details'], decision=chosen, recovery=dict(chosen, kind='decision'))
+    # The decision was built from the details of the refused repair; the stop names only the answers.
+    details.pop('step')
+    plan.pop('command', None)
+    return dict(plan, state='stop', code=decision['code'])
+
+
+def _complete_context_handoff(records, artifacts, assignment, plan):
+    """Choose the step for the named turn of a context refusal or handoff."""
+    details = plan['details']
+    if 'step' in details:
+        return dict(plan, command=details['step']['command'])
+    lost = details['turn']
+    route_id = lost['route']['id']
+    retire = False
+    if not lost['events']:
+        from .review_route_plan import read_route_standing
+        standing = read_route_standing(records, artifacts, route_id)
+        if not standing['stale']:
+            details['step'] = describe_route_probe_step(records, artifacts, assignment, route_id)
+            if plan.get('not_before') is not None:
+                details['step']['prerequisites'].append(dict(not_before=plan['not_before']))
+            return dict(plan, command='review-probe')
+        retire = not standing['retired']
+
+    if not retire:
+        number = select_route_steps(records, artifacts, assignment)[-1]
+        if number == 1:
+            lineage = protocol.context_repair._exposure_lineage(records, assignment)
+            causes = protocol.context_repair.cause_events(records, {turn['id'] for turn in lineage})
+            if not causes:
+                # A retirement on another slot can leave this route's proof unverified and this repair unbound.
+                retire = protocol.is_contaminated_context(lost) or (
+                    protocol.find_answered_route_status(records, artifacts, route_id) != 'verified_for_route')
+        if not retire:
+            details['step'] = describe_step(records, artifacts, assignment, number)
+            stop = _plan_unserved_repair(records, artifacts, assignment, plan) if number == 1 else None
+            if stop is not None:
+                return stop
+    if retire:
+        turn = records['review_assignment'][lost['assignment_id']]
+        details['step'] = describe_step(records, artifacts, turn, 8)
+        details['steps'] = [details['step'], dict(command='review-series', assignment_id=assignment['id'])]
+    return dict(plan, command=details['step']['command'])
 
 
 def complete_plan(records, artifacts, assignment, plan):
     """Add executable payload rules to external boundaries without changing call payloads."""
-    if plan['state'] not in ('stop', 'handoff'):
+    if (plan['state'] not in ('stop', 'handoff')
+            or (plan['state'] == 'stop' and plan.get('command') == 'review-stop' and 'payload' in plan
+                and assignment and assignment.get('session_chain'))):
         return plan
     plan = copy.deepcopy(plan)
     details = plan.setdefault('details', {})
     code = plan.get('code')
-    if STOP_REGISTRY.get(code, {}).get('group'):
+    if (plan['state'] == 'handoff' and 'turn' in details
+            and code in ('review_context_unverified', 'review_context_contaminated')):
+        return _complete_context_handoff(records, artifacts, assignment, plan)
+    repair_source = (code == 'review_source_continuation_unverified'
+                     and plan.get('command') == 'review-assignment' and plan['state'] == 'handoff')
+    if STOP_REGISTRY.get(code, {}).get('group') and not repair_source:
         terminal = describe_terminal(code)
         details.update(terminal['details'])
         details.pop('step', None)
@@ -373,12 +665,6 @@ def complete_plan(records, artifacts, assignment, plan):
         return dict(plan, **describe_role_handoff(records, artifacts, assignment, code, details))
     context_status = assignment.get('context_state', {}).get('context_status')
     head_ran = protocol.describe_assignment_calls(records, assignment)['ran']
-    turn_route = None
-    if code == 'review_context_unverified' and 'turn' in details:
-        # The handoff of rule PC4 names a turn of the review and its route record, which can be another record than
-        # the route of the head.
-        from .review_route_plan import read_route_standing
-        turn_route = read_route_standing(records, artifacts, details['route_id'])
     if code == 'review_pending_delivery_over_plan':
         from .review_route_capacity import (SESSION_FORECAST_DECISION, SESSION_CAPTURE_ANSWER,
             SESSION_CAPTURE_REPAIR_ANSWER, SESSION_ROUTE_ANSWER, SESSION_ARTIFACT_DECISION, SESSION_STOP_ANSWER)
@@ -422,14 +708,6 @@ def complete_plan(records, artifacts, assignment, plan):
         plan.update(state='handoff', command=details['step']['command'])
     elif code == 'review_context_unverified' and head_ran and context_status not in (None, 'verified_for_route'):
         plan['state'] = 'stop'
-    elif turn_route is not None and turn_route['stale'] and not turn_route['retired']:
-        # The route record of the named turn takes no probe. Its retirement on that turn gives it the state of its
-        # latest probe with an answer, and review-series then names what follows.
-        turn = records['review_assignment'][details['turn']['assignment_id']]
-        details['steps'] = [describe_step(records, artifacts, turn, 8),
-                            dict(command='review-series', assignment_id=assignment['id'])]
-        details['step'] = details['steps'][0]
-        plan.update(state='handoff', command=details['step']['command'])
     elif code == 'review_route_retired' and (
             (plan.get('payload') or {}).get('context', {}).get('session_refresh')
             or details.get('step', {}).get('id') == 14):
@@ -439,12 +717,9 @@ def complete_plan(records, artifacts, assignment, plan):
             details['step'] = dict(id=14, command='review-assignment', payload=payload, chooses=['route_id'],
                                    prerequisites=[dict(condition=REFRESH_ROUTE_CHOICE)])
         plan.update(state='handoff', command='review-assignment')
-    elif code in ('review_context_contaminated', 'review_route_retired', 'review_context_repair_required',
-                  'review_context_repair_stale', 'review_context_repair_mismatch', 'review_context_repair_unverified'
-                  ) or turn_route is not None and turn_route['stale']:
-        # This branch also takes the handoff of rule PC4 whose named turn stands on a retired and stale route record
-        # that its latest probe with an answer does not verify: no probe and no retirement ends that state, so the
-        # step is the step of the role.
+    elif repair_source or code in ('review_context_contaminated', 'review_route_retired', 'review_context_repair_required',
+                                   'review_context_repair_stale', 'review_context_repair_mismatch',
+                                   'review_context_repair_unverified'):
         if code == 'review_context_repair_stale':
             repairs = [row for row in protocol.context_repair._lineage(records, assignment)
                        if row.get('context', {}).get('context_repair') is not None]
@@ -454,21 +729,31 @@ def complete_plan(records, artifacts, assignment, plan):
                 details['step'] = describe_step(records, artifacts, predecessor, 2)
                 details['step']['payload']['context']['context_repair']['exhaustion'] = copy.deepcopy(
                     binding['exhaustion'])
+                # The repair of the exhausted predecessor is named only on a route that serves it.
+                stop = _plan_unserved_repair(records, artifacts, predecessor, plan)
+                if stop is not None:
+                    return stop
                 return dict(plan, state='handoff', command='review-assignment')
-        steps = select_route_steps(records, artifacts, assignment)
-        # An existing cause event already meets retirement's prerequisite.
-        steps = [number for number in steps if number != 8]
-        number = steps[-1] if steps[-1] in (4, 5, 6) else 1
+        numbers = select_route_steps(records, artifacts, assignment)
+        number = numbers[-1]
+        cause = protocol.context_repair.find_repair_cause(records, artifacts, assignment) if 8 in numbers else None
         from .review_route_plan import read_route_standing
-        if code == 'review_route_retired' and read_route_standing(records, artifacts, assignment['route_id'])['stale']:
-            # The retired route record is stale: the slot continues on a record of the same identity with the
-            # installed runtime, verified after the retirement.
-            details['steps'] = describe_route_steps(records, artifacts, assignment, [7, number], details)
+        if 8 in numbers and cause is None:
+            details['steps'] = describe_route_steps(records, artifacts, assignment, numbers, details)
+            details['step'] = details['steps'][0]
+        elif code == 'review_route_retired' and read_route_standing(records, artifacts, assignment['route_id'])['stale']:
+            # The slot continues with the installed runtime, verified after the cause.
+            details['steps'] = describe_route_steps(records, artifacts, assignment, [7, number], details,
+                                                    repair_cause=cause)
             details['step'] = details['steps'][0]
             if len(details['steps']) == 1:
                 details.pop('steps')
         else:
-            details['step'] = describe_step(records, artifacts, assignment, number)
+            details['step'] = describe_step(records, artifacts, assignment, number,
+                                            repair_events=cause['events'] if cause else None)
+            stop = _plan_unserved_repair(records, artifacts, assignment, plan) if number == 1 else None
+            if stop is not None:
+                return stop
         plan.update(state='handoff', command=details['step']['command'])
     elif code == 'review_route_runtime_stale' and details.get('renewal', {}).get('admitted') is False:
         # A head whose next step cannot move to another route record: the steps of the stale-route procedure for
@@ -511,6 +796,17 @@ def complete_plan(records, artifacts, assignment, plan):
             prerequisites = details['step']['prerequisites']
             details['step'] = describe_route_probe_step(records, artifacts, assignment, route_id)
             details['step']['prerequisites'] = prerequisites
+    elif code == 'review_route_capacity_below_floor' and (plan.get('payload') or {}).get('context', {}).get(
+            'session_refresh'):
+        # Rule F5: the refresh that the capacity admission refuses takes the probe of its route or step 14 on a
+        # serving route, the answers of the refusal; with none, the plan stops.
+        plan.pop('payload')
+        plan.pop('command', None)
+        details['decision'] = dict(owner_decides=details['owner_decides'], then=details['then'])
+        if details['then']:
+            details['step'] = details['then'][0]['steps'][0]
+            plan['command'] = details['step']['command']
+        plan['state'] = 'stop'
     elif code == 'review_route_capacity_below_floor':
         details['step'] = describe_step(records, artifacts, assignment, 7)
         plan.update(state='handoff', command='review-route')

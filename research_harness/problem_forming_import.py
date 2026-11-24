@@ -500,18 +500,21 @@ def describe_import_size(records, artifacts, imported):
                                   records_field='import_records_characters')
 
 
-def deliver_slate_imports(records, artifacts, packet):
+def deliver_slate_imports(records, artifacts, packet, *, descriptors=None, native=None):
     if packet.get('subject', {}).get('kind') != 'problem' or packet.get('role') != 'slate':
         return
     from .bar_sources import PROTOCOL_V3
     from .review_prompt_paragraphs import FORMING_RECORD_KINDS
     from .review_protocol import _reference_templates
-    descriptors = packet.get('source_rules') == PROTOCOL_V3
+    if descriptors is None:
+        descriptors = packet.get('source_rules') == PROTOCOL_V3
+    if native is None:
+        native = descriptors
     if records.get('problem_forming_import'):
         packet['problem_forming_imports'] = describe_imports(records, artifacts)
         if descriptors:
             packet['problem_forming_imports'] = _reference_templates(packet['problem_forming_imports'])
-    if descriptors:
+    if native:
         references = {(item['record_kind'], item['id']): item for candidate in packet.get('candidates', [])
                       for item in candidate.get('source', {}).get('evidence', [])
                       if item.get('kind') == 'record' and 'origin' not in item

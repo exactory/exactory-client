@@ -179,17 +179,24 @@ def _resolve_span(records, artifacts, work, field_value, span):
     return provenance, excerpt
 
 
+def require_citation_metadata_work(records, version_id):
+    """Return the work of version_id when a citation metadata record may name it: an existing URL work with no DOI
+    and no arXiv identity."""
+    work = records.get("work", {}).get(version_id)
+    if (work is None or not version_id.startswith("url:")
+            or any(identifier.startswith(("doi:", "arxiv:")) for identifier in [work["id"], *work.get("aliases", [])])
+            or work.get("doi") or work.get("arxiv_id")):
+        raise ResearchError("problem_citation_work_ineligible", "Use an existing URL work without a DOI or arXiv identity",
+                            {"version_id": version_id})
+    return work
+
+
 def validate_citation_metadata(records, artifacts, value):
     """Revalidate a payload or stored record; return field provenance and byte-bound excerpts."""
     from .problem_evidence import validate_reading
     require_problem(records)
     _validate_schema(value, stored=True)
-    work = records.get("work", {}).get(value["version_id"])
-    if (work is None or not value["version_id"].startswith("url:")
-            or any(identifier.startswith(("doi:", "arxiv:")) for identifier in [work["id"], *work.get("aliases", [])])
-            or work.get("doi") or work.get("arxiv_id")):
-        raise ResearchError("problem_citation_work_ineligible", "Use an existing URL work without a DOI or arXiv identity",
-                            {"version_id": value["version_id"]})
+    work = require_citation_metadata_work(records, value["version_id"])
     resolved = [_resolve_span(records, artifacts, work, field_value, span) for field_value, span in _field_spans(value)]
     provenance = _field_map(value, [row[0] for row in resolved])
     if "provenance" in value and value["provenance"] != provenance:
@@ -210,10 +217,16 @@ def validate_citation_metadata(records, artifacts, value):
 
 
 def record_citation_metadata(store, payload, *, expected_revision, request_id):
+    from .problem_evidence import validate_citation_write_field
     artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         require_problem(records)
+        title, authors, year = value.get("title"), value.get("authors"), value.get("year", "")
+        components = [title, *authors] if isinstance(authors, list) and authors else []
+        if components and all(isinstance(part, str) and part.strip() for part in components) and isinstance(year, str):
+            citation = ". ".join(part for part in (", ".join(authors), title, year) if part)
+            validate_citation_write_field("citation", citation, value)
         _validate_schema(value)
         provenance, _ = validate_citation_metadata(records, artifacts, value)
         saved = records.get("problem_citation_metadata", {}).get(value["id"])

@@ -14,6 +14,13 @@ from test_research_problem_claims import ProblemCase
 from test_research_problem_forming import build_form, build_forming, build_outcome
 
 
+def build_leaving_step(successor, **changes):
+    return dict(dict(id="leave", slate_id="slate", way="next_exploration", candidate_ids=[],
+                     learned="The slate reviews refused every candidate.", evidence=[],
+                     plan="Open the next exploration on another field question.", passed_over=[],
+                     successor_workspace=str(successor), other_leads=[]), **changes)
+
+
 class ProblemReportTests(CheckCommandMixin, ProblemCase):
     def setUp(self):
         super().setUp()
@@ -27,7 +34,15 @@ class ProblemReportTests(CheckCommandMixin, ProblemCase):
     def put_slate(self, selected=()):
         self.put("problem_slate", "slate", dict(id="slate", selected=list(selected), deferred=[], rejected=[],
             candidate_ids=sorted(self.store.snapshot()["records"].get("problem_candidate", {})),
-            reason="The exploration ended.", recorded_revision=self.store.revision + 1))
+            bar_review_ids=["review-bar-first", "review-bar-second"], review_ids=[],
+            comparison="The candidates were compared.", reason="The exploration ended.",
+            recorded_revision=self.store.revision + 1))
+
+    def put_leaving_step(self):
+        """A search step that opens the next exploration: at a slate that selects nothing, without a post, the report
+        is due only after it."""
+        self.put("problem_search_step", "leave", build_leaving_step(self.root.parent / "next",
+                                                                    recorded_revision=self.store.revision + 1))
 
     def put_candidate(self, identifier="candidate-1"):
         from test_research_problem_candidates import build_candidate
@@ -175,6 +190,7 @@ class ProblemReportTests(CheckCommandMixin, ProblemCase):
     def test_due_scope_is_exactly_the_two_start_kinds_or_a_forming_call(self):
         records = self.store.snapshot()["records"]
         records["problem_slate"] = dict(slate=dict(id="slate", candidate_ids=[], selected=[], deferred=[], rejected=[], recorded_revision=2))
+        records["problem_search_step"] = dict(leave=build_leaving_step(self.root.parent / "next", recorded_revision=3))
         for kind in ("phenomenon", "thought_experiment", "field_question", "other", None):
             with self.subTest(kind=kind):
                 marker = records["workspace"]["problem"]
@@ -269,6 +285,19 @@ class ProblemReportTests(CheckCommandMixin, ProblemCase):
         self.assert_error("problem_report_forms_open", self.record_report)
         self.assertNotIn("problem_report", self.store.snapshot()["records"])
 
+    def test_a_report_due_after_the_search_left_the_record_refuses_open_forms(self):
+        """The refusal of 0.92.1 also holds where the report is due under the rule of 0.93.0."""
+        self.record_form(closed=False)
+        self.put_slate()
+        self.put_leaving_step()
+        self.assertTrue(problem_reports.is_report_due(self.store.snapshot()["records"]))
+        revision = self.store.revision
+        self.assert_error("problem_report_forms_open", self.record_report)
+        self.assertEqual(self.store.revision, revision)
+        self.mutate(cli.OPERATIONS["form-outcome"], build_outcome())
+        self.assert_error("problem_report_forms_open", self.record_report)
+        self.assertNotIn("problem_report", self.store.snapshot()["records"])
+
     def test_refuses_a_gated_post_without_its_exact_evidence_snapshot(self):
         statement = self.select_statement()
         value = self.put_value()
@@ -314,6 +343,7 @@ class ProblemReportTests(CheckCommandMixin, ProblemCase):
 
     def test_status_advisories_change_no_gate_obligation_or_next_action(self):
         self.put_slate()
+        self.put_leaving_step()
         before = cli.status_report(self.store)
         self.assertIn("problem_report_due", [row["code"] for row in before["advisories"]])
         for summary in (cli.status_summary(before), cli.next_summary(before)):

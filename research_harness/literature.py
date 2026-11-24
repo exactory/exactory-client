@@ -361,7 +361,8 @@ def validate_search_dispositions(value):
     for item in _items_list(value["dispositions"], "Dispositions"):
         fields(item, ("work_id", "disposition", "reason"), code="invalid_search")
         text(item["reason"], "Disposition reason", code="invalid_search")
-        if item["disposition"] not in DISPOSITIONS or item["work_id"] not in found or item["work_id"] in judged:
+        if (item["disposition"] not in DISPOSITIONS or not isinstance(item["work_id"], str)
+                or item["work_id"] not in found or item["work_id"] in judged):
             raise ResearchError("invalid_search", "Judge each found work exactly once with a supported disposition")
         judged[item["work_id"]] = item["disposition"]
     if set(judged) != found:

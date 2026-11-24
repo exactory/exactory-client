@@ -258,10 +258,12 @@ VERIFICATION_ADAPTER = dict(
     applies=applies_verification, enumerate_units=list_verification_units,
     targets=list_verification_targets, series_key=compute_verification_key,
     citations=list_verification_citations, validate_final=validate_verification_final,
-    final_prompt=prompts.FINAL_VERIFICATION, source_requests=False)
+    final_prompt=prompts.FINAL_VERIFICATION,
+    final_prompt_v3=prompts.FINAL_VERIFICATION_V3, source_requests=False)
 
 READINESS_ADAPTER = dict(
     applies=applies_readiness, enumerate_units=list_readiness_units,
     targets=list_readiness_targets, series_key=compute_readiness_key,
     citations=list_readiness_citations, validate_final=validate_readiness_final,
-    final_prompt=prompts.FINAL_READINESS, source_requests=True)
+    final_prompt=prompts.FINAL_READINESS,
+    final_prompt_v3=prompts.FINAL_READINESS_V3, source_requests=True)

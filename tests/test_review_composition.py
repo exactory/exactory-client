@@ -1096,7 +1096,7 @@ class FindingFinalCompositionTests(unittest.TestCase):
             'Synthetic formulation ' + str(index) for index in range(1, 5000)]
         from research_harness.artifacts import describe_artifact
         references = [describe_artifact(('Recorded detail ' + str(index)).encode(), 'text/plain') for index in range(6)]
-        packet['handle_table'] = {'e' + str(index): dict(reference=reference) for index, reference in enumerate(references)}
+        packet['handle_table'] = {'n' + str(index): dict(reference=reference) for index, reference in enumerate(references, 1)}
         grounds = [dict(kind='reviewer_gap', text='The search needs a full reading.',
                         refs=references)]
         pages = [dict(targets=['t' + str(index)], output=dict(targets=[dict(formulation='t' + str(index), coverage='The exact formulation was checked.',
@@ -1111,7 +1111,7 @@ class FindingFinalCompositionTests(unittest.TestCase):
             self.assertEqual(len(row[2]), 300)
             self.assertLessEqual(composition._measure_final_value(row), DECISION_ROW_CHARACTERS)
             remaining = [handle for handle in composition._collect_reference_handles(packet, grounds) if handle not in row[3]]
-            next_handle = remaining[0] if remaining else 'e6'
+            next_handle = remaining[0] if remaining else 'n7'
             self.assertGreater(composition._measure_final_value(row[:3] + [row[3] + [next_handle]]), DECISION_ROW_CHARACTERS)
 
     def test_decision_rows_count_escaping_and_all_ground_kinds(self):
@@ -1352,9 +1352,16 @@ class MissingPageFieldTests(unittest.TestCase):
                 if not fields or all(isinstance(value, (list, dict)) and not value for value in fields.values()):
                     continue
                 bad = copy.deepcopy(page)
-                bad['output']['targets'][0]['fields'] = {}
-                with self.subTest(rule=rule['id'], target=target), self.assertRaises(ResearchError):
-                    composition.validate_page_output(rule, packet, [target], bad['output'])
+                bad['output']['targets'][0]['fields'] = {
+                    path: value for path, value in fields.items()
+                    if path in ('/value/work_items', '/value/assurances', '/value/objection_findings',
+                                '/value/rubric_potential', '/support/checks', '/checks', '/reassessment/findings')
+                    and value in ([], {})}
+                with self.subTest(rule=rule['id'], target=target):
+                    with self.assertRaises(ResearchError) as caught:
+                        composition.validate_page_output(rule, packet, [target], bad['output'])
+                    check = 'review.support' if rule['id'].endswith('/study-readiness') else rule['checks'][0]
+                    self.assertEqual(caught.exception.contract_check, check)
                 seen.add(rule['id'])
         self.assertEqual(seen, selected)
 

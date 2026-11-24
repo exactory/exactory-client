@@ -15,11 +15,16 @@ from .evidence import digest
 
 PROTOCOL = 'codex-invocation-settings-v1'
 KEY = 'codex_invocation'
-REQUIRED_EFFORT = 'high'
 
 
 def supports_route(route):
     return route.get('adapter') in (plain.ADAPTER, framed.ADAPTER)
+
+
+def read_turn_context(events):
+    """The payload of the one turn_context of a native rollout, or None when the rollout holds none or several."""
+    contexts = [event['payload'] for event in events if event.get('type') == 'turn_context']
+    return contexts[0] if len(contexts) == 1 else None
 
 
 def has_supported_binding(*records):
@@ -43,11 +48,11 @@ def _inspect_capture(route, request, response, events):
     if (len(sessions) != 1 or not isinstance(sessions[0].get('base_instructions'), dict)
             or not isinstance(sessions[0]['base_instructions'].get('text'), str)):
         return False
-    contexts = [event['payload'] for event in events if event.get('type') == 'turn_context']
-    if (len(contexts) != 1 or contexts[0].get('model') != route['model']
-            or contexts[0].get('effort') != REQUIRED_EFFORT):
+    context = read_turn_context(events)
+    if (context is None or context.get('model') != route['model']
+            or context.get('effort') != plain.read_route_effort(route)):
         return False
-    directory = contexts[0].get('cwd')
+    directory = context.get('cwd')
     controls = evidence.get('excluded_controls')
     if (not isinstance(directory, str) or not Path(directory).is_absolute()
             or not isinstance(controls, list)

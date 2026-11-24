@@ -16,7 +16,10 @@ from test_review_route_capacity import build_route
 import test_research_problem_slate as slate_fixtures
 from test_review_output_profile import build_row
 from test_review_parts_v3 import make_turn_output
-from codex_route_fixtures import record_codex_route, build_codex_response, invoke_codex
+from codex_route_fixtures import record_codex_route, build_codex_response, invoke_codex, limit_codex_input
+
+LIMITED_ROUTE_CHARACTERS = 200000
+ROUTE_OUTPUT_TOKENS = 128000
 
 
 class SlateSeriesTests(unittest.TestCase):
@@ -31,13 +34,19 @@ class SlateSeriesTests(unittest.TestCase):
             patcher.start()
             self.addCleanup(patcher.stop)
 
-    def make_case(self):
+    def make_case(self, input_tokens=None, *, candidate=True):
+        """With input_tokens, the route takes that input token limit and a character limit of 200,000."""
         case = slate_fixtures.ProblemSlateTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
-        case.record_candidate()
+        case.setUp()
+        if candidate:
+            case.record_candidate()
         case.observe_bars()
-        record_codex_route(case, 'local', output_tokens=128000)
+        if input_tokens is not None:
+            # The observed input limit of a route is the input of its probe less the output reservation.
+            case.capacity_probe_tokens = input_tokens + ROUTE_OUTPUT_TOKENS
+            limit_codex_input(case, LIMITED_ROUTE_CHARACTERS)
+        record_codex_route(case, 'local', output_tokens=ROUTE_OUTPUT_TOKENS)
         return case
 
     def assign(self, case, identifier='slate-series', **context):
@@ -132,14 +141,30 @@ class SlateSeriesTests(unittest.TestCase):
             packet = protocol.build_packet(case.read_records(), case.artifacts, None, 'slate', 'first')
         return packet, cite
 
-    def drive_series(self, case, first, final_cite):
+    def drive_series(self, case, first, final_cite, *, requested_body=None):
         from research_harness.review_series import run_series
         from research_harness.review_excerpts import read_sent_packet
         sizes, kinds, lines = [], [], []
+        requested = False
+        body_handle = None
+        if requested_body is not None:
+            first_packet = protocol._read_json(case.artifacts, first['packet'])
+            inventory = protocol._read_json(case.artifacts, first_packet[parts.KEY]['inventory'])
+            reference, content = requested_body
+            unit = next((row for row in inventory['units'] if any(component.get('artifact') == reference
+                         for component in row['components'])), None)
+            self.assertIsNotNone(unit, 'The forming original must have an addressable body')
 
         def respond(route, request, credential):
+            nonlocal requested, body_handle
             packet = read_sent_packet(request)
             header = packet[parts.KEY]
+            if requested_body is not None and header['kind'] == 'read':
+                for row in packet[v3.MATERIAL_KEY]:
+                    if isinstance(row, dict) and row['digest'] == unit['digest']:
+                        body_handle = row['handle']
+                    if isinstance(row, str):
+                        self.assertNotIn(content, row)
             measured = capacity.measure_request(route, request)['text_characters']
             self.assertLessEqual(measured, header['capacity']['request_bound']['text_characters'])
             sizes.append(measured)
@@ -147,6 +172,13 @@ class SlateSeriesTests(unittest.TestCase):
             output = (case.build_slate_output(list(case.read_records()['problem_candidate'])) if header['kind'] == 'final'
                       else make_turn_output(packet))
             if header['kind'] == 'final':
+                if requested_body is not None:
+                    if not requested:
+                        requested = True
+                        self.assertEqual(body_handle, unit['handle'])
+                        return build_codex_response(route, request, dict(kind='requests', source_requests=[],
+                            unit_requests=[dict(unit=body_handle, body=reference['sha256'])]))
+                    self.assertIn(content, [row['text'] for row in packet['review_parts_requests']])
                 output['value']['evidence'] = [final_cite]
                 for assurance in output['value']['assurances']:
                     assurance.update(evidence=[final_cite], reason='Not assessed in this slate review.')
@@ -280,21 +312,28 @@ class SlateSeriesTests(unittest.TestCase):
         def build_packet(*args, **kwargs):
             return copy.deepcopy(logical) if args[3] == 'slate' else original(*args, **kwargs)
         with patch.object(protocol, 'NEW_SESSION_RULES', (session.PROTOCOL, bar_sources.PROTOCOL_V3)), \
-                patch.object(protocol, 'build_packet', side_effect=build_packet):
-            self.assertFalse(slate.can_start_series(case.read_records(), case.artifacts,
-                dict(role='slate', context={}), case.read_records()['review_route']['local'], logical,
-                protocol.canonical_prompt('slate', orchestration='problem_creation')))
+                patch.object(protocol, 'build_packet', side_effect=build_packet), \
+                patch.object(v3, 'admit_packet', wraps=v3.admit_packet) as planner:
             first = self.assign(case)
+        planner.assert_not_called()
         packet = json.loads(case.artifacts.read(first['packet']))
         self.assertIn('session_chain', first)
         self.assertEqual(packet['source_rules'], session.PROTOCOL)
         self.assertFalse(slate.applies(first, packet))
         self.assertNotIn(parts.KEY, first)
 
+    def test_a_v2_final_of_the_slate_adapter_is_refused_as_an_unknown_binding(self):
+        # Row P9 of the second writer pass: the slate adapter admits the parts protocol v3 alone and has no v2 final.
+        with self.assertRaises(ResearchError) as refused:
+            protocol.canonical_prompt('slate', orchestration='problem_creation',
+                                      review_parts=dict(adapter='problem_slate', kind='final'))
+        self.assertEqual(refused.exception.code, 'invalid_review_context')
+
     def test_new_slate_series_and_session_deliver_place_review(self):
         # 0.91.6 writes place_review into every new slate packet. A slate series of parts v3 and a slate session of
-        # the rules v4 classify that member and deliver it: in the frame of each part, which then carries the slate
-        # places paragraph, and in the frame of each session turn.
+        # the rules v4 classify that member and deliver it: in the frame of each part and in the frame of each session
+        # turn. A read turn of the series selects no version of the slate places paragraph (decision 3 of the second
+        # writer pass); a final, page or closing turn selects its version 2.
         from research_harness import review_prompt_paragraphs as paragraphs, review_session_v4 as session
         member = {'protocol': paragraphs.SLATE_PLACES_PROTOCOL}
         case = self.make_case()
@@ -304,7 +343,9 @@ class SlateSeriesTests(unittest.TestCase):
             first = self.assign(case)
         self.assertEqual(first[parts.KEY]['protocol'], v3.PROTOCOL)
         self.assertEqual(json.loads(case.artifacts.read(first['packet']))[paragraphs.PLACE_REVIEW_KEY], member)
-        self.assertIn(paragraphs.SLATE_PLACES_PROTOCOL, first['prompt']['parameters'][paragraphs.PARAMETER])
+        self.assertEqual(first[parts.KEY]['kind'], 'read')
+        selected = first['prompt']['parameters'].get(paragraphs.PARAMETER, [])
+        self.assertFalse({paragraphs.SLATE_PLACES_PROTOCOL, 'exactory-problem-slate-places-v2'} & set(selected))
         case = self.make_case()
         logical, cite = self.make_imported_packet(case, body_characters=1400000, record_characters=1000)
         original = protocol.build_packet
@@ -347,6 +388,124 @@ class SlateSeriesTests(unittest.TestCase):
         routes = capacity.find_serving_routes(case.read_records(), 'slate', packet,
             artifacts=case.artifacts, assignment=value, prompt=prompt)
         self.assertIn(('local', 'parts'), [(row['route_id'], row['delivery']) for row in routes])
+
+    def import_one_body(self, case, content=b'x', media_type='text/plain', *, native=(), reason_characters=145000,
+                        import_id='import-1', forming_id='imported-call', cite_candidate=True):
+        from research_harness import problem_forming
+        from test_problem_forming_import import FormingImportTests
+        from test_research_problem_candidates import build_candidate
+        from test_research_problem_forming import build_forming
+
+        fixture = FormingImportTests()
+        self.addCleanup(fixture.doCleanups)
+        source = fixture.fixture()
+        body = source.artifacts.put(content, media_type) if content is not None else None
+        call = source.mutate(problem_forming.record_forming, build_forming(
+            forming_id, forms=[], stopping_reason='a' * reason_characters,
+            **({'inputs': [dict(description='One input', evidence=[body])]} if body else {})))['result']
+        candidate = build_candidate()
+        candidate['source']['evidence'] = [fixture.reference('forming_call', call)]
+        source.mutate(slate_fixtures.problem_candidates.record_candidate, candidate)
+        imported = fixture.import_history(destination=case, source=source, identifier=import_id)
+        cite = fixture.reference('forming_call', call, imported['source_origin'])
+        if cite_candidate:
+            case.record_candidate('imported-candidate', source=dict(kind='computation', reference='Imported record',
+                                                                  evidence=[cite, *native]))
+        return cite, body
+
+    def test_a_slate_over_the_token_limit_of_its_route_starts_a_series(self):
+        """Drive a token-overflow import through each bounded read and its recorded final."""
+        from research_harness.review_excerpts import read_sent_packet
+
+        case = self.make_case(input_tokens=160000, candidate=False)
+        body_text = 'Unique text of the imported forming record.'
+        cite, body = self.import_one_body(case, body_text.encode(), reason_characters=140000)
+        with patch.object(capacity, 'measure_request', wraps=capacity.measure_request) as measurements:
+            first = self.assign(case)
+        for call in measurements.call_args_list:
+            route, ordinary = call.args[:2]
+            sent = read_sent_packet(ordinary) or {}
+            if sent.get('role') == 'slate' and parts.KEY not in sent:
+                break
+        else:
+            self.fail('No ordinary slate request was measured')
+        records = case.read_records()
+        single = capacity.measure_request(route, ordinary, records=records, artifacts=case.artifacts)
+        self.assertLessEqual(single['characters'], single['character_limit'])
+        self.assertGreater(single['tokens_upper'], single['token_limit'])
+        self.assertEqual((first[parts.KEY]['protocol'], first[parts.KEY]['adapter']), (v3.PROTOCOL, 'problem_slate'))
+        request = protocol.build_assignment_request(records, case.artifacts, first)
+        self.assertTrue(capacity.measure_request(route, request, records=records, artifacts=case.artifacts)['fits'])
+
+        self.drive_series(case, first, cite, requested_body=(body, body_text))
+
+    def test_an_imported_binary_body_requires_text_before_the_first_read(self):
+        """Refuse a required binary, then deliver its declared text in a recorded series."""
+        from types import SimpleNamespace
+        from continuity_forms_fixtures import fork_store
+        from research_harness.integration import pin_artifact
+
+        case = self.make_case(input_tokens=160000, candidate=False)
+        _, body = self.import_one_body(case, b'%PDF-1.4', 'application/pdf')
+        with patch.object(protocol.transport, 'send_request') as send:
+            with self.assertRaises(ResearchError) as caught:
+                self.assign(case)
+        send.assert_not_called()
+        error = caught.exception
+        self.assertEqual(error.code, 'review_route_capacity_below_floor')
+        self.assertEqual(error.details['reason'], 'body_without_text_form')
+        [answer] = error.details['then']
+        [capture] = answer['steps']
+        self.assertEqual(capture['command'], 'artifact')
+        self.assertEqual(capture['body']['sha256'], body['sha256'])
+        self.assertNotIn('slate-series', case.read_records()['review_assignment'])
+
+        with fork_store(SimpleNamespace(case=case)):
+            path = 'captured-body.txt'
+            (case.store.root / path).write_text('Complete synthetic source text.', encoding='utf-8')
+            captured = case.mutate(pin_artifact, dict(capture['payload'], path=path))['result']
+            first = self.assign(case)
+            packet = json.loads(case.artifacts.read(first['packet']))
+            logical = parts.read_logical_packet(case.artifacts, packet[parts.KEY])
+            self.assertIn(captured['artifact'], [row['artifact'] for row in logical['evidence']])
+            self.assertEqual(first[parts.KEY]['protocol'], v3.PROTOCOL)
+
+    def test_a_slate_within_both_limits_of_its_route_stays_a_single_request(self):
+        case = self.make_case(input_tokens=40000)
+        first = self.assign(case)
+        self.assertNotIn(parts.KEY, first)
+        records = case.read_records()
+        request = protocol.build_assignment_request(records, case.artifacts, first)
+        measure = capacity.measure_request(records['review_route']['local'], request, records=records,
+                                           artifacts=case.artifacts)
+        self.assertTrue(measure['fits'], measure)
+
+    def test_a_recorded_single_slate_between_the_limits_keeps_its_form(self):
+        # A release without the token admission recorded such a slate as one request, as in incident 20261112012956.
+        # The single request keeps its bytes, a continuation follows its recorded form, and it reaches its review.
+        from research_harness import research_decisions, review_parts_slate as slate
+        from research_harness.review_single_request import describe_assignment_delivery
+        case = self.make_case(input_tokens=21000)
+        with patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,)), \
+                patch.object(capacity, 'require_covered_assignment'):
+            stored = self.assign(case)
+        records, artifacts = case.read_records(), case.artifacts
+        route = records['review_route']['local']
+        request = protocol.build_assignment_request(records, artifacts, stored)
+        measure = capacity.measure_request(route, request, records=records, artifacts=artifacts)
+        self.assertLessEqual(measure['characters'], measure['character_limit'])
+        self.assertGreater(measure['tokens_upper'], measure['token_limit'])
+        self.assertNotIn(parts.KEY, stored)
+        self.assertEqual(describe_assignment_delivery(records, artifacts, stored)['form'], 'single')
+        self.assertFalse(slate.can_start_series(records, artifacts,
+            dict(role='slate', context=dict(prior_assignment_id=stored['id'])), route,
+            json.loads(artifacts.read(stored['packet'])), stored['prompt']))
+        output = case.build_slate_output(sorted(records['problem_candidate']))
+        invoke_codex(case, stored['id'], output)
+        sent = json.loads(artifacts.read(case.read_records()['review_attempt']['attempt-' + stored['id']]['request']))
+        self.assertEqual(sent, request)
+        case.mutate(research_decisions.record_value_review, dict(output, id='recorded-single-slate', dossier_id=None,
+                                                                 assignment_id=stored['id']))
 
 
 if __name__ == '__main__':

@@ -369,3 +369,16 @@ class OutputReservationTests(unittest.TestCase):
         )
         self.assertEqual(value['characters_per_token'], 1.36)
         self.assertTrue(value['token_estimate'])
+
+
+class CapacityDecisionImportTests(unittest.TestCase):
+    def test_capacity_decision_imports_only_public_functions_of_other_modules(self):
+        """Repairs A9. The capacity decision of a math export reads the checked export through public functions."""
+        import ast
+        import inspect
+        import textwrap
+        from research_harness import review_route_capacity
+        tree = ast.parse(textwrap.dedent(inspect.getsource(review_route_capacity.describe_capacity_decision)))
+        private = [alias.name for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+                   for alias in node.names if alias.name.startswith('_')]
+        self.assertEqual(private, [])

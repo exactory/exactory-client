@@ -60,6 +60,10 @@ REVIEW_BOUND_EVIDENCE_FORMS_NOTICE = (
     'citations, write each citation as a handle in the form that those instructions state.')
 # The positions that a refusal of evidence.shape lists; refused_count gives the number of every refused entry.
 REFUSED_INDEX_LIMIT = 100
+# The exceptions that a malformed value of a reviewer's answer raises inside a check or a composition of the harness.
+UNREADABLE_ANSWER_ERRORS = (ArithmeticError, AttributeError, LookupError, RecursionError, TypeError, ValueError)
+UNREADABLE_ANSWER_ERR_MSG = ('The harness could not check this answer, because a value in it does not have the form '
+                             'that this turn asks for. Return the answer with each value in its form.')
 # The messages of the record of a refused reviewer output when the store refused that record beyond the wait: after a
 # run, and after a recording command that was refused.
 OUTPUT_REFUSAL_AFTER_RUN_STORE_BUSY_MSG = (
@@ -96,6 +100,8 @@ CONTRACT_CHECKS = {
     'evidence.fulltext': {'notice_fields': ('version_id', 'source_id', 'artifact', 'delivered_depth', 'notice')},
     'evidence.locator': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('part_relative_span',)},
     'review.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS + _MATERIAL_NOTICE_FIELDS},
+    'review.session_turn': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS + _READING_NOTICE_FIELDS +
+                            ('pending_requests', 'minimum_page', 'maximum_page', 'predicate')},
     'review.value': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS +
                      ('required', 'bar_ids', 'candidate_id', 'candidate_ids', 'items', 'minimum_items')},
     'review.objections': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('objection_id', 'candidate_ids')},
@@ -132,6 +138,30 @@ def contract_check(name):
         if not getattr(error, 'contract_external', False) and not hasattr(error, 'contract_check'):
             error.contract_check = name
         raise
+
+
+@contextmanager
+def refuse_unreadable_answer():
+    """Refuse a reviewer's answer on which a paged validator or composer of the harness fails.
+
+    Callers open the scope around the checks and the composition of the answer, after their reads of frozen inputs.
+    A ResearchError passes unchanged, so a missing or altered artifact is still reported as a damaged store."""
+    try:
+        yield
+    except UNREADABLE_ANSWER_ERRORS as error:
+        with contract_check('review.shape'):
+            raise ResearchError('review_composition_conflict', UNREADABLE_ANSWER_ERR_MSG,
+                                {'harness_exception': describe_harness_exception(error)}) from error
+
+
+def describe_harness_exception(error):
+    """The class of an exception and the function where it rose, for the operator: the record of a refusal keeps it
+    in details.harness_exception, which no notice to the reviewer shows."""
+    trace = error.__traceback__
+    while trace.tb_next is not None:
+        trace = trace.tb_next
+    frame = trace.tb_frame
+    return {'class': type(error).__name__, 'function': frame.f_globals.get('__name__', '') + '.' + frame.f_code.co_name}
 
 
 def _frozen_pdf_capture(link, packets):
@@ -418,12 +448,22 @@ def classify_observed_output(records, artifacts, attempt_id):
     try:
         output = protocol.read_raw_observation(records, artifacts, attempt_id)['raw_output']
         packet = json.loads(artifacts.read(assignment['packet']))
-        from .review_handles import expand_handles, is_material_output, validate_material
-        output = expand_handles(packet, output, artifacts=artifacts, assignment=assignment,
-                                raw='handle_expansion' not in attempt)
+        from .review_handles import expand_handles, expand_observed_output, is_material_output, validate_material
+        paged_session = packet.get('session_combine') or packet.get('session_final', {}).get('page_plan_digest')
+        paged_reading = packet.get('reading_final', {}).get('page_plan_digest')
+        if paged_session or paged_reading or packet.get('review_parts', {}).get('page_plan_digest'):
+            output = expand_observed_output(packet, output, attempt, artifacts=artifacts, assignment=assignment)
+        else:
+            output = expand_handles(packet, output, artifacts=artifacts, assignment=assignment,
+                                    raw='handle_expansion' not in attempt)
         if is_material_output(packet, output):
             validate_material(packet, output, artifacts=artifacts, assignment=assignment)
             return None
+        parts = packet.get(review_parts.KEY, {})
+        if (parts.get('protocol') == 'exactory-review-parts-v3' and parts.get('kind') == 'final'
+                and isinstance(output, dict) and output.get('kind') != 'requests'):
+            from .review_parts_v3 import require_final_role_fields
+            require_final_role_fields(output)
         staged = packet.get('staged_review')
         if staged is not None:
             from .review_staged import validate_task_output
@@ -440,7 +480,8 @@ def classify_observed_output(records, artifacts, attempt_id):
                     _validate_staged_final(records, artifacts, assignment, packet, epoch, scientific)
         elif packet.get('review_parts', {}).get('page_plan_digest'):
             with contract_check('review.shape'):
-                review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
+                review_parts.validate_turn_output(records, artifacts, assignment, packet, output,
+                                                  attempt=attempt, expanded=True)
             if packet['review_parts']['final_form'] == 'closing' and output.get('kind') != 'requests':
                 from .review_composite import build_composite
                 from .review_parts_v3 import list_composite_turns, validate_composite_output
@@ -454,7 +495,7 @@ def classify_observed_output(records, artifacts, attempt_id):
             with contract_check('review.shape'):
                 review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
         elif assignment['role'] in ('bar', 'slate', 'result'):
-            validate_review_contract(records, artifacts, assignment, output, attempt=attempt)
+            validate_review_contract(records, artifacts, assignment, output, attempt=attempt, expanded=bool(paged_session))
             if 'closing' in packet.get('session_final', {}) and output.get('stage') not in ('request', 'material'):
                 from .review_composite import build_composite
                 from .review_session_v4 import list_composite_turns, validate_composite_output
@@ -471,8 +512,8 @@ def classify_observed_output(records, artifacts, attempt_id):
                 validate_verification_final(records, artifacts, assignment, output, attempt=attempt)
         elif assignment['role'] == 'native_math':
             from .native_review import uses_finding_contract, validate_finding, validate_output, find_finding_version
-            from .openness_reading import (INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, find_stage,
-                                           has_deliverable_passage, validate_turn_output)
+            from .openness_reading import (INVALID_RESPONSE, MATH_PROTOCOL_V2, PASSAGE_PROGRESS_ERR_MSG,
+                                           find_protocol, find_stage, has_deliverable_passage, validate_turn_output)
             with contract_check('native.output'):
                 packet = json.loads(artifacts.read(assignment['packet']))
                 if find_stage(packet) is None:
@@ -481,7 +522,16 @@ def classify_observed_output(records, artifacts, attempt_id):
                     else:
                         validate_output(packet['native'], output)
                 else:
-                    validate_turn_output(packet, output, artifacts=artifacts, assignment=assignment)
+                    observed_records = records
+                    if (find_stage(packet) == 'final' and find_protocol(packet) == MATH_PROTOCOL_V2
+                            and isinstance(output, dict) and output.get('decision') == 'approve'
+                            and getattr(records, 'read_snapshot', None)):
+                        from .review_task_execution import identify_call
+                        captured = records.get('review_call_observation', {}).get(identify_call('review.invoke', attempt_id))
+                        revision = captured['recorded_revision'] if captured is not None else attempt['recorded_revision']
+                        observed_records = records.read_snapshot(revision - 1)
+                    validate_turn_output(packet, output, artifacts=artifacts, assignment=assignment,
+                                         expanded=bool(paged_reading), records=observed_records)
                     if 'closing' in packet.get('reading_final', {}) and output.get('stage') not in ('reading', 'material'):
                         from .review_composite import build_composite
                         from .openness_final_pages import list_composite_turns, validate_composite_output
@@ -513,6 +563,9 @@ def refused_attempts(records, artifacts, completed):
             failure = classify_observed_output(records, artifacts, attempt['id'])
             if failure is not None:
                 result.append({'attempt_id': attempt['id'], 'code': failure['code']})
+                # The member is optional: a diagnosis needs only its code, as release 0.92.1 read it.
+                if 'harness_exception' in failure.get('details', {}):
+                    result[-1]['harness_exception'] = failure['details']['harness_exception']
     return result
 
 
@@ -574,11 +627,14 @@ def _record_refusal(store, assignment_id, attempt_id, *, request_id, busy_msg, k
     if not callable(getattr(store, '_read_scoped_preparation', None)):
         # A check prepares no second mutation.
         return None
+    if not isinstance(assignment_id, str):
+        # Only a text names a stored assignment, so the store is not read for another value.
+        return None
 
     def write():
         preparation = store._read_scoped_preparation()
         records = preparation.records
-        if not isinstance(assignment_id, str) or assignment_id not in records.get('review_assignment', {}):
+        if assignment_id not in records.get('review_assignment', {}):
             return None
         artifacts = Evaluation.of(records, store.build_artifact_store())
         try:

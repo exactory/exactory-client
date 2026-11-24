@@ -228,17 +228,17 @@ class ProblemSlateTests(ProblemDeliveryCase):
         report = status_report(self.store)
         self.assertFalse(report["ready"])
         self.assertEqual(report["milestone"], "slate")
-        self.assertEqual(report["next"]["code"], "problem_no_post")
+        self.assertEqual(report["next"]["code"], "problem_search_step_required")
         self.assertEqual(report["next"]["reason"], reason)
         self.assertEqual(report["candidates"], {"current": 1, "selected": 0, "deferred": 0, "rejected": 1})
         self.assertEqual(report["slate_id"], "slate-1")
         self.select_statement(candidate_id="candidate-1")
         report = status_report(self.store)
-        self.assertEqual((report["milestone"], report["next"]["code"]), ("slate", "problem_no_post"))
+        self.assertEqual((report["milestone"], report["next"]["code"]), ("slate", "problem_search_step_required"))
         summary = status_summary(report)
         self.assertEqual((summary["candidates"], summary["slate_id"]), (report["candidates"], "slate-1"))
         for view in (summary, next_summary(report)):
-            self.assertEqual(view["next_hint"]["code"], "problem_no_post")
+            self.assertEqual(view["next_hint"]["code"], "problem_search_step_required")
 
     def test_statement_candidate_must_be_selected_in_the_latest_slate(self):
         self.record_candidate()
@@ -380,6 +380,24 @@ class ProblemSlateTests(ProblemDeliveryCase):
         assignment = self.read_records()["review_assignment"][identifier]
         return assignment, json.loads(self.artifacts.read(assignment["packet"]))
 
+    def observe_refreshed_slate(self, candidate_ids, identifier, bar_ids=None):
+        """A refreshed slate review of `first`. Since 0.93.0 it is a new chain in the slot of the earlier review, whose
+        packet delivers the bars and replays no turn of the bar session, so its answer cites the reviewer's own bar."""
+        assignment = self.assign("slate", "first", identifier=identifier)
+        _, packet = self.read_assignment(identifier)
+        reference = packet["own_bars"][0]["record_reference"]
+        output = self.build_slate_output(candidate_ids)
+        output["value"]["evidence"] = [reference]
+        for assurance in output["value"]["assurances"]:
+            assurance["evidence"] = [reference]
+        if bar_ids is not None:
+            output["value"]["bar_ids"] = bar_ids
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-" + identifier, "assignment_id": identifier},
+                        credential="test-only")
+        return self.mutate(decisions.record_value_review,
+                           dict(output, id="review-" + identifier, dossier_id=None, assignment_id=identifier))["result"]
+
     def test_a_new_slate_review_carries_the_places_paragraph(self):
         self.record_candidate()
         self.observe_bars()
@@ -440,11 +458,11 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.observe_bars()
         first = self.observe_recorded_slate()
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
-        refreshed = self.observe("slate", "first", self.build_slate_output(["candidate-1", "candidate-2"]),
-                                 identifier="slate-first-refreshed")
+        refreshed = self.observe_refreshed_slate(["candidate-1", "candidate-2"], "slate-first-refreshed")
         original, _ = self.read_assignment("slate-first")
         assignment, packet = self.read_assignment("slate-first-refreshed")
-        self.assertEqual((assignment["history_assignment_id"], assignment["slot_id"]), ("slate-first", original["slot_id"]))
+        self.assertEqual((assignment["context"], assignment["history_assignment_id"], assignment["slot_id"]),
+                         ({"session_refresh": {"assignment_id": "slate-first"}}, None, original["slot_id"]))
         self.assertEqual(packet["problem_refresh"]["review_ids"], [first["id"]])
         self.assertEqual(packet["place_review"], {"protocol": "exactory-problem-slate-places-v1"})
         self.assertIn("exactory-problem-slate-places-v1", assignment["prompt"]["parameters"]["problem_paragraphs"])
@@ -548,18 +566,17 @@ class ProblemSlateTests(ProblemDeliveryCase):
                              dict(output, id="review-repaired-slate", dossier_id=None, assignment_id=repaired["id"]))["result"]
         return original, review
 
-    def test_changed_candidates_refresh_the_slate_reviewer_in_its_session(self):
+    def test_changed_candidates_refresh_the_slate_reviewer_as_a_new_chain_in_its_slot(self):
         self.record_candidate()
         self.observe_bars()
         first = self.observe("slate", "first", self.build_slate_output(["candidate-1"]))
         self.assert_error("review_resampling_forbidden", lambda: self.assign("slate", "first", identifier="slate-first-again"))
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
-        refreshed = self.observe("slate", "first", self.build_slate_output(["candidate-1", "candidate-2"]),
-                                 identifier="slate-first-refreshed")
+        refreshed = self.observe_refreshed_slate(["candidate-1", "candidate-2"], "slate-first-refreshed")
         records = self.read_records()
         original, assignment = (records["review_assignment"][identifier] for identifier in ("slate-first", "slate-first-refreshed"))
         self.assertEqual((assignment["context"], assignment["history_assignment_id"], assignment["slot_id"]),
-                         ({"prior_assignment_id": "slate-first"}, "slate-first", original["slot_id"]))
+                         ({"session_refresh": {"assignment_id": "slate-first"}}, None, original["slot_id"]))
         packet = json.loads(self.artifacts.read(assignment["packet"]))
         previous = json.loads(self.artifacts.read(original["packet"]))
         self.assertEqual([candidate["id"] for candidate in packet["candidates"]], ["candidate-1", "candidate-2"])
@@ -610,7 +627,7 @@ class ProblemSlateTests(ProblemDeliveryCase):
         packet = json.loads(self.artifacts.read(result["packet"]))
         self.assertEqual((result["history_assignment_id"], sorted(packet["bar_ids"])), ("bar-first-v2", bar_review_ids))
 
-    def test_changed_bars_refresh_the_slate_reviewer_in_its_session(self):
+    def test_changed_bars_refresh_the_slate_reviewer_as_a_new_chain_in_its_slot(self):
         original = protocol.canonical_prompt
 
         def previous_prompt(role, **options):
@@ -627,14 +644,12 @@ class ProblemSlateTests(ProblemDeliveryCase):
         bar_review_ids = ["review-bar-first-v2", "review-bar-second-v2"]
         self.assert_error("problem_slate_review_unverified",
                           lambda: self.record_slate(bar_review_ids=bar_review_ids, review_ids=[stranded["id"]]))
-        output = self.build_slate_output(["candidate-1"])
-        output["value"]["bar_ids"] = bar_review_ids
-        refreshed = self.observe("slate", "first", output, identifier="slate-first-refreshed")
+        refreshed = self.observe_refreshed_slate(["candidate-1"], "slate-first-refreshed", bar_ids=bar_review_ids)
         records = self.read_records()
         assignment = records["review_assignment"]["slate-first-refreshed"]
         packet = json.loads(self.artifacts.read(assignment["packet"]))
         self.assertEqual((assignment["context"], sorted(packet["bar_ids"])),
-                         ({"prior_assignment_id": "slate-first"}, bar_review_ids))
+                         ({"session_refresh": {"assignment_id": "slate-first"}}, bar_review_ids))
         self.assertEqual((sorted(packet["problem_refresh"]["previous_bar_ids"]), packet["problem_refresh"]["bar_ids"]),
                          (["review-bar-first", "review-bar-second"], packet["bar_ids"]))
         self.assertEqual(self.record_slate(bar_review_ids=bar_review_ids, review_ids=[refreshed["id"]])["review_ids"],
@@ -708,7 +723,7 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.observe_bars()
         self.record_slate(selected=[], rejected=[{"candidate_id": "candidate-1", "reason": "A settled case."}],
                           reason="No candidate reaches potential level 2.")
-        self.assertEqual(status_report(self.store)["next"]["code"], "problem_no_post")
+        self.assertEqual(status_report(self.store)["next"]["code"], "problem_search_step_required")
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
         report = status_report(self.store)
         self.assertEqual((report["milestone"], report["next"]["code"], report["slate_id"]),

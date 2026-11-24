@@ -161,6 +161,7 @@ class CallCaptureRecoveryTests(LiteratureCase):
                                           request_id='reconcile-uncaptured')
         self.assertTrue(result['result']['released'])
         self.assertEqual(self.records()['review_route_probe']['uncaptured']['error']['code'], 'review_invocation_interrupted')
+        self.assertEqual(self.records()['review_route_probe']['uncaptured']['unverified_reasons'], ['call_incomplete'])
 
     def test_final_receipt_returns_before_changed_capture_dependencies(self):
         self.run_probe()

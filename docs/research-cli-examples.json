@@ -4894,6 +4894,23 @@
     "id": "report-1",
     "reopen_when": "A new argument resolves the recorded obstruction."
   },
+  "problem-search-step": {
+    "id": "search-step-1",
+    "slate_id": "slate-1",
+    "way": "raise_deferred",
+    "candidate_ids": ["candidate-001"],
+    "learned": "Both slate reviews grade candidate-001 at level 1 of significance. No work that the record read states it, needs it or stops at it.",
+    "evidence": [],
+    "plan": "Search for a work that states the candidate as open, assumes it or stops at it, and read each work that the search finds in full. The step ends with a revised candidate that cites such a work, or with the searches that found none.",
+    "passed_over": [],
+    "successor_workspace": null,
+    "other_leads": []
+  },
+  "problem-search-origin": {
+    "id": "search-origin-1",
+    "source_workspace": "/absolute/path/to/earlier-problem",
+    "source_revision": 371
+  },
   "review-stop": {
     "id": "stop-1",
     "action": "stop",

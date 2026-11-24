@@ -8,24 +8,32 @@ import copy
 
 from .errors import ResearchError
 from .evidence import digest
-from .review_refusal import contract_check
+from .review_refusal import contract_check, refuse_unreadable_answer
 
 
 MINIMUM_CONDENSING_BLOCK_CHARACTERS = 1024
-CONDENSING_TURN_TEXT = (
-    'A block is an ordered group of carried entries retained under a block handle. '
-    'Read its entries and return {block, summary, refs}. block is the supplied block handle. '
-    'The complete serialized answer, including escapes and refs, fits the smaller of one quarter of the '
-    'block characters and this turn\'s answer bound. Cite a nonempty array of distinct entry handles from '
-    'this block. The block remains available by handle; request a page of its entry handles or an entry '
-    'by its handle when you need the original material.'
-)
 INVALID_COMBINATION_MESSAGE = (
-    'Return {block, summary, refs} for this block, with text in summary and a nonempty array of distinct '
-    'local entry handles in refs. The whole serialized combination must fit its stated bound.'
+    'This answer is not the combination of the block of this turn. Return exactly {block, summary, refs}. block is '
+    'the handle of the block that the turn delivers, summary is text, and refs is a nonempty list of entries of '
+    'that block, each once, named as the instructions of this turn state. The whole answer, counted as a request '
+    'of this route carries it, has at most the smaller of a quarter of the characters of the block and the answer '
+    'bound of the turn; the turn states both. For the agent, details.block names the block and '
+    'details.combination_bound gives that number; a notice shows these two members as digests.')
+INVALID_SIZE_MESSAGE = (
+    'The sizes given to the condensing planner are not valid. Give the room of a block as a positive integer of '
+    'characters, and the characters of each entry as an integer of at least zero.'
 )
-INVALID_SIZE_MESSAGE = 'A room is a positive integer and entry characters are nonnegative integers.'
-OVERSIZED_ENTRY_MESSAGE = 'An entry exceeds the block room; deliver that entry in segments before condensing it.'
+OVERSIZED_ENTRY_MESSAGE = (
+    'One entry is larger than the room of a block, and a block holds whole entries, so this list cannot be cut '
+    'into blocks. Where the details are given, details.handle names the entry and details.characters its size '
+    'against details.room. Cut such an entry into segments that fit the room before the list is condensed. '
+    'Where this refusal reaches a command, keep its details and report the stop.'
+)
+
+INVALID_FORECAST_ENTRY_MESSAGE = (
+    'The forecast of a condensing was asked for a list whose total is above zero and whose largest entry has zero '
+    'characters. Give the size of the largest entry of the list, a positive integer of at most the room of a '
+    'block.')
 
 
 def _validate_size(characters, room):
@@ -65,18 +73,19 @@ def describe_combination_bound(block, answer_bound):
 
 
 def validate_combination(block, output, measure, answer_bound):
-    """Validate one complete reviewer answer at the protocol's shape boundary."""
-    with contract_check('review.shape'):
-        handles = set(block['entries'])
-        bound = describe_combination_bound(block, answer_bound)
+    """Validate one complete reviewer answer at the protocol's shape boundary. The members of the block, which the
+    harness built, and the bound are read before the scope that refuses an unreadable answer."""
+    handle, handles, references = block['handle'], set(block['entries']), block.get('references', [])
+    bound = describe_combination_bound(block, answer_bound)
+    with refuse_unreadable_answer(), contract_check('review.shape'):
         if (not isinstance(output, dict) or set(output) != {'block', 'summary', 'refs'}
-                or output['block'] != block['handle'] or not isinstance(output['summary'], str)
+                or output['block'] != handle or not isinstance(output['summary'], str)
                 or not isinstance(output['refs'], list) or not output['refs']
                 or any(not (isinstance(ref, str) and ref in handles or isinstance(ref, dict)
-                            and ref in block.get('references', [])) for ref in output['refs'])
+                            and ref in references) for ref in output['refs'])
                 or len({digest(ref) for ref in output['refs']}) != len(output['refs']) or measure(output) > bound):
             raise ResearchError('invalid_value_review', INVALID_COMBINATION_MESSAGE,
-                                dict(block=block['handle'], combination_bound=bound))
+                                dict(block=handle, combination_bound=bound))
     return copy.deepcopy(output)
 
 
@@ -103,14 +112,18 @@ def plan_condensing(entries, room):
                 condensed.append(block)
                 next_entries.append(dict(handle=block['handle'], characters=block['characters'] // 4))
         if not condensed:
-            raise ResearchError('invalid_input', 'The overflowing list has no block large enough to condense.',
+            raise ResearchError('invalid_input',
+                                'The entries of this list exceed the room, and no block of them reaches '
+                                'details.minimum characters, the smallest block that a condensing turn takes, so '
+                                'the list cannot be condensed. details.room gives the room.',
                                 dict(room=room, minimum=MINIMUM_CONDENSING_BLOCK_CHARACTERS))
         rounds.append(condensed)
         remaining = next_entries
         characters = sum(entry['characters'] for entry in remaining)
         if characters > room:
             blocks = cut_condensing_blocks(remaining, room)
-    return dict(blocks=initial, rounds=rounds, entries=remaining, minimum_block_characters=1,
+    return dict(blocks=initial, rounds=rounds, entries=remaining,
+                minimum_block_characters=MINIMUM_CONDENSING_BLOCK_CHARACTERS,
                 turns=sum(len(round_) for round_ in rounds), remaining_characters=characters)
 
 
@@ -126,7 +139,8 @@ def forecast_condensing(characters, room, largest_entry):
     _validate_size(characters, room)
     _validate_size(largest_entry, room)
     if largest_entry > room or characters > 0 and largest_entry == 0:
-        raise ResearchError('invalid_input', OVERSIZED_ENTRY_MESSAGE)
+        message = OVERSIZED_ENTRY_MESSAGE if largest_entry > room else INVALID_FORECAST_ENTRY_MESSAGE
+        raise ResearchError('invalid_input', message)
     turns, rounds = 0, 0
     while characters > room:
         fill = room - largest_entry + 1
@@ -153,7 +167,8 @@ def apply_combination(state, block, output, measure):
     start = next((index for index in range(len(entries))
                   if handles[index:index + len(replaced)] == replaced), None)
     if start is None:
-        raise ResearchError('invalid_input', 'The block is not consecutive in the current carried state.')
+        raise ResearchError('invalid_input', 'The entries of this block do not stand together and in their order in '
+                                             'the carried state, so its combination cannot take their place.')
     archive = copy.deepcopy(state['handles'])
     archive.update((entry['handle'], copy.deepcopy(entry)) for entry in entries)
     combination = dict(handle=block['handle'], characters=measure(output), value=copy.deepcopy(output))

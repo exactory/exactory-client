@@ -90,4 +90,5 @@ def validate_final(records, artifacts, assignment, output, *, attempt=None):
 ADAPTER = dict(applies=applies, enumerate_units=list_units, targets=list_targets,
                series_key=compute_series_key, citations=list_citations,
                validate_final=validate_final, covers_items=problem_result.covers_items,
-               final_prompt=prompts.FINAL_ADJUDICATOR, source_requests=False)
+               final_prompt=prompts.FINAL_ADJUDICATOR,
+               final_prompt_v3=prompts.FINAL_ADJUDICATOR_V3, source_requests=False)

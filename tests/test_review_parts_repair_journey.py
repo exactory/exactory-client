@@ -126,12 +126,42 @@ class ResultRepairJourneyTests(PartsResultCase):
         self.assertTrue(parts.verify_series(self.case.read_records(), self.case.artifacts, final['id'])['complete'])
 
 
-class BarRepairJourneyTests(StrategyCase):
+class RepairCapacityTests(StrategyCase):
+    def test_a_repair_over_the_token_limit_of_its_route_requires_parts(self):
+        # The repair adapter decides its start in the measure of the admission: the same ordinary request stays one
+        # request on a route that it fits, and requires parts on a route whose input token limit is below it.
+        from research_harness import review_parts_repair, review_route_capacity as capacity
+        assignment = dict(id='prospective', role='bar', dossier_id='dossier-1', context={})
+        packet = dict(role='bar', dossier_id='dossier-1', context_repair=dict(assignment_id='assignment-bar-a'),
+                      evidence=[])
+        prompt = protocol.canonical_prompt('bar', repair=True)
+        self.capacity_probe_tokens = 128000 + 165000
+        record_codex_route(self, output_tokens=128000)
+        self.capacity_probe_tokens = 128000 + 5000
+        record_codex_route(self, 'small', output_tokens=128000, model='small-model')
+        records = self.store.snapshot()['records']
+        for route_id, required in (('route', False), ('small', True)):
+            route = records['review_route'][route_id]
+            request = protocol.transport.request_body(route, prompt['text'], packet, [])
+            measure = capacity.measure_request(route, request, records=records, artifacts=self.artifacts)
+            self.assertLessEqual(measure['characters'], measure['character_limit'])
+            self.assertEqual(measure['fits'], not required)
+            self.assertEqual(review_parts_repair.requires_parts(records, self.artifacts,
+                dict(assignment, route_id=route_id), route, packet, prompt, [], 'assignment-bar-a'),
+                required)
+
+class BarRepairCase(StrategyCase):
+    """A recorded bar, exposed for a repair. A class may give its route a capacity probe of route_input_tokens
+    and leave the repair route without its probe."""
     expose = repair_fixtures.ContextRepairIntegrationTests.expose
     repair_payload = repair_fixtures.ContextRepairIntegrationTests.repair_payload
     final_response = repair_fixtures.ContextRepairIntegrationTests.final_response
+    route_input_tokens = None
+    probe_repair_route = True
 
     def setUp(self):
+        if self.route_input_tokens is not None:
+            self.capacity_probe_tokens = 128000 + self.route_input_tokens
         super().setUp()
         self.setup_dossier()
         record_codex_route(self, output_tokens=128000)
@@ -146,7 +176,8 @@ class BarRepairJourneyTests(StrategyCase):
         self.mutate(decisions.record_value_review, dict(self.original, id='bar-a', dossier_id='dossier-1',
                                                        assignment_id=assignment['id']))
         self.expose()
-        probe_codex_route(self, 'repair-probe')
+        if self.probe_repair_route:
+            probe_codex_route(self, 'repair-probe')
 
     def assign_repair(self, identifier='repair-a'):
         payload = self.repair_payload()
@@ -156,6 +187,8 @@ class BarRepairJourneyTests(StrategyCase):
     def packet(self, assignment):
         return json.loads(self.artifacts.read(assignment['packet']))
 
+
+class BarRepairJourneyTests(BarRepairCase):
     def test_fitting_bar_repair_stays_ordinary(self):
         assignment = self.assign_repair()
         self.assertNotIn(parts.KEY, self.packet(assignment))
@@ -310,6 +343,76 @@ class BarRepairJourneyTests(StrategyCase):
                                                        assignment_id=assignment['id']))
         self.assertTrue(parts.verify_series(self.store.snapshot()['records'], self.artifacts, assignment['id'])['complete'])
 
+
+
+class OrdinaryRepairSuccessorTests(BarRepairCase):
+    route_input_tokens = 165000
+
+    def test_an_ordinary_repair_successor_keeps_its_form(self):
+        from research_harness import review_parts_v3, review_route_capacity
+
+        first = self.assign_repair()
+        self.assertNotIn(parts.KEY, first)
+        output = self.review_response('bar', status='unresolved')
+        output['source_requests'] = [dict(id='page', kind='inventory_page', page=0)]
+        output['value']['reason'] = 'x' * 160000
+        invoke_codex(self, first['id'], output)
+        payload = dict(self.repair_payload(), id='ordinary-child', context=dict(prior_assignment_id=first['id']))
+        with patch.object(parts, 'NEW_SERIES_PROTOCOLS', (review_parts_v3.PROTOCOL, parts.PROTOCOL)), \
+                patch.object(review_parts_v3, 'prepare_packet', wraps=review_parts_v3.prepare_packet) as plan_v3, \
+                patch.object(parts, 'plan_turn', wraps=parts.plan_turn) as plan_v2, \
+                patch.object(review_route_capacity, 'require_covered_assignment',
+                             wraps=review_route_capacity.require_covered_assignment) as admit:
+            with self.assertRaises(ResearchError) as caught:
+                self.mutate(protocol.record_assignment, payload)
+        self.assertNotIn(first['id'], [call.args[2]['context'].get('prior_assignment_id')
+                                       for call in plan_v3.call_args_list])
+        self.assertNotIn('ordinary-child', [call.kwargs['series_id'] for call in plan_v2.call_args_list])
+        packet = admit.call_args.args[3]
+        self.assertNotIn(parts.KEY, packet)
+        self.assertEqual(packet['continuation']['assignment_id'], first['id'])
+        self.assertEqual(caught.exception.code, 'review_route_capacity_below_floor')
+        self.assertEqual(caught.exception.details['reason'], 'no_parts_delivery')
+        self.assertGreater(caught.exception.details['measure']['tokens_upper'],
+                           caught.exception.details['measure']['token_limit'])
+
+
+class FreshRepairStartTests(BarRepairCase):
+    probe_repair_route = False
+
+    def test_a_fresh_repair_refused_by_v3_reaches_v2_only_through_the_coverage_check(self):
+        """A repair of a head that is no recorded v3 series and that v3 refuses is planned by the parts protocol v2,
+        and the coverage check of the assignment takes the plan: a first read that the route cannot carry is not
+        recorded, and the repair ends in the capacity stop with its answers (finding PL-F8 of the review of the
+        merged tree; the decision of the table replaces the earlier rule that such a repair stops with the floor of
+        v3)."""
+        from research_harness import review_parts_v3
+
+        self.capacity_probe_tokens = 128000 + 15000
+        record_codex_route(self, 'small', output_tokens=128000, model='small')
+        payload = dict(self.repair_payload(), route_id='small')
+        payload['context']['context_repair']['probe_id'] = 'probe-small'
+        outcomes = []
+        original = review_parts_v3.admit_packet
+
+        def admit(records, artifacts, route, packet, adapter, **options):
+            outcome = original(records, artifacts, route, packet, adapter, **options)
+            outcomes.append((route['id'], adapter, outcome))
+            return outcome
+
+        with patch.object(parts, 'NEW_SERIES_PROTOCOLS', (review_parts_v3.PROTOCOL, parts.PROTOCOL)), \
+                patch.object(review_parts_v3, 'admit_packet', side_effect=admit), \
+                patch.object(parts, 'plan_turn', wraps=parts.plan_turn) as plan_v2:
+            with self.assertRaises(ResearchError) as caught:
+                self.mutate(protocol.record_assignment, payload)
+        self.assertEqual(caught.exception.code, 'review_route_capacity_below_floor')
+        self.assertEqual([(route, adapter, outcome['state']) for route, adapter, outcome in outcomes],
+                         [('small', 'context_repair', 'refuse')])
+        self.assertEqual(caught.exception.details['reason'], 'no_parts_delivery')
+        self.assertEqual([answer['answer'] for answer in caught.exception.details['then']],
+                         ['Probe this route', 'Reassess the retained review'])
+        self.assertEqual(plan_v2.call_count, 1)
+        self.assertNotIn(payload['id'], self.store.snapshot()['records']['review_assignment'])
 
 class AdjudicatorRepairJourneyTests(StrategyCase):
     def prepare_adjudicator_repair(self, *, staged):

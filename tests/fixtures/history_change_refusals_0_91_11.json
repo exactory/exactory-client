@@ -1,0 +1,649 @@
+{
+  "source": "research_harness/storage.py of 0.91.11 (commit 883a2a09), the release before rules HR1 to HR3; each outcome is the code and message of the refusal of one change at one position of one use",
+  "outcomes": {
+    "before the use": {
+      "event at revision 0, no receipt": {
+        "Store.revision": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.snapshot": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.committed_request": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        }
+      },
+      "event at revision -7, no receipt": {
+        "Store.revision": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.snapshot": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.committed_request": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        }
+      },
+      "event at revision 0 that writes a record, no receipt": {
+        "Store.revision": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.snapshot": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.committed_request": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        }
+      },
+      "event at revision 0 with a receipt": {
+        "Store.revision": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.snapshot": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.committed_request": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        }
+      },
+      "event at revision 4, metadata kept": {
+        "Store.revision": {
+          "code": "corrupt_state",
+          "message": "Research event digest does not match its original values"
+        },
+        "Store.snapshot": {
+          "code": "corrupt_state",
+          "message": "Research event digest does not match its original values"
+        },
+        "Store.committed_request": {
+          "code": "corrupt_state",
+          "message": "Research event digest does not match its original values"
+        },
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research event digest does not match its original values"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research event digest does not match its original values"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event digest does not match its original values"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event digest does not match its original values"
+        }
+      },
+      "record value as BLOB, same bytes": {
+        "Store.revision": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.snapshot": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.committed_request": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        }
+      },
+      "event payload as BLOB, same bytes": {
+        "Store.revision": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.snapshot": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.committed_request": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        }
+      },
+      "event changes as BLOB, same bytes": {
+        "Store.revision": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.snapshot": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.committed_request": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        }
+      },
+      "receipt digest as BLOB": {
+        "Store.revision": {
+          "code": "corrupt_state",
+          "message": "Research request receipt does not match its original event"
+        },
+        "Store.snapshot": {
+          "code": "corrupt_state",
+          "message": "Research request receipt does not match its original event"
+        },
+        "Store.committed_request": {
+          "code": "corrupt_state",
+          "message": "Research request receipt does not match its original event"
+        },
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research request receipt does not match its original event"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research request receipt does not match its original event"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research request receipt does not match its original event"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research request receipt does not match its original event"
+        }
+      },
+      "extra receipt": {
+        "Store.revision": {
+          "code": "corrupt_state",
+          "message": "Research revision, events, and receipts disagree"
+        },
+        "Store.snapshot": {
+          "code": "corrupt_state",
+          "message": "Research revision, events, and receipts disagree"
+        },
+        "Store.committed_request": {
+          "code": "corrupt_state",
+          "message": "Research revision, events, and receipts disagree"
+        },
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research revision, events, and receipts disagree"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research revision, events, and receipts disagree"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research revision, events, and receipts disagree"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research revision, events, and receipts disagree"
+        }
+      },
+      "added index": {
+        "Store.revision": {
+          "code": "corrupt_state",
+          "message": "Research database schema or history guards were changed"
+        },
+        "Store.snapshot": {
+          "code": "corrupt_state",
+          "message": "Research database schema or history guards were changed"
+        },
+        "Store.committed_request": {
+          "code": "corrupt_state",
+          "message": "Research database schema or history guards were changed"
+        },
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research database schema or history guards were changed"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research database schema or history guards were changed"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research database schema or history guards were changed"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research database schema or history guards were changed"
+        }
+      }
+    },
+    "between the read and the write": {
+      "event at revision 0, no receipt": {
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        }
+      },
+      "event at revision -7, no receipt": {
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        }
+      },
+      "event at revision 0 that writes a record, no receipt": {
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        }
+      },
+      "event at revision 0 with a receipt": {
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        }
+      },
+      "event at revision 4, metadata kept": {
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event digest does not match its original values"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event digest does not match its original values"
+        }
+      },
+      "record value as BLOB, same bytes": {
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        }
+      },
+      "event payload as BLOB, same bytes": {
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        }
+      },
+      "event changes as BLOB, same bytes": {
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        }
+      },
+      "receipt digest as BLOB": {
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research request receipt does not match its original event"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research request receipt does not match its original event"
+        }
+      },
+      "extra receipt": {
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research revision, events, and receipts disagree"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research revision, events, and receipts disagree"
+        }
+      },
+      "added index": {
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research database schema or history guards were changed"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research database schema or history guards were changed"
+        }
+      }
+    },
+    "just before the write lock": {
+      "event at revision 0, no receipt": {
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        }
+      },
+      "event at revision -7, no receipt": {
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        }
+      },
+      "event at revision 0 that writes a record, no receipt": {
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        }
+      },
+      "event at revision 0 with a receipt": {
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event revisions are not contiguous"
+        }
+      },
+      "event at revision 4, metadata kept": {
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research event digest does not match its original values"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research event digest does not match its original values"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research event digest does not match its original values"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research event digest does not match its original values"
+        }
+      },
+      "record value as BLOB, same bytes": {
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        }
+      },
+      "event payload as BLOB, same bytes": {
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        }
+      },
+      "event changes as BLOB, same bytes": {
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Stored JSON is not canonical or has the wrong type"
+        }
+      },
+      "receipt digest as BLOB": {
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research request receipt does not match its original event"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research request receipt does not match its original event"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research request receipt does not match its original event"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research request receipt does not match its original event"
+        }
+      },
+      "extra receipt": {
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research revision, events, and receipts disagree"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research revision, events, and receipts disagree"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research revision, events, and receipts disagree"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research revision, events, and receipts disagree"
+        }
+      },
+      "added index": {
+        "Store.mutate": {
+          "code": "corrupt_state",
+          "message": "Research database schema or history guards were changed"
+        },
+        "Store.mutate_serialized": {
+          "code": "corrupt_state",
+          "message": "Research database schema or history guards were changed"
+        },
+        "prepared write": {
+          "code": "corrupt_state",
+          "message": "Research database schema or history guards were changed"
+        },
+        "scoped write": {
+          "code": "corrupt_state",
+          "message": "Research database schema or history guards were changed"
+        }
+      }
+    }
+  }
+}

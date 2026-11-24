@@ -18,13 +18,15 @@ def _require(condition, message):
 def validate_transition(records, artifacts, previous_assignment, new_route, new_request_context):
     """Preserve exact scientific identity and the complete authenticated previous exchange."""
     from . import review_protocol, review_transport, review_source_complete, review_context_repair
+    from .review_codex_transport import read_route_effort
     prior, context = previous_assignment, new_request_context
     old_route = records.get('review_route', {}).get(prior['route_id'])
     _require(old_route is not None and old_route['adapter'] == 'codex_cli_v1'
              and new_route['adapter'] == 'codex_cli_visual_v1'
              and old_route['endpoint'] == new_route['endpoint'] == 'codex://local'
              and old_route['model'] == new_route['model']
-             and prior['route_id'] != new_route['id'], 'Only the same exact model may add native visual input')
+             and read_route_effort(old_route) == read_route_effort(new_route)
+             and prior['route_id'] != new_route['id'], 'Only the same exact model at the same effort can add native visual input')
     _require(prior['role'] == context['role'] == 'result' and prior.get('subject') == context['subject']
              and context['subject'].get('kind') == 'problem'
              and context['slot_id'] == review_context_repair.slot_id(records, prior)

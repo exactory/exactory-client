@@ -148,6 +148,7 @@ def bind_verdict(store, payload, *, expected_revision, request_id):
         artifacts = Evaluation(records, store.build_artifact_store())
         fields(value, ("id", "task_digest", "body", "assessment"))
         text(value["id"], "Verdict assessment ID")
+        text(value["task_digest"], "Verification task digest")
         task = records.get("verification_task", {}).get(value["task_digest"])
         if task is None:
             raise ResearchError("verification_task_required", "Acquire and bind the task-only server target first")
@@ -185,6 +186,8 @@ def bind_verdict(store, payload, *, expected_revision, request_id):
         assessment = value["assessment"]
         fields(assessment, ("assessor", "provenance", "independence_basis", "blind", "checks"), ("assignment_id",))
         text(assessment["assessor"], "Verifier identity")
+        if assessment.get("assignment_id") is not None:
+            text(assessment["assignment_id"], "Verifier assignment ID")
         text(assessment["independence_basis"], "Independent verification basis")
         artifacts.read(assessment["provenance"])
         if assessment["blind"] is not True:

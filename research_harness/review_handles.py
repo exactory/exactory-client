@@ -31,27 +31,36 @@ from .storage import _canonical
 
 
 HANDLE_TABLE = 'handle_table'
+PAGE_FORMULATIONS = 'page_formulations'
+GROUND_REFERENCE_PREFIXES = ('g', 'h', 'n', 'm')
 # A protocol builder can supply the openness minimum that an approval of its packet records (decision 25).
 SUPPLIED_MINIMUM = 'supplied_minimum'
 EXPANSION_PROTOCOL = 'exactory-review-handle-expansion-v1'
 MATERIAL_PART_LIMIT = 8
 INVALID_REFERENCE_HANDLE_MESSAGE = (
-    'A citation of this answer is not valid; details.path names its place. A citation is {ref}, or {ref,start,end} '
-    'for a span, each with an optional part. ref is a handle of handle_table in this packet. part is a positive '
-    'integer that names a delivered part of a split unit. start and end are integer character offsets in the text '
-    'that this packet delivers for that handle or part, with 0 <= start < end <= the length of that text, and '
-    'only a handle of a source takes a span. Correct the citation.'
+    'A citation of this answer is not valid; path names its place, and details.ref gives the handle as the answer '
+    'wrote it. A citation is {ref}, or {ref,start,end} for a span, each with an optional part. ref is a handle '
+    'that this chain, session or series has shown to you. part is a positive integer that names a delivered part '
+    'of a split unit: the number that its delivery states, or, where a delivery states no number, the position of '
+    'that delivery among the deliveries of the unit, counted from 1. start and end are integer character offsets '
+    'in the text of that handle, or of that part, with 0 <= start < end <= the length of that text; the '
+    'instructions of this turn state which handles take a span. In the refs of a ground of an openness finding, a '
+    'citation is {ref} alone, with a g, h, n or m handle, and in a chain over unread ranges also a u or x handle. '
+    'Correct the citation.'
 )
 MATERIAL_READING_TURN_MESSAGE = (
-    'A part of an argument is accepted only as the answer of a final turn, and this is a reading turn. Return '
-    'the reading response of this turn, and put the outline of the argument into your notes. The final turn '
-    'takes the argument.')
+    'A part of an argument is accepted only in a turn of the final: a final turn, a page turn or the closing turn. '
+    'This turn is none of them. Return the answer that the instructions of this turn state. Where that answer '
+    'holds notes, put the outline of the argument into them. A turn of the final takes the argument.')
 INVALID_MATERIAL_MESSAGE = (
-    'The answer is not the part of an argument that this turn expects. Return {stage:"material",title,part,text,more}. '
-    'part is the next part number, which starts at 1, and a later part keeps the title of the first part. text has '
-    'at most the characters of the answer bound of this turn. more is true while a part follows and false in the '
-    'last part, and an argument has at most eight parts. While material_state.pending names an argument, the answer '
-    'of the turn is its next part.'
+    'The answer is not the part of an argument that this turn expects; path names the member that failed, and it '
+    'is empty for the part as a whole. A part is exactly {stage:"material",title,part,text,more}. title has at most '
+    '120 characters, and a later part keeps the title of the first part. part is the next part number, which '
+    'starts at 1; details.expected_part gives it where the check compared it. text has at most the characters of '
+    'the answer bound of this turn, which details.answer_bound gives there. more is true while a part follows and '
+    'false in the last part, and an argument has at most eight parts. While a part is due, the turn shows '
+    'material_request, or review_parts_material_request in a series of the parts protocol, with the title and '
+    'the number of that part. The answer of the turn is then that part, and details.pending names its argument.'
 )
 
 
@@ -182,6 +191,7 @@ def _validate_v7_refs(packet, output, *, raw):
         elif isinstance(output.get('targets'), list):
             located = [('/targets/%d/grounds' % index, target.get('grounds'))
                        for index, target in enumerate(output['targets']) if isinstance(target, dict)]
+    prefixes = GROUND_REFERENCE_PREFIXES + (('u', 'x') if packet['reading_final'].get('unread') else ())
     for place, grounds in located:
         for ground_index, ground in enumerate(grounds if isinstance(grounds, list) else []):
             references = ground.get('refs') if isinstance(ground, dict) else None
@@ -192,14 +202,47 @@ def _validate_v7_refs(packet, output, *, raw):
                     continue  # Already expanded authenticated output.
                 handle = reference.get('ref') if isinstance(reference, dict) else None
                 if (not isinstance(reference, dict) or set(reference) != {'ref'}
-                        or not isinstance(handle, str) or handle[:1] not in (
-                            ('g', 'h', 'n', 'm', 'u', 'x') if packet['reading_final'].get('unread')
-                            else ('g', 'h', 'n', 'm'))):
+                        or not isinstance(handle, str) or handle[:1] not in prefixes):
                     _refuse_handle('%s/%d/refs/%d' % (place, ground_index, reference_index), handle)
 
 
-def expand_handles(packet, output, *, artifacts=None, assignment=None, raw=False):
+def _expand_page_formulations(packet, output):
+    """Expand target citations only in a finding page's named gap formulations."""
+    formulations = packet.get(PAGE_FORMULATIONS)
+    targets = output.get('targets') if isinstance(output, dict) else None
+    if not formulations or not isinstance(targets, list):
+        return output, 0
+    expanded, references = list(targets), 0
+    for row_index, row in enumerate(targets):
+        if not isinstance(row, dict) or not isinstance(row.get('grounds'), list):
+            continue
+        grounds = list(row['grounds'])
+        for ground_index, ground in enumerate(grounds):
+            if not isinstance(ground, dict) or ground.get('kind') != 'reviewer_gap':
+                continue
+            citation = ground.get('formulation')
+            if not isinstance(citation, dict) or 'ref' not in citation:
+                continue
+            handle = citation['ref']
+            if set(citation) != {'ref'} or not isinstance(handle, str) or handle not in formulations:
+                _refuse_handle('/targets/%d/grounds/%d/formulation' % (row_index, ground_index), handle)
+            grounds[ground_index] = dict(ground, formulation=formulations[handle])
+            references += 1
+        expanded[row_index] = dict(row, grounds=grounds)
+    return dict(output, targets=expanded), references
+
+
+def _expand_answer(packet, output, artifacts):
+    output, formulations = _expand_page_formulations(packet, output)
+    expanded, references = _expand_value(packet[HANDLE_TABLE], output, '', artifacts)
+    return _supply_minimum(packet, expanded), formulations + references
+
+
+def expand_handles(packet, output, *, artifacts=None, assignment=None, raw=False, expanded=False):
     """Expand citations before role validation, preserving legacy outputs exactly."""
+    if 'session_final' in packet:
+        from .review_session_v4 import require_single_final_members
+        require_single_final_members(packet, output)
     packet = _resolve_packet(packet, artifacts, assignment)
     if HANDLE_TABLE not in packet:
         return output
@@ -208,18 +251,28 @@ def expand_handles(packet, output, *, artifacts=None, assignment=None, raw=False
         if packet.get('material_state', {}).get('pending') and not is_material_output(packet, output):
             raise ResearchError('invalid_review_material', INVALID_MATERIAL_MESSAGE,
                                 {'path': '/stage', 'pending': packet['material_state']['pending']})
-        return _supply_minimum(packet, _expand_value(packet[HANDLE_TABLE], output, '', artifacts)[0])
+        if expanded:
+            return output
+        return _expand_answer(packet, output, artifacts)[0]
+
+
+def expand_observed_output(packet, output, attempt, *, artifacts, assignment):
+    """Use the capture's certified expansion, or resolve its retained written answer."""
+    expanded = 'handle_expansion' in attempt
+    return expand_handles(packet, output, artifacts=artifacts, assignment=assignment, raw=not expanded, expanded=expanded)
 
 
 def describe_expansion(packet, output, response, *, artifacts=None, assignment=None):
     """Bind expanded native citations to the exact provider answer text."""
+    if 'session_final' in packet:
+        from .review_session_v4 import require_single_final_members
+        require_single_final_members(packet, output)
     packet = _resolve_packet(packet, artifacts, assignment)
     if HANDLE_TABLE not in packet:
         return output, None
     with contract_check('review.shape'):
         _validate_v7_refs(packet, output, raw=True)
-        expanded, count = _expand_value(packet[HANDLE_TABLE], output, '', artifacts)
-        expanded = _supply_minimum(packet, expanded)
+        expanded, count = _expand_answer(packet, output, artifacts)
     answer = extract_answer_text(response)
     certificate = dict(protocol=EXPANSION_PROTOCOL, references=count,
                        answer_sha256=hashlib.sha256(answer.encode('utf-8')).hexdigest(),
@@ -238,10 +291,10 @@ def record_handle_output(packet, observation, artifacts, *, assignment=None):
         expanded, certificate = describe_expansion(packet, output, _read_json(artifacts, observation['response']),
                                                   artifacts=artifacts, assignment=assignment)
     except ResearchError as error:
-        if error.code != 'invalid_reference_handle':
+        if error.code not in ('invalid_reference_handle', 'invalid_review_session_turn'):
             raise
         # Keep the raw answer so authentication and the retry path can repeat
-        # its shape refusal without losing the completed provider call.
+        # its shape or form refusal without losing the completed provider call.
         return observation
     result = dict(observation, output=_put_json(artifacts, expanded), handle_expansion=certificate)
     if is_material_output(packet, expanded):
@@ -265,7 +318,7 @@ def derive_expanded_output(packet, observation, response, *, artifacts=None, ass
     except ResearchError as error:
         # A refused raw answer still has authentic provenance. Its contract
         # check must be able to repeat the refusal rather than lose the call.
-        if error.code == 'invalid_reference_handle' and 'handle_expansion' not in observation:
+        if error.code in ('invalid_reference_handle', 'invalid_review_session_turn') and 'handle_expansion' not in observation:
             if digest(raw) != digest(observation['output']):
                 raise ResearchError('review_invocation_unverified', 'The refused handle answer must match the original response.')
             return raw

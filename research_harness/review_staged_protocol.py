@@ -18,7 +18,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .finishing import retry_store_write
 from .graph import obligation
-from .operations import _read_preparation, fields, immutable_record, prepared_mutation, text
+from .operations import _read_preparation, fields, find_record, immutable_record, prepared_mutation, text
 from .storage import _canonical, read_epoch_tasks
 
 
@@ -32,22 +32,50 @@ CAPTURE_INELIGIBILITY_CODES = frozenset((
 class _GuardReviewStarts:
     """Check prospective staged admissions inside their serialized writes."""
 
-    def __init__(self, store, assignment_id):
+    def __init__(self, store, records, assignment):
         self._store = store
-        self._assignment_id = assignment_id
+        self._records = records
+        self._assignment = assignment
+        self._assignment_id = assignment['id']
 
     def __getattr__(self, name):
         return getattr(self._store, name)
 
     def mutate_scoped(self, operation, payload, apply, **identity):
+        exposed = controller_id = None
+        if operation in ('review.task_reserve', 'review.worker_claim'):
+            # The exposure is read from the records of the preparation, outside the write.
+            exposed = {turn['id'] for turn in protocol.list_review_turns(self._records, self._assignment)}
+            controller_id = self._assignment['staged_review'].get('controller_assignment_id', self._assignment_id)
+
         def commit(transaction, revision):
             from .problem_delivery import require_unposted_review
             from .review_task_execution import _TransactionRecords
             records = _TransactionRecords(transaction)
             assignment = protocol._get(records, 'review_assignment', self._assignment_id)
             require_unposted_review(records, assignment, self._store.build_artifact_store())
+            if exposed is not None:
+                for event in records.get('review_context_event', {}).values():
+                    if event['kind'] != 'contamination':
+                        continue
+                    identifier = event['assignment_id']
+                    # A task recorded since preparation is also part of this controller's exposure.
+                    named = records['review_assignment'].get(identifier, {})
+                    binding = named.get('staged_review', {})
+                    if identifier in exposed or binding.get('controller_assignment_id') == controller_id:
+                        raise ResearchError('review_context_contaminated', protocol.CONTEXT_CONTAMINATED_MSG)
             return apply(transaction, revision)
         return self._store.mutate_scoped(operation, payload, commit, **identity)
+
+
+def _refuse_guarded_start(store, assignment_id):
+    """Complete a serialized event refusal outside the write with the current turn and plan."""
+    records = retry_store_write(store.snapshot, codes=('store_busy',))['records']
+    artifacts = store.build_artifact_store()
+    assignment = protocol._get(records, 'review_assignment', assignment_id)
+    lost = protocol.find_unverified_context(records, artifacts, assignment)
+    if lost is not None:
+        protocol.refuse_unverified_context(records, artifacts, assignment, lost)
 
 
 def collect_output_records(observations, names):
@@ -1149,7 +1177,7 @@ def prepare_child(records, artifacts, value, revision):
     from .problem_delivery import require_unposted_review
     require_unposted_review(records, controller, artifacts)
     epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
-    planned = records.get('review_task', {}).get(value['context']['task_id'])
+    planned = find_record(records, 'review_task', value['context']['task_id'])
     changes = []
     composition_plan = value['context'].get('composition_plan')
     if composition_plan is not None:
@@ -1448,11 +1476,23 @@ def invoke_task(store, payload, *, expected_revision, request_id):
     prepared_task_mutation(store, 'review.task_dispatch', payload, prepare_dispatch,
                            request_id=request_id + ':dispatch', expected_revision=expected_revision)
     if reservation is None or retryable:
+        def reserve(waiting):
+            current_records, current = records, assignment
+            if waiting:
+                current_records = _read_preparation(store).records
+                current = protocol._get(current_records, 'review_assignment', assignment['id'])
+                artifacts = store.build_artifact_store()
+                require_unposted_review(current_records, current, artifacts)
+                protocol.require_verified_assignment(current_records, artifacts, current)
+            return execution.reserve_task(_GuardReviewStarts(store, current_records, current),
+                                          plan, request_id=request_id + ':reserve')
+
         try:
             from .review_call_admission import wait_for_admission
-            reserved = wait_for_admission(store, lambda waiting: execution.reserve_task(
-                _GuardReviewStarts(store, assignment['id']), plan, request_id=request_id + ':reserve'))
+            reserved = wait_for_admission(store, reserve)
         except ResearchError as error:
+            if error.code == 'review_context_contaminated' and not error.details:
+                _refuse_guarded_start(store, assignment['id'])
             if error.code not in ('assessment_incomplete', 'review_task_exhausted'):
                 raise
             def prepare_exhaustion(current_records, value):
@@ -1571,7 +1611,14 @@ def wait_for_capture(store, route, reservation, request_id):
         epoch = protocol._get(snapshot['records'], 'review_epoch', reservation['epoch_id'])
         controller = protocol._get(snapshot['records'], 'review_assignment', epoch['controller_assignment_id'])
         require_unposted_review(snapshot['records'], controller, store.build_artifact_store())
-        process = review_worker.launch_worker(_GuardReviewStarts(store, controller['id']), reservation['id'])
+        try:
+            process = review_worker.launch_worker(
+                _GuardReviewStarts(store, snapshot['records'], controller), reservation['id'])
+        except ResearchError as error:
+            if error.code == 'review_context_contaminated' and not error.details:
+                finish_worker(store, reservation['id'], None, request_id)
+                _refuse_guarded_start(store, controller['id'])
+            raise
     deadline = time.monotonic() + route['configuration']['timeout_seconds'] + 15
     while True:
         snapshot = review_worker.read_polling_store(store.snapshot)

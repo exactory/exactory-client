@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Run and verify exhaustive partitions of ordinary unittest discovery, run the tests of named modules that one
 shard holds, and run named test modules. The commands run, run-group and run-modules install the reviewer program
-guard (ci/reviewer_program_guard.py) before a test module loads, record the wall time and the processor time of
-each test, and print the wall time and the processor time of the command. Their result also names the evidence tests
-that the guard tests of the process required (ci/evidence_tests.py). The command run compares its wall time with the
-shard budget of ci/budgets.json. The command verify requires, for each Python version, that the run executed each
-test once and that each evidence test that a shard named ran and passed in a shard of the same run."""
+guard (ci/reviewer_program_guard.py) before a test module loads, measure the wall time and the processor time of
+each test, and print a summary with the wall time and the processor time of the command and the ten slowest tests.
+The commands run and run-group write a result file, which holds the time of every test and names the evidence tests
+that the guard tests of the process required (ci/evidence_tests.py); run-modules writes no file. The command run
+compares its wall time with the shard budget of ci/budgets.json. The command verify requires, for each Python
+version, that the run executed each test once and that each evidence test that a shard named ran and passed in a
+shard of the same run."""
 import argparse
 import hashlib
 import json

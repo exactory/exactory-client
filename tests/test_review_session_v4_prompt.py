@@ -32,7 +32,7 @@ class RolePromptRenderTests(unittest.TestCase):
     def test_every_turn_starts_with_its_role_base_without_the_texts_of_other_rule_sets(self):
         common = protocol._select_common_prompt(protocol.COMMON_VERSION)
         for orchestration in ('problem_creation', None):
-            templates = protocol._PROBLEM_PROMPTS if orchestration else protocol._ROLE_PROMPTS
+            templates = protocol._PROBLEM_PROMPTS_V5 if orchestration else protocol._ROLE_PROMPTS
             for role in ROLES:
                 for suffix in (None, repair.PROMPT, repair.EXHAUSTION_PROMPT_V1):
                     _, base = session.build_base_prompt(role, orchestration, repair_suffix=suffix)
@@ -52,7 +52,7 @@ class RolePromptRenderTests(unittest.TestCase):
 
     def test_problem_bar_final_holds_its_template_and_response_and_study_bar_final_its_own(self):
         problem = session.build_turn_prompt('bar', 'final', {}, orchestration='problem_creation')['text']
-        self.assertIn(protocol._PROBLEM_PROMPTS['bar'], problem)
+        self.assertIn(protocol._PROBLEM_BAR_PROMPT_V5, problem)
         self.assertIn(protocol._PROBLEM_BAR_EXAMPLE, problem)
         study = session.build_turn_prompt('bar', 'final', {}, orchestration=None)['text']
         self.assertIn(protocol._ROLE_PROMPTS['bar'], study)
@@ -64,7 +64,11 @@ class RolePromptRenderTests(unittest.TestCase):
                 study = session.build_turn_prompt(role, kind, {}, orchestration=None)['text']
                 problem = session.build_turn_prompt(role, kind, {}, orchestration='problem_creation')['text']
                 self.assertEqual(session.STUDY_FORMS_PROMPT in study, kind in ('final', 'page', 'closing'))
+                # Decision 1 of the text application: the forms of the evidence of a check, in the final and the
+                # page of a study result alone.
+                self.assertEqual(session.STUDY_SUPPORT_FORMS_PROMPT in study, role == 'result' and kind in ('final', 'page'))
                 self.assertNotIn(session.STUDY_EVIDENCE_FORMS_PROMPT, problem)
+                self.assertNotIn(session.STUDY_SUPPORT_FORMS_PROMPT, problem)
                 self.assertNotIn(session.STUDY_HANDLE_PROMPT, problem)
 
     def test_s3_study_series_final_holds_the_forms_and_a_v2_series_final_keeps_its_bytes(self):
@@ -76,6 +80,8 @@ class RolePromptRenderTests(unittest.TestCase):
                     binding['final_form'] = form
                 text = protocol.canonical_prompt(role, review_parts=binding, **options)['text']
                 self.assertIn(session.STUDY_FORMS_PROMPT.lstrip(), text, (adapter, form))
+                self.assertEqual(session.STUDY_FORMS_PROMPT.lstrip() + session.STUDY_SUPPORT_FORMS_PROMPT in text,
+                                 role == 'result' and form != 'closing', (adapter, form))
             read = dict(adapter=adapter, kind='read', protocol='exactory-review-parts-v3', capacity=capacity_binding)
             self.assertNotIn(session.STUDY_EVIDENCE_FORMS_PROMPT, protocol.canonical_prompt(role, review_parts=read, **options)['text'])
         problem = dict(adapter='problem_result', kind='final', protocol='exactory-review-parts-v3', capacity=capacity_binding)
@@ -256,9 +262,10 @@ class StudySeriesBelowFloorTests(unittest.TestCase):
         from development_fixtures import DevelopmentCase
         case = study_fixtures.ReadinessPartsTests()
         self.addCleanup(case.doCleanups)
-        # The probe of the route observes 255,000 input tokens, 127,000 after the output reserve: below the floor of
-        # a v4 request turn of this packet and above that of a parts v3 turn.
-        with patch.object(DevelopmentCase, 'capacity_probe_tokens', 255000, create=True):
+        # The probe of the route observes 300,000 input tokens, 172,000 after the output reserve: below the floor of
+        # a v4 request turn of this packet (175,654) and above that of a parts v3 series whose admission charges the
+        # prompt of each turn and the target table.
+        with patch.object(DevelopmentCase, 'capacity_probe_tokens', 300000, create=True):
             case.setUp()
         case.enlarge_readiness()
         with patch.object(protocol, 'NEW_SESSION_RULES', (session.PROTOCOL, bar_sources.PROTOCOL_V3)), \
@@ -268,6 +275,34 @@ class StudySeriesBelowFloorTests(unittest.TestCase):
         self.assertNotIn('session_chain', first)
         self.assertEqual({key: first[parts.KEY][key] for key in ('protocol', 'adapter', 'kind', 'series_assignment_id')},
                          dict(protocol=parts_v3.PROTOCOL, adapter='study_readiness', kind='read', series_assignment_id='first'))
+
+
+    def test_v5_new_study_result_below_both_floors_stops_with_a_probe_that_the_store_takes(self):
+        """The route of 255,000 probe tokens (127,000 after the output reserve) is below the floor of a v4 request turn
+        (214,360) and below the charged floor of the final of a v3 series (128,015): the assignment stops with the
+        capacity stop, its one step is a probe of the route that the store takes, and on the probed route the
+        assignment then records a chain of the session rules v4."""
+        import test_review_parts_study as study_fixtures
+        from development_fixtures import DevelopmentCase
+        from test_slate_series_start_regressions import record_asked_probe
+        case = study_fixtures.ReadinessPartsTests()
+        self.addCleanup(case.doCleanups)
+        with patch.object(DevelopmentCase, 'capacity_probe_tokens', 255000, create=True):
+            case.setUp()
+        case.enlarge_readiness()
+        with patch.object(protocol, 'NEW_SESSION_RULES', (session.PROTOCOL, bar_sources.PROTOCOL_V3)), \
+                patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts_v3.PROTOCOL, parts.PROTOCOL)):
+            with self.assertRaises(ResearchError) as stopped:
+                case.assign()
+            error = stopped.exception
+            self.assertEqual((error.code, error.details['reason']), ('review_route_capacity_below_floor', 'no_parts_delivery'))
+            [step] = [step for answer in error.details['then'] for step in answer['steps']]
+            self.assertEqual(step['command'], 'review-probe')
+            probe = record_asked_probe(case.case, dict(step['payload'], id='answer-probe'))
+            self.assertTrue(probe['capacity_verified'])
+            first = case.assign()
+        self.assertIn('session_chain', first)
+        self.assertNotIn(parts.KEY, first)
 
 
 class StudyBarFormsTests(StrategyCase):

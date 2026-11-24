@@ -406,13 +406,14 @@ class CapacityEvidenceTests(unittest.TestCase):
             self.assertEqual(capacity.describe_route_capacity(route)['input_tokens']['value'], 0)
 
     def test_first_probe_hint_requires_verified_evidence_under_another_key(self):
-        route = dict(build_route('codex_cli_v1', 'unlisted', output=8000), runtime=build_capacity_runtime('codex_cli_v1', **dict(version='current')))
+        route = dict(build_route('openai_responses_v1', 'unlisted', output=8000),
+                     runtime=build_capacity_runtime('openai_responses_v1', implementation_sha256='c' * 64))
         own = build_capacity_prior(route, 200000)
         records = dict(review_route={'route': route})
         for prior in (own, dict(own, key=None)):
             with self.subTest(prior=prior), patch.object(capacity_evidence, 'CAPACITY_PRIORS', (prior,)):
                 self.assertEqual(capacity.select_capacity_probe_size(records, route, 60000), 150000)
-        earlier = dict(route, id='earlier', runtime=build_capacity_runtime(route['adapter'], **dict(version='earlier')))
+        earlier = dict(route, id='earlier', runtime=build_capacity_runtime(route['adapter'], implementation_sha256='d' * 64))
         records['review_route']['earlier'] = earlier
         records['review_assignment'] = dict(head=dict(route_id='earlier'))
         sample = dict(id='accepted', assignment_id='head', origin='instrumented',
@@ -457,7 +458,105 @@ class CapacityEvidenceTests(unittest.TestCase):
         profile = capacity.read_output_profile(records, route)
         self.assertEqual(capacity.describe_route_capacity(route, profile, records=records)['input_tokens']['value'], 17000)
 
+    def test_first_capacity_probe_under_the_byte_measure_is_the_character_limit_of_the_transport(self):
+        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 40000):
+            route = build_route('codex_cli_v1', 'unlisted', output=8000)
+            records = dict(review_route={'route': route})
+            report = capacity.describe_route_capacity(route, records=records)
+            self.assertEqual((report['request_measure'], report['input_tokens']['source']), ('bytes', 'observed'))
+            self.assertEqual(report['capacity_evidence']['probe_input_tokens'], 40000)
+            self.assertEqual(capacity.select_capacity_probe_size(records, route, 60000), 40000)
+            for other in (build_route('codex_cli_v1', 'gpt-6-astra', output=8000),
+                          build_route('openai_responses_v1', 'unlisted', output=8000),
+                          build_unkeyed_route('codex_cli_v1', 'unlisted')):
+                with self.subTest(adapter=other['adapter'], model=other['model'], keyed='runtime' in other):
+                    records = dict(review_route={'route': other})
+                    earlier = capacity_evidence.read_capacity_evidence(other, records)['probe_input_tokens']
+                    self.assertEqual(capacity.describe_route_capacity(other, records=records)
+                                     ['capacity_evidence']['probe_input_tokens'], earlier)
+                    self.assertEqual(capacity.select_capacity_probe_size(records, other, 60000), earlier)
+
+
+class CodexRouteEffortIdentityTests(unittest.TestCase):
+    def test_the_effort_of_a_codex_route_is_part_of_its_identity(self):
+        from research_harness import review_visual_route
+        high = build_route('codex_cli_v1', 'gpt-6-astra', output=8000)
+        xhigh = dict(high, id='xhigh', configuration=dict(high['configuration'], effort='xhigh'))
+        self.assertEqual(capacity.describe_capacity_key(high)['configuration'], {})
+        self.assertEqual(capacity.describe_capacity_key(xhigh)['configuration'], {'effort': 'xhigh'})
+        probe = dict(id='probe', route_id='xhigh', status='completed', completed_generation=True,
+                     capacity=dict(input_tokens=30000), capacity_verified=True, capacity_evidence_verified=True,
+                     verified_input_tokens=30000, usage=dict(input_tokens=30000, sends=1), recorded_revision=1,
+                     capacity_evidence=dict(key=capacity.describe_capacity_key(xhigh), input_tokens=30000))
+        records = dict(review_route={'route': high, 'xhigh': xhigh}, review_route_probe={'probe': probe})
+        self.assertEqual(capacity.describe_route_capacity(xhigh, records=records)['input_tokens']['value'], 22000)
+        self.assertEqual(capacity.describe_route_capacity(high, records=records)['input_tokens']['value'], 0)
+        self.assertEqual(capacity.describe_route_class(xhigh)['effort'], 'xhigh')
+        self.assertEqual(capacity.describe_route_class(high)['effort'], 'high')
+        self.assertTrue(capacity.read_profile_priors(high))
+        self.assertEqual(capacity.read_profile_priors(xhigh), [])
+        visual = dict(id='visual', adapter='codex_cli_visual_v1', model='gpt-6-astra', endpoint='codex://local',
+                      configuration=dict(max_output_tokens=8000, timeout_seconds=600))
+        for configuration, message in ((visual['configuration'], 'Only the same exact model'),
+                                       (dict(visual['configuration'], effort='xhigh'), 'Keep the exact result subject')):
+            with self.subTest(configuration=configuration), self.assertRaises(ResearchError) as refused:
+                review_visual_route.validate_transition(dict(review_route={'xhigh': xhigh}), None,
+                    dict(route_id='xhigh', role='bar'), dict(visual, configuration=configuration), dict(role='result'))
+            self.assertEqual(refused.exception.code, 'review_visual_route_mismatch')
+            self.assertTrue(refused.exception.message.startswith(message), refused.exception.message)
+
+
 class LocalCapacityProbeTests(LiteratureCase):
+    def test_one_capacity_probe_at_the_character_limit_admits_a_route_of_a_model_without_a_prior(self):
+        """Observation 1 of a live run at a character limit of 40,000: an ordinary probe gives no room, the
+        capacity stop lists one probe of the whole character limit, and that probe admits the assignment."""
+        import codex_route_fixtures
+        from research_harness import review_excerpts
+        codex_route_fixtures.install_codex_runtime(self)
+        codex_route_fixtures.limit_codex_input(self, 40000)
+
+        def send(route, request, credential):
+            packet = review_excerpts.read_sent_packet(request)
+            output = dict(allowed_control=packet['allowed_control'], evidence_control=packet['evidence_control'],
+                          excluded_controls=[])
+            response = codex_route_fixtures.build_codex_response(route, request, output)
+            response['usage']['input_tokens'] = 14000 if capacity.measure_request(route, request)['tokens_upper'] == 40000 else 500
+            return response
+
+        self.mutate(protocol.record_route, dict(id='route', adapter='codex_cli_v1', model='unlisted-model',
+            endpoint='codex://local', configuration=dict(max_output_tokens=8000, timeout_seconds=5)))
+        with patch.object(transport, 'send_request', side_effect=send):
+            ordinary = self.mutate(protocol.probe_route, dict(id='ordinary', route_id='route'))['result']
+        self.assertEqual(ordinary['unverified_reasons'], [])
+        size = 5000
+        for _ in range(5):
+            reference = self.artifacts.put(b'x' * size, 'text/plain')
+            payload = dict(id='assignment', role='standalone', dossier_id=None, route_id='route',
+                           reviewer_id='reviewer', author_id='author', context=dict(artifact_refs=[reference]))
+            records = self.store.snapshot()['records']
+            packet = protocol.build_packet(records, self.artifacts, None, 'standalone', 'reviewer', **payload['context'])
+            request = transport.request_body(records['review_route']['route'],
+                                             protocol.canonical_prompt('standalone')['text'], packet)
+            measured = capacity.measure_request(records['review_route']['route'], request)['tokens_upper']
+            if measured == 5000:
+                break
+            size += 5000 - measured
+        self.assertEqual(measured, 5000)
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(protocol.record_assignment, payload)
+        self.assertEqual(caught.exception.code, 'review_route_capacity_below_floor')
+        step = caught.exception.details['then'][0]['steps'][0]
+        self.assertEqual(step['payload']['capacity']['input_tokens'], 40000)
+        with patch.object(transport, 'send_request', side_effect=send):
+            probe = self.mutate(protocol.probe_route, dict(step['payload'], id='capacity'))['result']
+        self.assertEqual((probe['capacity_verified'], probe['unverified_reasons']), (True, []))
+        records = self.store.snapshot()['records']
+        route = records['review_route']['route']
+        report = capacity.describe_route_capacity(route, records=records, artifacts=self.artifacts)
+        self.assertEqual(report['input_tokens']['value'], 6000)
+        self.mutate(protocol.record_assignment, payload)
+        self.assertIn('assignment', self.store.snapshot()['records']['review_assignment'])
+
     def test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review(self):
         import codex_route_fixtures
         from research_harness import review_codex_transport as codex, review_excerpts

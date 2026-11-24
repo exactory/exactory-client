@@ -238,7 +238,11 @@ def validate_composite_binding(value):
     s.text(value['id'])
     s.text(value['digest'])
     s.require(len(value['digest']) == 64 and all(c in '0123456789abcdef' for c in value['digest']),
-              'A composite binding holds its digest')
+              'A composite binding is {id, digest}, and its digest is 64 lowercase hexadecimal characters')
+
+
+def require_acceptable_checkpoint(checkpoint):
+    s.require(checkpoint["kind"] != "hypothesis", "Hypotheses grant no accepted progress")
 
 
 def accept_result(state, payload):
@@ -256,7 +260,7 @@ def accept_result(state, payload):
         validate_composite_binding(value['composite'])
     cp = reference(state["checkpoints"], value["checkpoint_id"], "checkpoint")
     s.require(s.digest(cp) == value["checkpoint_digest"], "Checkpoint differs", "digest_mismatch")
-    s.require(cp["kind"] != "hypothesis", "Hypotheses grant no accepted progress")
+    require_acceptable_checkpoint(cp)
     s.choice(value["outcome"], {"proof", "counterexample", "reduction", "obstruction"})
     expected_kind = "proof" if value["outcome"] == "counterexample" else value["outcome"]
     s.require(cp["kind"] == expected_kind or (cp["kind"] == "reduction" and value["outcome"] == "proof"), "Checkpoint kind and accepted outcome differ")

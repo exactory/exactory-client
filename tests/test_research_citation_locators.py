@@ -58,8 +58,9 @@ class CitationLocatorTests(ProblemCase):
                        {"url": "https://"}, {"url": "https://user:secret@github.com/x"}):
             with self.subTest(change=change):
                 before = self.store.snapshot()
-                self.assert_error("problem_citation_locator_unbound", lambda: self.mutate(
-                    record_citation_locator, dict(self.build_payload(), **change)))
+                code = ("problem_citation_locator_format" if change.get("url") in ("http://example.org/file.pdf", "https://")
+                        else "problem_citation_locator_unbound")
+                self.assert_error(code, lambda: self.mutate(record_citation_locator, dict(self.build_payload(), **change)))
                 self.assertEqual(self.store.snapshot(), before)
 
     def test_locator_does_not_repair_real_reading_staleness(self):

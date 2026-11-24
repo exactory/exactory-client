@@ -707,7 +707,7 @@ def _next_eligible(records, identifier):
 
 def _provider(name):
     providers = {"arxiv": Arxiv, "openalex": OpenAlex, "crossref": Crossref, "datacite": DataCite}
-    if name not in providers:
+    if not isinstance(name, str) or name not in providers:
         raise ResearchError("unsupported_provider", SUPPORTED_PROVIDERS_MESSAGE)
     return providers[name]()
 

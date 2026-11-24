@@ -338,6 +338,9 @@ _RECORD_TREES = {
         records, "problem_post", [find_post(records, find_current_statement(records))])),
     "problem_post_fact": ("problem/post-facts", _find_current_post_fact_ids),
     "problem_report": ("problem/reports", lambda records: _find_latest_ids(records, "problem_report")),
+    "problem_search_step": ("problem/search-steps", lambda records: set(records.get("problem_search_step", {}))),
+    "problem_search_origin": ("problem/search-origins", lambda records: _find_latest_ids(
+        records, "problem_search_origin")),
     "round_admission": ("study/round-admissions", lambda records: _find_latest_keys(
         records, "round_admission", lambda record: record["number"])),
     "round_decision": ("study/round-decisions", lambda records: _find_latest_keys(
@@ -403,7 +406,8 @@ def _build_records(records, artifacts, inputs):
                 record = dict(record, **describe_instruction(record["instruction"]))
                 if record["instruction"].get("form") == "parts":
                     retain_fields = ("instruction", "user_words", "selections")
-            content = _encode(record) if kind == "problem_report" else _encode_record(record, entry, retain_fields=retain_fields)
+            complete = kind in ("problem_report", "problem_search_origin")
+            content = _encode(record) if complete else _encode_record(record, entry, retain_fields=retain_fields)
             files[path] = ViewFile(content, entry)
     return files
 

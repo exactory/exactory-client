@@ -111,7 +111,10 @@ def build_acceptance_review_links(controller, state, records):
             from research_harness.review_composite import read_final_output
             output, composite = read_final_output(records, artifacts, final_id)
             s.require(composite is not None and acceptance['composite'] == dict(id=composite['id'], digest=s.digest(composite)),
-                      'The native acceptance must keep its composed review', 'review_parts_incomplete')
+                      'The composite that an acceptance records does not match the store: the final turn of its '
+                      'review has no composite, or one whose id or digest differs from the recorded one. This '
+                      'delivery is refused. Report the refusal with the objective and the step that failed',
+                      'review_parts_incomplete')
             value['review'].update(output_digest=s.digest(output), composite=acceptance['composite'])
         links.append(immutable_record(records, "native_acceptance_review", s.digest(key), value))
     return links

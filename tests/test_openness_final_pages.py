@@ -178,8 +178,29 @@ class FinalPagesCommandTests(FinalPagesSupport):
     def test_a5_q7_nine_targets_record_one_authenticated_composite(self):
         native = self.export_targets()
         final, packets = self.finish_pages(native)
+        from research_harness import openness_final_pages, review_prompt_paragraphs as paragraphs
         self.assertEqual(sum('page_plan_digest' in p.get('reading_final', {}) and 'closing' not in p['reading_final'] for p in packets), 2)
         records = self.store.snapshot()['records']
+        members = reading._list_chain(records, records['review_assignment'][final])
+        plan = capacity.read_chain_capacity_plan(self.artifacts, members[0])
+        route = records['review_route']['route']
+        self.assertEqual(len(members), len(packets))
+        self.assertEqual([reading.find_stage(packet) for packet in packets],
+                         ['reading', 'reading', 'page', 'page', 'closing'])
+        for member, packet in zip(members, packets):
+            with self.subTest(assignment=member['id']):
+                request, sent = self.read_sent_packet(member['id'])
+                self.assertEqual(request['instructions'], member['prompt']['text'])
+                self.assertIn(paragraphs.NOTES_COST_PROMPT, request['instructions'])
+                self.assertIn(paragraphs.LIST_ROWS_PROMPT, request['instructions'])
+                self.assertTrue(v7.matches_turn_prompt(member, packet))
+                binding = openness_final_pages.read_binding(packet)
+                for field in ('notes_cost', 'lists'):
+                    self.assertIn(field, binding)
+                    self.assertEqual(openness_final_pages.read_binding(sent)[field], binding[field])
+                kind = member['capacity_plan_kind']
+                report = capacity.describe_plan_preflight({}, route, request, plan, kind)
+                self.assertTrue(report['plan_comparison']['fits'], report['plan_comparison'])
         composite = next(iter(records['review_composite'].values()))
         self.assertEqual(len(review_composite.authenticate_composite(records, self.artifacts, composite)['findings']['openness']['coverage']), 9)
         self.assertTrue(reading.verify_chain(records, self.artifacts, records['review_assignment'][final]))

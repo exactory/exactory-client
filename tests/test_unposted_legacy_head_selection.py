@@ -31,9 +31,16 @@ class LegacyUnpostedHeadSelectionTests(unittest.TestCase):
             with self.subTest(metadata=name):
                 self.assertNotIn('problem_post', records)
                 plan = self.fixture.plan(records)
+                self.assertEqual(plan['head_id'], 'bar-first')
+                if name == 'history':
+                    # The plan asks the admission of its run. review-run refuses this head before any call (its
+                    # earlier scientific history is not verified), so the plan stops where release 0.92.1 planned
+                    # the refused run.
+                    self.assertEqual((plan['state'], plan.get('code'), plan.get('command')),
+                                     ('stop', 'invalid_review_context', None), plan)
+                    continue
                 self.assertEqual((plan['state'], plan.get('command')),
                                  ('run', 'review-run'), plan)
-                self.assertEqual(plan['head_id'], 'bar-first')
                 self.assertEqual(plan['payload'], dict(
                     id='bar-first-run-1', assignment_id='bar-first'))
 

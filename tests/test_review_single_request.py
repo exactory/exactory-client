@@ -414,11 +414,13 @@ class FrozenSingleTests(unittest.TestCase):
     def test_first_output_read_timeout_replaces_it_without_changing_the_frozen_origin(self):
         from codex_route_fixtures import build_codex_response, bind_codex_response
         from research_harness.review_continuation import plan_next
+        from research_harness.review_parts_v3 import PROTOCOL as V3
         from test_review_output_profile import build_row
         self.record_over_cap()
         profile = dict(rows=[build_row(level=None, kind='single', thinking=1000),
                              build_row(level=None, kind='read', thinking=1000)])
-        with patch.object(capacity, 'read_output_profile', return_value=profile):
+        with patch.object(capacity, 'read_profile_priors', return_value=profile['rows']), \
+                patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,)):
             planned = plan_next(self.case.store.snapshot()['records'], self.case.artifacts, 'first')
             first_read = protocol.record_assignment(self.case.store, planned['payload'],
                 expected_revision=self.case.store.revision, request_id='replace-single')['result']
@@ -448,11 +450,24 @@ class FrozenSingleTests(unittest.TestCase):
                             expected_revision=revision, request_id='premature-replacement')
                     self.assertEqual(caught.exception.code, 'invalid_review_context')
                     self.assertEqual(self.case.store.revision, revision)
-            next_plan = plan_next(self.case.store.snapshot()['records'], self.case.artifacts, first_read['id'])
+            records = self.case.store.snapshot()['records']
+            ancestors = {row['id']: (self.case.read_packet(row), row['prompt'],
+                protocol.build_assignment_request(records, self.case.artifacts, row))
+                for row in (self.first, first_read)}
+            next_plan = plan_next(records, self.case.artifacts, first_read['id'])
             self.assertEqual(next_plan['state'], 'replace', next_plan)
-            replacement = protocol.record_assignment(self.case.store, next_plan['payload'],
-                expected_revision=self.case.store.revision, request_id='replace-read')['result']
+            with patch.object(parts, 'NEW_SERIES_PROTOCOLS', (V3, parts.PROTOCOL)):
+                switched = plan_next(records, self.case.artifacts, first_read['id'])
+                self.assertEqual(switched, next_plan)
+                replacement = protocol.record_assignment(self.case.store, next_plan['payload'],
+                    expected_revision=self.case.store.revision, request_id='replace-read')['result']
+            records = self.case.store.snapshot()['records']
+            for identifier, frozen in ancestors.items():
+                row = records['review_assignment'][identifier]
+                self.assertEqual((self.case.read_packet(row), row['prompt'],
+                    protocol.build_assignment_request(records, self.case.artifacts, row)), frozen)
         header = self.case.read_packet(replacement)[parts.KEY]
+        self.assertEqual(header['protocol'], parts.PROTOCOL)
         self.assertEqual((header['entry'], header['replaces_assignment_id']), ('output', self.first['id']))
         self.assertLessEqual(header['unit_characters'], old // 2)
         self.assertEqual(replacement['slot_id'], first_read['slot_id'])

@@ -66,6 +66,21 @@ def is_first_output_read(assignment, packet):
             and not assignment.get('context', {}).get('prior_assignment_id'))
 
 
+def finalize_v3_replacement(records, artifacts, route, role, parameters, packet):
+    """Publish the plan separately and preflight the exact replacement delivery."""
+    from . import review_preflight, review_transport
+
+    declaration = capacity.take_capacity_request(packet)
+    members = capacity.prepare_assignment_capacity(records, artifacts, route, declaration)
+    prompt = parts.build_packet_prompt(role, parameters, packet)
+    request = review_transport.request_body(route, prompt['text'], packet, [], order=())
+    plan = capacity.read_chain_capacity_plan(artifacts, members)
+    report = review_preflight.build_report(records, artifacts, route, role, prompt, packet, request,
+        capacity_plan=plan, turn_kind=packet[parts.KEY]['kind'])
+    preflight = review_preflight.check_request(report, request, packet=packet, artifacts=artifacts)
+    return prompt, request, preflight, members
+
+
 def build_output_replacement(records, artifacts, assignment, *, identifier=None):
     """Plan or reduce the first read of a frozen single-output replacement."""
     from . import review_protocol as protocol, review_preflight
@@ -105,6 +120,7 @@ def build_output_replacement(records, artifacts, assignment, *, identifier=None)
     planned = parts.prepare_packet(records, artifacts, value, route, packet, assignment['prompt'],
         protocol.read_history(artifacts, assignment), base_prompt_parameters=parameters,
         slot_id=protocol.context_repair.slot_id(records, assignment), entry='output', read_allowance=allowance,
+        head=assignment,
         replaces_assignment_id=header['replaces_assignment_id'] if retry_read else assignment['id'],
         refusal_notice=frozen_notice)
     if parts.find_kind(planned) != 'read':
@@ -112,18 +128,14 @@ def build_output_replacement(records, artifacts, assignment, *, identifier=None)
     capacity_members = {}
     planned_v3 = planned[parts.KEY]['protocol'] == 'exactory-review-parts-v3'
     if planned_v3:
-        declaration = planned.pop(capacity.CAPACITY_REQUEST_KEY)
-        capacity_members = capacity.prepare_assignment_capacity(records, artifacts, route, declaration)
-        planned.pop('digest', None)
-        from .evidence import digest
-        planned['digest'] = digest(planned)
-    prompt = parts.build_turn_prompt(assignment['role'], parameters, planned[parts.KEY])
-    request = protocol.transport.request_body(route, prompt['text'], planned, [], order=())
-    plan = capacity.read_chain_capacity_plan(artifacts, capacity_members) if planned_v3 else None
-    preflight = review_preflight.check_request(review_preflight.build_report(
-        records, artifacts, route, assignment['role'], prompt, planned, request,
-        **(dict(capacity_plan=plan, turn_kind='read') if planned_v3 else {})),
-        request, packet=planned, artifacts=artifacts)
+        prompt, request, preflight, capacity_members = finalize_v3_replacement(
+            records, artifacts, route, assignment['role'], parameters, planned)
+    else:
+        prompt = parts.build_packet_prompt(assignment['role'], parameters, planned)
+        request = protocol.transport.request_body(route, prompt['text'], planned, [], order=())
+        preflight = review_preflight.check_request(review_preflight.build_report(
+            records, artifacts, route, assignment['role'], prompt, planned, request),
+            request, packet=planned, artifacts=artifacts)
     if not planned_v3 and planned[parts.KEY]['unit_characters'] > inventory['characters'] // 2:
         return None
     if retry_read:

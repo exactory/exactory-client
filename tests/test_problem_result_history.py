@@ -1051,7 +1051,8 @@ class ProblemResultHistoryTests(ResultPartsCase):
     def test_route_pinned_files_match_06918(self):
         root = Path(__file__).resolve().parents[1]
         # Frozen from git 40690d5, independently of the working tree modules; the three
-        # Codex transports are frozen at 0.85.1, which added the Codex 0.167.0 declarations.
+        # Codex transports are pinned at 0.93.0, which moved the audited declarations to
+        # review_codex_declarations and added the effort of a Codex route.
         # The Claude adapter pin includes new-call usage-event retention; historical runtime pins stay readable.
         expected = PINNED_SHA256
         for relative, sha in expected.items():
@@ -1203,9 +1204,9 @@ class ProblemResultHistoryTests(ResultPartsCase):
 
 
 PINNED_SHA256 = {'research_harness/review_claude_transport.py': 'a4f6f6aa5bc0d1b9f1a41254040a6a21f8f0c627428af1d64372889a88699f9a',
- 'research_harness/review_codex_framed_transport.py': 'ea137cdc6999bf319cf3aa301dc86b6d4b4c68520bcb08db90b0a24729ecd6ec',
- 'research_harness/review_codex_transport.py': 'acf50a8472feeae42ebf9d7e0fb9a473be35d3d42066c84abf65f301c078e7ad',
- 'research_harness/review_codex_visual_transport.py': 'b20abb57e6549a90c172a4dc13f18f49f9bbb9ab11f6d011164abc64db063460',
+ 'research_harness/review_codex_framed_transport.py': 'b20ac0e4d41ccb4b3106abfad756a39a2d171e10037ee2b324d13b13a4ed1db6',
+ 'research_harness/review_codex_transport.py': 'db3468fb63bbfa837ff2cf0ee5a34b1cd88a7070a8b5967559620fa54ccfcea9',
+ 'research_harness/review_codex_visual_transport.py': '64986928a11fc65891b9dbc348628da882553014857a198dba8dfda6529faec2',
  'research_harness/review_exact_text.py': 'bdaa6f03311ea602fe4579d9fdb1db0baf5db2a571dba419650acff40fbb931d',
  'research_harness/review_exact_text_cost_v1.py': 'f017125ec32bf89c8aa71c2ccba96ba8e0fcdf1abb53c050d8bd16b90adf7cf5',
  'research_harness/review_exact_text_v2.py': 'fcae2720e7f584936e026427203c945dc18be0794d003113c800e0de898e2bf8',

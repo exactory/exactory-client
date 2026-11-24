@@ -54,8 +54,8 @@ class PartOffsetReplacementIncidentTests(unittest.TestCase):
         with patch.object(protocol.transport, 'send_request', side_effect=probe):
             case.mutate(protocol.probe_route, dict(id='repair-probe', route_id='route'), credential='fixture')
         build = protocol._repair_packet
-        def build_repaired_packet(*args):
-            packet = build(*args)
+        def build_repaired_packet(*args, **kwargs):
+            packet = build(*args, **kwargs)
             packet['source_deliveries'].append(copy.deepcopy(delivery))
             packet['evidence'].append(dict(artifact=part, encoding='utf-8', content=part_text))
             packet.pop('digest', None)

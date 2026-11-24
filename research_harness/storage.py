@@ -1,11 +1,13 @@
 """Revisioned SQLite records, immutable event patches, and request receipts.
 
 Every mutation first looks for its request receipt in a read transaction, and a
-committed request returns its original response from that read, without a write
+committed request returns its original response from reads, without a write
 lock. Any other mutation holds a BEGIN IMMEDIATE transaction, checks its request
 receipt before its expected revision, and commits records, original changes, the
-result, and the next revision together. Connections are short-lived. Reads open
-in SQLite read-only mode and never initialize or migrate storage.
+result, and the next revision together. A use takes history rows in short read
+transactions and checks their JSON between them. Its own transaction proves the
+prefix and validates any remaining events. Connections are short-lived.
+Reads open in SQLite read-only mode and never initialize or migrate storage.
 
 The SQL metadata row holds schema_version and revision. Scientific configuration
 is the ordinary configuration/research record, owned by domain services.
@@ -28,7 +30,9 @@ import uuid
 import weakref
 import zlib
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
+from types import MappingProxyType
 from typing import NamedTuple, Optional
 
 from .artifacts import ArtifactStore, _Workspace, _filesystem_error, _regular_file
@@ -204,6 +208,11 @@ def _is_busy_error(error: sqlite3.Error) -> bool:
     return "locked" in message or "busy" in message
 
 
+def _is_text_conversion_error(error) -> bool:
+    # sqlite3's ordinary text decoder puts the undecodable value in this message.
+    return isinstance(error, sqlite3.OperationalError) and str(error).startswith("Could not decode to UTF-8")
+
+
 @contextmanager
 def retry_busy_commits_until(deadline):
     """Within this block, a COMMIT that readers keep busy is tried again until deadline (a time.monotonic value), so
@@ -351,17 +360,233 @@ def _encode_record_change(key, value):
     return _canonical(value)
 
 
-def _validate(connection: sqlite3.Connection, *, replay: bool = True,
-              records: Optional[dict] = None, history=None, fingerprint=None, requests=None,
-              creation_revisions=None) -> int:
-    """Check the store's structure, and with replay, its complete history.
+# The canonical JSON of one string, as _encode_json writes a string inside a value.
+_ENCODE_TEXT = json.JSONEncoder(ensure_ascii=False).encode
+# The replay before the transaction of a use reads the event rows and their receipts in read transactions of about
+# this many characters of text, or of one event when it is longer.
+_UNLOCKED_BATCH_CHARACTERS = 32 * 1024 * 1024
 
-Construction checks the structure so unsupported, corrupt or hot stores fail
-before use. Every read, write and receipt lookup replays the history, so a
-process validates it once per use and never trusts a cached replay.
-An optional snapshot mapping receives current records only after their checks;
-the caller must discard it if any validation fails.
-"""
+
+class _VerifiedHistory(NamedTuple):
+    """What one replay of the history accepted, for the proof inside a later transaction of the same use: the
+    revision, the SHA-256 chained over every column of its event and receipt rows, the SHA-256 of the canonical JSON
+    of each current record, and the creation revisions of the posts. These name bytes: the later transaction reads
+    every row again and compares. history is the history index that a replay before a snapshot read keeps for that
+    read; a record that a proof carries holds none."""
+
+    revision: int
+    rows: bytes
+    identities: Mapping
+    creation_revisions: Mapping
+    history: object = None
+
+
+class _TextColumnBytes:
+    """The logical UTF-8 bytes that SQLite passes to the TEXT factory. A BLOB stays plain bytes."""
+
+    __slots__ = ("utf8",)
+
+    def __init__(self, utf8: bytes):
+        self.utf8 = utf8
+
+
+def _hash_row(rows, *columns):
+    """Hash each TEXT column as a type tag and the SHA-256 of its logical UTF-8 bytes."""
+    for column in columns:
+        if type(column) is str:
+            rows.update(b"s" + bytes.fromhex(_digest(column)))
+        elif type(column) is _TextColumnBytes:
+            rows.update(b"s" + hashlib.sha256(column.utf8).digest())
+        else:
+            rows.update((type(column).__name__ + repr(column) + ";").encode("utf-8"))
+
+
+def _read_receipt(connection, request_id):
+    return connection.execute("SELECT * FROM receipts WHERE request_id = ?", (request_id,)).fetchone()
+
+
+def _chain_event_rows(digest, row, receipt):
+    """The SHA-256 of digest, the chained SHA-256 of the rows before, followed by every column of an event row and of
+    its receipt row."""
+    rows = hashlib.sha256(digest)
+    _hash_row(rows, row["revision"], row["request_id"], row["operation"], row["payload"], row["changes"],
+              row["result"], row["digest"])
+    _hash_row(rows, receipt["request_id"], receipt["revision"], receipt["response"], receipt["digest"])
+    return rows.digest()
+
+
+def _read_events_after(connection, revision, *, upper_revision=None):
+    """The event rows after revision, in revision order. After revision 0 these are all rows, so that a row at
+    revision 0 or below reaches the check of the revisions and is refused as a gap.
+    The preliminary replay supplies an inclusive upper bound."""
+    if upper_revision is not None:
+        if revision == 0:
+            return connection.execute("SELECT * FROM events WHERE revision <= ? ORDER BY revision", (upper_revision,))
+        return connection.execute("SELECT * FROM events WHERE revision > ? AND revision <= ? ORDER BY revision",
+                                  (revision, upper_revision))
+    if revision == 0:
+        return connection.execute("SELECT * FROM events ORDER BY revision")
+    return connection.execute("SELECT * FROM events WHERE revision > ? ORDER BY revision", (revision,))
+
+
+def _prove_events(connection, verified):
+    """Prove the logical values of the accepted prefix. Return its (revision, request ID, event digest,
+    receipt digest) entries, or None so the complete replay can decide in its usual order."""
+    original_factory = connection.text_factory
+    connection.text_factory = _TextColumnBytes
+    try:
+        rows, proven = b"", []
+        for row in connection.execute("SELECT * FROM events WHERE revision <= ? ORDER BY revision", (verified.revision,)):
+            if row["revision"] != len(proven) + 1 or any(type(row[key]) is not _TextColumnBytes for key in
+                    ("request_id", "operation", "payload", "changes", "result", "digest")):
+                return None
+            request_id = row["request_id"].utf8.decode("utf-8")
+            receipt = _read_receipt(connection, request_id)
+            if receipt is None or any(type(receipt[key]) is not _TextColumnBytes for key in
+                                      ("request_id", "response", "digest")):
+                return None
+            rows = _chain_event_rows(rows, row, receipt)
+            proven.append((row["revision"], request_id, row["digest"].utf8.decode("utf-8"),
+                           receipt["digest"].utf8.decode("utf-8")))
+            del row, receipt
+        if len(proven) == verified.revision and rows == verified.rows:
+            return proven
+        return None
+    except UnicodeDecodeError:
+        return None
+    except sqlite3.OperationalError as error:
+        if not _is_text_conversion_error(error):
+            raise
+        return None
+    finally:
+        connection.text_factory = original_factory
+
+
+def _encode_changes(encoded):
+    """[(change, the canonical JSON of its value), ...] for the changes text of an event, from one encoding of each
+    value: the text is canonical when it is, piece by piece, the canonical JSON of its changes, and each piece is
+    compared in place. None when the comparison does not hold; _check_event then decides with the complete encoding."""
+    if not isinstance(encoded, str) or not encoded.startswith("["):
+        return None
+    try:
+        changes = json.loads(encoded)
+    except (ValueError, RecursionError):
+        return None
+    pairs, offset = [], 1
+    for change in changes:
+        if (not isinstance(change, dict) or set(change) != {"kind", "key", "value"}
+                or not isinstance(change["value"], dict)
+                or type(change["kind"]) is not str or type(change["key"]) is not str):
+            return None
+        try:
+            value = _encode_json(change["value"], "corrupt_state")
+        except ResearchError:
+            return None
+        prefix = (("," if pairs else "") + '{"key":' + _ENCODE_TEXT(change["key"]) + ',"kind":'
+                  + _ENCODE_TEXT(change["kind"]) + ',"value":')
+        end = offset + len(prefix) + len(value)
+        if not (encoded.startswith(prefix, offset) and encoded.startswith(value, offset + len(prefix))
+                and encoded.startswith("}", end)):
+            return None
+        pairs.append((change, value))
+        offset = end + 1
+    if len(encoded) != offset + 1 or not encoded.endswith("]"):
+        return None
+    return pairs
+
+
+def _check_event(row):
+    """The decoded changes of an event row after the checks of its JSON and its digest, in the order in which they
+    have always run."""
+    event = _event_value(row)
+    if _digest('{"changes":', row["changes"], ',"operation":',
+               json.dumps(row["operation"], ensure_ascii=False), ',"payload":', row["payload"],
+               ',"request_id":', json.dumps(row["request_id"], ensure_ascii=False), ',"result":', row["result"],
+               ',"revision":', str(row["revision"]), '}') != row["digest"]:
+        raise ResearchError("corrupt_state", "Research event digest does not match its original values")
+    return event["changes"]
+
+
+class _Replay:
+    """The events that one check has accepted so far: the chained SHA-256 of their rows, the SHA-256 of each record
+    that they wrote, the creation revisions, and on request the history index and the decoded value of each record."""
+
+    def __init__(self, verified=None, *, history=None, keep_values=False):
+        """Start from no event, or go on from verified, the record of an earlier replay of the same use whose rows
+        the caller has proven. That replay's history index passes to this one."""
+        self.history = history
+        self.values = {} if keep_values else None
+        if verified is None:
+            self.revision, self.rows, self.identities, self.created = 0, b"", {}, {}
+        else:
+            self.revision, self.rows = verified.revision, verified.rows
+            self.identities, self.created = dict(verified.identities), dict(verified.creation_revisions)
+            if history is not None:
+                history.take_versions(verified.history)
+
+    def add_event(self, row, read_receipt):
+        """Check the next event, take up what it wrote, then read, check and return its receipt."""
+        revision = self.revision + 1
+        if row["revision"] != revision:
+            raise ResearchError("corrupt_state", "Research event revisions are not contiguous")
+        _text(row["request_id"], "Stored request ID", "corrupt_state")
+        _text(row["operation"], "Stored operation", "corrupt_state")
+        encoded_request_id = json.dumps(row["request_id"], ensure_ascii=False)
+        encoded_revision = str(row["revision"])
+        pairs = _encode_changes(row["changes"])
+        if pairs is None:
+            # The complete encoding decides; it raises the fault of a malformed event.
+            pairs = [(change, None) for change in _check_event(row)]
+        else:
+            _load(row["payload"], dict)
+            _load(row["result"])
+            # _load and _encode_changes have checked each component's canonical bytes. Hash those
+            # segments in sorted-key order without encoding the complete event again.
+            if _digest('{"changes":', row["changes"], ',"operation":',
+                       json.dumps(row["operation"], ensure_ascii=False), ',"payload":', row["payload"],
+                       ',"request_id":', encoded_request_id, ',"result":', row["result"],
+                       ',"revision":', encoded_revision, '}') != row["digest"]:
+                raise ResearchError("corrupt_state", "Research event digest does not match its original values")
+        for change, encoded in pairs:
+            if not isinstance(change, dict) or set(change) != {"kind", "key", "value"} or not isinstance(change["value"], dict):
+                raise ResearchError("corrupt_state", "Research event change is malformed")
+            _text(change["kind"], "Stored record kind", "corrupt_state")
+            _text(change["key"], "Stored record key", "corrupt_state")
+            if encoded is None:
+                encoded = _encode_json(change["value"], "corrupt_state")
+            identity = _digest(encoded)
+            self.identities[(change["kind"], change["key"])] = identity
+            if self.values is not None:
+                self.values[(change["kind"], change["key"])] = change["value"]
+            if change["kind"] == "problem_post":
+                self.created.setdefault((change["kind"], change["key"]), revision)
+            if self.history is not None:
+                self.history.record_version(change["kind"], change["key"], revision, encoded, identity)
+        receipt = read_receipt(row["request_id"])
+        response_prefix = '{"request_id":' + encoded_request_id + ',"result":'
+        response_suffix = ',"revision":' + encoded_revision + '}'
+        # Match the exact canonical segments without a second result-sized string.
+        if (receipt is None or receipt["revision"] != row["revision"]
+                or not isinstance(receipt["response"], str)
+                or len(receipt["response"]) != len(response_prefix) + len(row["result"]) + len(response_suffix)
+                or not receipt["response"].startswith(response_prefix)
+                or not receipt["response"].startswith(row["result"], len(response_prefix))
+                or not receipt["response"].endswith(response_suffix)
+                or _digest(receipt["response"]) != receipt["digest"]):
+            raise ResearchError("corrupt_state", "Research request receipt does not match its original event")
+        self.rows = _chain_event_rows(self.rows, row, receipt)
+        self.revision = revision
+        return receipt
+
+    def finish(self, *, snapshot=False):
+        """The record of what this replay accepted. With snapshot the record also holds the history index, for the
+        snapshot read of the same use."""
+        return _VerifiedHistory(self.revision, self.rows, MappingProxyType(self.identities),
+                                MappingProxyType(self.created), self.history if snapshot else None)
+
+
+def _check_structure(connection: sqlite3.Connection):
+    """(schema version, revision) of a store with the supported structure."""
     metadata = connection.execute("SELECT id, schema_version, revision FROM metadata").fetchall()
     if len(metadata) != 1 or metadata[0]["id"] != 1:
         raise ResearchError("corrupt_state", "Research metadata must contain exactly one row")
@@ -377,6 +602,27 @@ the caller must discard it if any validation fails.
         raise ResearchError("corrupt_state", "Research database schema or history guards were changed")
     if connection.execute("PRAGMA journal_mode").fetchone()[0] != "delete":
         raise ResearchError("corrupt_state", "Research store must use rollback journaling")
+    return version, revision
+
+
+def _validate(connection: sqlite3.Connection, *, replay: bool = True,
+              records: Optional[dict] = None, history=None, fingerprint=None, requests=None,
+              creation_revisions=None, verified=None, verification=None) -> int:
+    """Check the store's structure, and with replay, its complete history.
+
+Construction checks the structure so unsupported, corrupt or hot stores fail
+before use. Every read, write and receipt lookup checks the complete history
+inside its own transaction. Without verified it replays every event. With
+verified, the record of a replay that this use ran before its transaction, it
+reads every row again, proves that the rows of that replay have the same logical values,
+and replays the events after them; when a row differs it replays every event.
+It trusts no revision, no counter and no stored digest in place of the bytes,
+and no use keeps the record of a replay for a later use.
+An optional snapshot mapping receives current records only after their checks;
+the caller must discard it if any validation fails. An optional list
+verification receives the record of this check.
+"""
+    version, revision = _check_structure(connection)
     if not replay:
         return revision
     if creation_revisions is None and history is not None:
@@ -386,74 +632,88 @@ the caller must discard it if any validation fails.
     if fingerprint is not None:
         _fingerprint_entry(fingerprint, ("metadata", version, revision))
 
-    projections = {}
-    event_count = 0
-    for row in connection.execute("SELECT * FROM events ORDER BY revision"):
-        event_count += 1
-        if row["revision"] != event_count:
-            raise ResearchError("corrupt_state", "Research event revisions are not contiguous")
-        _text(row["request_id"], "Stored request ID", "corrupt_state")
-        _text(row["operation"], "Stored operation", "corrupt_state")
-        event = _event_value(row)
-        encoded_request_id = json.dumps(row["request_id"], ensure_ascii=False)
-        encoded_revision = str(row["revision"])
-        # _event_value has checked each component's canonical bytes. Hash those
-        # segments in sorted-key order without encoding the complete event again.
-        if _digest('{"changes":', row["changes"], ',"operation":',
-                   json.dumps(row["operation"], ensure_ascii=False), ',"payload":', row["payload"],
-                   ',"request_id":', encoded_request_id, ',"result":', row["result"],
-                   ',"revision":', encoded_revision, '}') != row["digest"]:
-            raise ResearchError("corrupt_state", "Research event digest does not match its original values")
-        for change in event["changes"]:
-            if not isinstance(change, dict) or set(change) != {"kind", "key", "value"} or not isinstance(change["value"], dict):
-                raise ResearchError("corrupt_state", "Research event change is malformed")
-            _text(change["kind"], "Stored record kind", "corrupt_state")
-            _text(change["key"], "Stored record key", "corrupt_state")
-            encoded = _encode_json(change["value"], "corrupt_state")
-            identity = _digest(encoded)
-            projections[(change["kind"], change["key"])] = (encoded, identity)
-            if creation_revisions is not None and change["kind"] == "problem_post":
-                creation_revisions.setdefault((change["kind"], change["key"]), event_count)
-            if history is not None:
-                history.record_version(change["kind"], change["key"], event_count, encoded, identity)
-            del change
-        receipt = connection.execute("SELECT * FROM receipts WHERE request_id = ?",
-                                     (row["request_id"],)).fetchone()
-        response_prefix = '{"request_id":' + encoded_request_id + ',"result":'
-        response_suffix = ',"revision":' + encoded_revision + '}'
-        # Match the exact canonical segments without a second result-sized string.
-        if (receipt is None or receipt["revision"] != row["revision"]
-                or not isinstance(receipt["response"], str)
-                or len(receipt["response"]) != len(response_prefix) + len(row["result"]) + len(response_suffix)
-                or not receipt["response"].startswith(response_prefix)
-                or not receipt["response"].startswith(row["result"], len(response_prefix))
-                or not receipt["response"].endswith(response_suffix)
-                or _digest(receipt["response"]) != receipt["digest"]):
-            raise ResearchError("corrupt_state", "Research request receipt does not match its original event")
+    proven = None
+    if verified is not None and verified.revision <= revision and (history is None or verified.history is not None):
+        proven = _prove_events(connection, verified)
+    accepted = _Replay(None if proven is None else verified, history=history, keep_values=records is not None)
+    for proven_revision, request_id, event_digest, receipt_digest in proven or ():
+        if fingerprint is not None:
+            _fingerprint_entry(fingerprint, ("event", proven_revision, event_digest, receipt_digest))
+        if requests is not None:
+            requests.add(request_id)
+    read_receipt = partial(_read_receipt, connection)
+    for row in _read_events_after(connection, accepted.revision):
+        receipt = accepted.add_event(row, read_receipt)
         if fingerprint is not None:
             _fingerprint_entry(fingerprint, ("event", row["revision"], row["digest"], receipt["digest"]))
         if requests is not None:
             requests.add(row["request_id"])
         # Release the completed event before decoding another event or the current records.
-        del event, receipt, row
-    if event_count != revision or connection.execute("SELECT COUNT(*) FROM receipts").fetchone()[0] != revision:
+        del receipt, row
+    if accepted.revision != revision or connection.execute("SELECT COUNT(*) FROM receipts").fetchone()[0] != revision:
         raise ResearchError("corrupt_state", "Research revision, events, and receipts disagree")
+    if creation_revisions is not None:
+        for created, created_revision in accepted.created.items():
+            creation_revisions.setdefault(created, created_revision)
     record_count = 0
     for row in connection.execute("SELECT kind, key, value, digest FROM records ORDER BY kind, key"):
         record_count += 1
-        if projections.get((row["kind"], row["key"])) != (row["value"], row["digest"]):
+        identity = accepted.identities.get((row["kind"], row["key"]))
+        # The row holds the committed value when its bytes have the SHA-256 that the history gives the record.
+        if (identity is None or row["digest"] != identity or type(row["value"]) is not str
+                or _digest(row["value"]) != identity):
             # Keep the original JSON diagnostics ahead of the projection error.
             _load(row["value"], dict)
             raise ResearchError("corrupt_state", "Research record differs from its committed history")
-        # The matching projection is already a canonical JSON object with this digest.
-        value = json.loads(row["value"])
         if fingerprint is not None:
             _fingerprint_entry(fingerprint, ("record", row["kind"], row["key"], row["digest"]))
         if records is not None:
-            records.setdefault(row["kind"], {})[row["key"]] = value
-    if record_count != len(projections):
+            # The matching row is a canonical JSON object with this digest; a change that this check decoded has
+            # the same value.
+            value = accepted.values.pop((row["kind"], row["key"]), None)
+            records.setdefault(row["kind"], {})[row["key"]] = json.loads(row["value"]) if value is None else value
+    if record_count != len(accepted.identities):
         raise ResearchError("corrupt_state", "Research records are missing committed values")
+    if verification is not None:
+        verification.append(accepted.finish())
     return revision
+
+
+def _verify_without_lock(store, *, snapshot=False, writable=False):
+    """The record of a replay of the history before the transaction of a use, with no lock held while it decodes.
+    Each read transaction takes the next event rows with their receipts, up to about _UNLOCKED_BATCH_CHARACTERS
+    characters, up to the metadata revision of the first read. The checks run after each read transaction ends.
+    The transaction of the use proves the prefix and checks the rest, and a snapshot read decodes the current values
+    there. With snapshot, the record holds the history index when the store needs one. It returns None when the store fails a
+    check (corrupt_state, unsupported_schema, a text that SQLite cannot convert, and with writable a hot journal);
+    the transaction of the use then decides, and a writable one recovers the journal."""
+    accepted, upper_revision, complete = None, None, False
+    try:
+        while not complete:
+            batch, size, complete = [], 0, True
+            with store._connection() as connection:
+                _, revision = _check_structure(connection)
+                if accepted is None:
+                    upper_revision = revision
+                    history = _RecordHistory({}) if snapshot and _retains_history(connection) else None
+                    accepted = _Replay(history=history)
+                for row in _read_events_after(connection, accepted.revision, upper_revision=upper_revision):
+                    receipt = _read_receipt(connection, row["request_id"])
+                    batch.append((row, receipt))
+                    size += sum(len(column) for column in (*row, *(receipt or ())) if isinstance(column, (str, bytes)))
+                    if size >= _UNLOCKED_BATCH_CHARACTERS and row["revision"] < upper_revision:
+                        complete = False
+                        break
+            for row, receipt in batch:
+                accepted.add_event(row, lambda _request_id: receipt)
+                del row, receipt
+    except ResearchError as error:
+        if (error.code in ("corrupt_state", "unsupported_schema")
+                or (writable and error.code == "store_recovery_required")
+                or _is_text_conversion_error(error.__cause__)):
+            return None
+        raise
+    return accepted.finish(snapshot=snapshot)
 
 
 def _read_event_digests(connection, revisions):
@@ -479,6 +739,11 @@ class _RecordHistory:
 
     def __deepcopy__(self, memo):
         return self
+
+    def take_versions(self, earlier):
+        """Take the versions of earlier, the index that the replay before the transaction of the same use built;
+        nothing else reads earlier afterwards."""
+        self._versions, self._digests = earlier._versions, earlier._digests
 
     def record_version(self, kind, key, revision, encoded, identity):
         previous = self._digests.get((kind, key, identity))
@@ -684,8 +949,13 @@ class _PinnedKind(Mapping):
         versions = self._history._versions[self._kind]
         return (key for key in sorted(versions) if versions[key][0][0] <= self._revision)
 
+    def __contains__(self, key):
+        versions = self._history._versions[self._kind].get(key)
+        return versions is not None and versions[0][0] <= self._revision
+
     def __len__(self):
-        return sum(1 for _ in self)
+        versions = self._history._versions[self._kind]
+        return sum(1 for entries in versions.values() if entries[0][0] <= self._revision)
 
 
 def pin_kinds(records, kinds, revision):
@@ -703,6 +973,7 @@ def pin_kinds(records, kinds, revision):
                             "report this refusal with its details.",
                             {"record_id": "snapshot:" + str(revision)})
     history = records._history
+    kinds = tuple(kinds)
     overlay = {kind: rows for kind, rows in records.items() if kind not in kinds}
     for kind in kinds:
         if any(versions[0][0] <= revision for versions in history._versions.get(kind, {}).values()):
@@ -711,7 +982,7 @@ def pin_kinds(records, kinds, revision):
     return _RecordedSnapshot(overlay, history=history, revision=records.read_revision(), current_source=source)
 
 
-def _read_snapshot(connection: sqlite3.Connection, *, fingerprint=None, requests=None) -> dict:
+def _retains_history(connection: sqlite3.Connection) -> bool:
     from .claim_dependencies import uses_claim_dependencies
     # This untrusted precheck controls allocation only. _validate authenticates
     # every event and current record before any history or snapshot is returned.
@@ -722,23 +993,36 @@ def _read_snapshot(connection: sqlite3.Connection, *, fingerprint=None, requests
     for row in connection.execute("SELECT kind, key FROM records WHERE "
             "(kind = 'workspace' AND key IN ('study', 'draft')) OR kind = 'research_intent' LIMIT 1"):
         markers[row["kind"]] = {row["key"]: {}}
+    if uses_claim_dependencies(markers):
+        return True
+    # C21: a selection of carried readings reads each earlier reading chain on the content of its start, and a
+    # selection is stored on the first assignment of a reading chain. A reading chain can supply v3 carry; a v2
+    # selection needs cutoff history even without a reading_chain.
+    from .openness_carried import SELECTION_PROTOCOL_V2
+    for row in connection.execute("SELECT value FROM records WHERE kind = 'review_assignment' "
+                                  "AND (instr(value, ?) > 0 OR instr(value, ?) > 0)",
+                                  ('"reading_chain"', '"' + SELECTION_PROTOCOL_V2 + '"')):
+        assignment = _load(row["value"], dict)
+        selection = assignment.get("carried_selection")
+        if (isinstance(assignment.get("reading_chain"), dict)
+                or isinstance(selection, dict) and selection.get("protocol") == SELECTION_PROTOCOL_V2):
+            return True
+    return False
+
+
+def _read_snapshot(connection: sqlite3.Connection, *, fingerprint=None, requests=None, verified=None,
+                   verification=None) -> dict:
     records = {}
     creation_revisions = {}
-    retain_history = uses_claim_dependencies(markers)
-    if not retain_history:
-        # C21: a selection of carried readings reads each earlier reading chain on the content of its start, and a
-        # selection is stored on the first assignment of a reading chain.
-        for row in connection.execute("SELECT value FROM records WHERE kind = 'review_assignment' AND instr(value, ?) > 0",
-                                      ('"reading_chain"',)):
-            if isinstance(_load(row["value"], dict).get("reading_chain"), dict):
-                retain_history = True
-                break
-    history = _RecordHistory(creation_revisions) if retain_history else None
+    history = _RecordHistory(creation_revisions) if _retains_history(connection) else None
     revision = _validate(connection, records=records, history=history, fingerprint=fingerprint, requests=requests,
-                         creation_revisions=creation_revisions)
+                         creation_revisions=creation_revisions, verified=verified, verification=verification)
     if history is None:
         snapshot = _PostCreationSnapshot(records, creation_revisions=creation_revisions, revision=revision)
     else:
+        for kind in ("review_assignment", "review_attempt", "review_invocation"):
+            for key, versions in history._versions.get(kind, {}).items():
+                creation_revisions[kind, key] = versions[0][0]
         snapshot = _RecordedSnapshot(records, history=history, revision=revision)
     return {"revision": revision, "records": snapshot}
 
@@ -795,11 +1079,13 @@ class _PreparationRecords(Mapping):
 
 
 class _PreparationProof(NamedTuple):
-    """Immutable commit proof with no decoded records or Store reference."""
+    """Immutable commit proof with no decoded records or Store reference. verified is the record of the replay of
+    the preparation read, which the write proves under its write lock."""
 
     identity: tuple
     revision: int
     fingerprint: bytes
+    verified: _VerifiedHistory
 
     def matches_snapshot(self, identity, revision, fingerprint):
         return (self.identity == identity and self.revision == revision
@@ -811,15 +1097,18 @@ class _PreparedSnapshot:
 
     def __init__(self, store, request_id=None):
         self._store = store
-        fingerprint, requests = hashlib.sha256(), set()
+        fingerprint, requests, verification = hashlib.sha256(), set(), []
+        verified = _verify_without_lock(store, snapshot=True)
         with store._connection() as connection:
             identity = store._read_database_identity()
-            snapshot = _read_snapshot(connection, fingerprint=fingerprint, requests=requests)
+            snapshot = _read_snapshot(connection, fingerprint=fingerprint, requests=requests, verified=verified,
+                                      verification=verification)
             self._original_request = _request_row(connection, request_id) if request_id is not None else None
             if identity != store._read_database_identity():
                 raise _refuse_snapshot_identity(snapshot["revision"], snapshot["revision"])
         self._identity = identity
         self._fingerprint = fingerprint.digest()
+        self._verified = verification[0]
         self._revision = snapshot["revision"]
         self._records = _PreparationRecords(snapshot["records"])
         self._requests = frozenset(requests)
@@ -838,8 +1127,8 @@ class _PreparedSnapshot:
 
     def release_proof(self):
         """Detach the decoded view from every holder before independent commit validation."""
-        proof = _PreparationProof(self._identity, self.revision, self._fingerprint)
-        self._records = None
+        proof = _PreparationProof(self._identity, self.revision, self._fingerprint, self._verified)
+        self._records = self._verified = None
         return proof
 
 
@@ -868,6 +1157,7 @@ class _ScopedProof(NamedTuple):
     memberships: tuple
     filtered_memberships: tuple
     global_revision: bool
+    verified: _VerifiedHistory
 
 
 # Equality predicates only; no caller code runs while validating a proof.
@@ -1053,14 +1343,16 @@ class _ScopedPreparation:
 
     def __init__(self, store):
         self._store = store
-        requests = set()
+        requests, verification = set(), []
+        verified = _verify_without_lock(store, snapshot=True)
         with store._connection() as connection:
             self._identity = store._read_database_identity()
-            snapshot = _read_snapshot(connection, requests=requests)
+            snapshot = _read_snapshot(connection, requests=requests, verified=verified, verification=verification)
             self._revision = snapshot["revision"]
             self._prefix = _scoped_prefix(connection, self._revision)
             if self._identity != store._read_database_identity():
                 raise _refuse_snapshot_identity(self._revision, self._revision)
+        self._verified = verification[0]
         self._source = snapshot["records"]
         self._records = _ScopedRecords(self)
         self._reads, self._memberships, self._filtered_memberships = {}, {}, {}
@@ -1109,8 +1401,8 @@ class _ScopedPreparation:
                              tuple(sorted(self._memberships.items())),
                              tuple((kind, predicate, keys) for (kind, predicate), keys in
                                    sorted(self._filtered_memberships.items())),
-                             self._global_revision)
-        self._records = self._source = None
+                             self._global_revision, self._verified)
+        self._records = self._source = self._verified = None
         return proof
 
 
@@ -1426,12 +1718,14 @@ class Store:
 
     @property
     def revision(self) -> int:
+        verified = _verify_without_lock(self)
         with self._connection() as connection:
-            return _validate(connection)
+            return _validate(connection, verified=verified)
 
     def snapshot(self) -> dict:
+        verified = _verify_without_lock(self, snapshot=True)
         with self._connection() as connection:
-            return _read_snapshot(connection)
+            return _read_snapshot(connection, verified=verified)
 
     def _read_database_identity(self):
         identities = []
@@ -1457,8 +1751,9 @@ class Store:
     @contextmanager
     def guarded_snapshot(self):
         """Prevent common commits until the consumer releases this snapshot."""
+        verified = _verify_without_lock(self, snapshot=True)
         with self._connection() as connection:
-            guard = _GuardedSnapshot(self.root, _read_snapshot(connection))
+            guard = _GuardedSnapshot(self.root, _read_snapshot(connection, verified=verified))
             try:
                 yield guard
             finally:
@@ -1510,38 +1805,48 @@ class Store:
     def committed_request(self, request_id: str) -> Optional[dict]:
         """Read a validated original request without retrying or changing it."""
         _text(request_id, "Request ID")
+        verified = _verify_without_lock(self)
         with self._connection() as connection:
-            _validate(connection)
+            _validate(connection, verified=verified)
             original = _request_row(connection, request_id)
             if original is None:
                 return None
             return {"operation": original["operation"], "payload": _load(original["payload"], dict),
                     "response": _load(original["response"], dict)}
 
-    def _read_committed_response(self, operation, encoded_payload, request_id):
-        """The original response when request_id is committed with this operation and payload, from a read of the
+    def _read_committed_response(self, operation, encoded_payload, request_id, verified=None):
+        """The original response when request_id is committed with this operation and payload, from reads of the
         store, else None. A replay is a read: it takes no write lock, so a writer that has not reached its COMMIT and
-        every reader go on beside it. The look for the request row replays no history; a row that exists is answered
-        only after this read has replayed the history, as every authoritative read does."""
+        every reader go on beside it. The look for the request row replays no history. When the row exists, the
+        history is replayed before a read that proves its rows (verified is the record of the preparation read of the
+        write, if it has one), and that read takes the request row again, as every authoritative read does."""
         with self._connection() as connection:
             _validate(connection, replay=False)
-            original = _request_row(connection, request_id)
-            if original is None:
+            if _request_row(connection, request_id) is None:
                 return None
-            _validate(connection)
-            return _read_original_response(original, operation, encoded_payload, request_id)
+        if verified is None:
+            verified = _verify_without_lock(self)
+        with self._connection() as connection:
+            _validate(connection, verified=verified)
+            return _read_original_response(_request_row(connection, request_id), operation, encoded_payload,
+                                           request_id)
 
     def mutate(self, operation: str, payload: dict, apply, *, expected_revision: int, request_id: str,
                _preparation=None) -> dict:
         encoded_payload = _encode_mutation_input(operation, payload, apply, expected_revision, request_id)
-        original = self._read_committed_response(operation, encoded_payload, request_id)
+        # The history is replayed before the write lock, by the preparation read or here, and proven under it.
+        verified = _preparation.verified if isinstance(_preparation, _PreparationProof) else None
+        original = self._read_committed_response(operation, encoded_payload, request_id, verified)
         if original is not None:
             return original
+        if verified is None:
+            verified = _verify_without_lock(self, writable=True)
         with self._connection(writable=True) as connection:
             fingerprint = hashlib.sha256() if _preparation is not None else None
             identity = self._read_database_identity() if _preparation is not None else None
             creation_revisions = {}
-            revision = _validate(connection, fingerprint=fingerprint, creation_revisions=creation_revisions)
+            revision = _validate(connection, fingerprint=fingerprint, creation_revisions=creation_revisions,
+                                 verified=verified)
             original = _replay_in_write_transaction(connection, operation, encoded_payload, request_id)
             if original is not None:
                 return original
@@ -1569,12 +1874,15 @@ class Store:
         """Revalidate an owned task proof, then apply(tx, actual_commit_revision)."""
         encoded_payload = _encode_mutation_input(operation, payload, apply,
                                                  0 if expected_revision is None else expected_revision, request_id)
-        original = self._read_committed_response(operation, encoded_payload, request_id)
+        verified = _preparation.verified if isinstance(_preparation, _ScopedProof) else None
+        original = self._read_committed_response(operation, encoded_payload, request_id, verified)
         if original is not None:
             return original
+        if verified is None:
+            verified = _verify_without_lock(self, writable=True)
         with self._connection(writable=True) as connection:
             creation_revisions = {}
-            revision = _validate(connection, creation_revisions=creation_revisions)
+            revision = _validate(connection, creation_revisions=creation_revisions, verified=verified)
             original = _replay_in_write_transaction(connection, operation, encoded_payload, request_id)
             if original is not None:
                 return original
@@ -1593,9 +1901,10 @@ class Store:
         original = self._read_committed_response(operation, encoded_payload, request_id)
         if original is not None:
             return original
+        verified = _verify_without_lock(self, writable=True)
         with self._connection(writable=True) as connection:
             creation_revisions = {}
-            revision = _validate(connection, creation_revisions=creation_revisions)
+            revision = _validate(connection, creation_revisions=creation_revisions, verified=verified)
             original = _replay_in_write_transaction(connection, operation, encoded_payload, request_id)
             if original is not None:
                 return original

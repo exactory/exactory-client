@@ -29,11 +29,12 @@
     "review.route_probe"
   ],
   "admission_functions": {
-    "research_harness/review_protocol.py:_invoke_once": "0153153ea8474621371d706463ed7a5ef09c9ec95c3abfcf877866f212ac6d5e",
+    "research_harness/review_protocol.py:_invoke_once": "ee088d78d5fa1233d3dc79715034fb2cbf31e576e46cdb6fb5b2bd77c159256e",
     "research_harness/review_protocol.py:_observed": "896e10fd17b469f2f469fe89b8f07113b9dec3ec9e829e146e300a516bcf5765",
-    "research_harness/review_call_admission.py:admit_review_call": "91bbea98b04dd72715df943eebf3cf1f498a614109b0ba4df2130ba4900177c2",
+    "research_harness/review_call_admission.py:admit_review_call": "557dbc985019621435bb66d41d84e462636378b658a92c79a1d74134408e988d",
     "research_harness/review_route_capacity.py:describe_session_stop": "65cfe3b9fb9d3f1bf3d0506b7f01594166971485799cafe4497a32b995166af5",
-    "research_harness/review_protocol.py:invoke_assignment": "81ba1625a06f24bc180173f08562d22fe430a226197f9b8104401ce4f338aa50"
+    "research_harness/review_protocol.py:invoke_assignment": "302b391880d9cb9668fbe4573d2412747f945e072bae7edbf2a0da0591f685f1",
+    "research_harness/review_protocol.py:prepare_assignment_call": "a314db11882dfa7a2b930b6ae02031b9e290bdc219f9b9adf56aa5cc640a34ac"
   },
   "limit_readers": [
     "research_harness/batches.py",
@@ -305,7 +306,7 @@
           "source": "route_configuration",
           "signal": "timeout",
           "configuration_field": "timeout_seconds",
-          "maximum_configured": 600
+          "maximum_configured": 3600
         },
         "response_bytes": {
           "entry": "A26",
@@ -475,9 +476,13 @@
         "timeout_seconds": {
           "class": "no_effect",
           "reason": "The timeout changes how long the caller waits, not the provider window."
+        },
+        "effort": {
+          "class": "key",
+          "reason": "Effort changes the model reasoning settings of the turn."
         }
       },
-      "source_ast_sha256": "1a674d76baa83781300d64c11223ccb1ef7ffb97324b03fd73e0cc58721a3a77"
+      "source_ast_sha256": "212bc90f15ec457052c014912c94c3927edf0169c236c39ca5ad7d1dc9e8b603"
     },
     "codex_cli_framed_v1": {
       "module": "research_harness/review_codex_framed_transport.py",
@@ -507,7 +512,7 @@
           "source": "route_configuration",
           "signal": "timeout",
           "configuration_field": "timeout_seconds",
-          "maximum_configured": 600
+          "maximum_configured": 3600
         },
         "response_bytes": {
           "entry": "A26",
@@ -677,9 +682,13 @@
         "timeout_seconds": {
           "class": "no_effect",
           "reason": "The timeout changes how long the caller waits, not the provider window."
+        },
+        "effort": {
+          "class": "key",
+          "reason": "Effort changes the model reasoning settings of the turn."
         }
       },
-      "source_ast_sha256": "7f1b66ee6290e7b0c54b347700d50533206ba19b4a6a267c19edb0ee660ce168"
+      "source_ast_sha256": "96c3640e3c9248fd1fc0693030232873dca2b2bfae73a6811b21342ac1fac268"
     },
     "codex_cli_visual_v1": {
       "module": "research_harness/review_codex_visual_transport.py",
@@ -709,7 +718,7 @@
           "source": "route_configuration",
           "signal": "timeout",
           "configuration_field": "timeout_seconds",
-          "maximum_configured": 600
+          "maximum_configured": 3600
         },
         "response_bytes": {
           "entry": "A26",
@@ -892,10 +901,14 @@
         "timeout_seconds": {
           "class": "no_effect",
           "reason": "The timeout changes how long the caller waits, not the provider window."
+        },
+        "effort": {
+          "class": "key",
+          "reason": "Effort changes the model reasoning settings of the turn."
         }
       },
       "runtime_inherits": "codex_cli_v1",
-      "source_ast_sha256": "7660b8f690c0f88f426c9751920f31aa07fcf37fddaa992239517111326050fa",
+      "source_ast_sha256": "32aca3394ac46abc1e660aa904c6c502e2cc0296d97d54cb81409a0120561166",
       "binary_rules": [
         {
           "endpoint": "codex://local",
@@ -1856,7 +1869,7 @@
   ],
   "native_packet_producers": {
     "skills/math-solver/harness/attack.py": "903e1a1e708facf7feeb1010428f5baef9f5f8ca44583298251a1c01ac554842",
-    "skills/math-solver/harness/search_controller/service.py": "301fb18027f39dccbac67835c3fb7cdd15277d86c833499586afcd80cd0b846a",
+    "skills/math-solver/harness/search_controller/service.py": "76bfcfbcba15903b4f710c5294d351d90fdb95945c1a8ec2ff2c2a040f6178b6",
     "skills/math-solver/harness/search_controller/strategy_refresh_io.py": "8987869e0ea210d0a8bba86f499bf4d12dd5a01bc9ba843a1ed8c48576148ac4",
     "skills/math-solver/harness/search_controller/execution.py": "b006cc20aabf26270859b0f931632daa6d83006076a3d2237591c9314b07265d",
     "skills/math-solver/harness/search_controller/deferrals.py": "8b0a7321da7b1773709642d28a67d1edfa667fa6f210c29aba54473dbd4f35d5",
@@ -1866,7 +1879,7 @@
     "skills/math-solver/harness/search_controller/render.py": "304d723d594fce8cedc17618fb308cc3f28cabe84f905e90370723bd792b65e3",
     "skills/math-solver/harness/search_controller/problem_records.py": "cf2dc7a9ce2a31fa79d591651b420cea92a93812aa11ebd8692bfaa36ba31f6e",
     "skills/math-solver/harness/search_controller/dispositions.py": "19eae998379431d3c62bd698e0cf9733afac33e49effd9cc98d31e370178f439",
-    "skills/math-solver/harness/search_controller/__init__.py": "f6d19cbcf81f2b0c5d313887755cdc3d7a0ef1474f19eec54e8a0348c8bf73a0",
+    "skills/math-solver/harness/search_controller/__init__.py": "be6248647d0c2037976109c108a0ad63695c153578ff940c78e4d4faa4b87439",
     "skills/math-solver/harness/search_controller/runtime.py": "8535a24f4baeca5de06c798ed9aa52bc24b4b7af6e84a118d075755fcb22529d",
     "skills/math-solver/harness/search_controller/computation_io.py": "54af2f077385939596ea41e52b29fd3508086a00351aeb21c00b7e1ae076db7f",
     "skills/math-solver/harness/search_controller/integration.py": "46296c69ad99be5f6180cc0b5faa6e74caf1e1ea91afca19994397f3ce9af8fe",
@@ -1875,11 +1888,11 @@
     "skills/math-solver/harness/search_controller/cli.py": "9762296da2edd0164115e6caff107645477f33d91479a6144031d277e4505848",
     "skills/math-solver/harness/search_controller/adoption.py": "48a4f1030bb3527af6cb21b01035a2a8b2b6eb5c7f9f6ce1c15c72f589a8ef59",
     "skills/math-solver/harness/search_controller/strategy_refresh.py": "c7f6f855fc6b91d788ef4d03ce8c8e2c4aae14b843a404e8ced7079c47871bce",
-    "skills/math-solver/harness/search_controller/reviewer.py": "242dc3ada244cdb8d41abc02222a31ed717c22708c3d1bb857f1903c6b9be795",
+    "skills/math-solver/harness/search_controller/reviewer.py": "c551930bedcc41fc214d72bd188f0178dcda80a41fb3b579209806fab999a97f",
     "skills/math-solver/harness/search_controller/closure_delivery.py": "76714a2668c73a72348864b3c2d21d267998f43ce11f0be0dbfbd5144d99ae2a",
     "skills/math-solver/harness/search_controller/storage.py": "e6935835f974cf385a5f303e927038779dfc7692d06f24eab3257ba0d6b885d2",
-    "skills/math-solver/harness/search_controller/attempt_delivery.py": "efe0ac35398aa05ab5f2b0aaf3b388f0479d5eae2ac2ba36e518bff0ceae7e2e",
-    "skills/math-solver/harness/search_controller/proof.py": "0bf509ad6349faa08da170ebada54f114b4f6c059d7bec0f6fa31b66ee13855c",
+    "skills/math-solver/harness/search_controller/attempt_delivery.py": "4b688c8c09d7375519d3e2b0e2183421ed6a0a8420a2461733c5f180b312e0be",
+    "skills/math-solver/harness/search_controller/proof.py": "0adbb921ddffeb74f26127f61e536dec1a5de47f786b18c60a3420c83ac34cfa",
     "skills/math-solver/harness/search_controller/rank_recovery.py": "fe88ffa31fb8dc528049cb94cb840adab82a0251fd0cb0bd253e892307efa5ec",
     "skills/math-solver/harness/search_controller/scheduler.py": "c74155c4782dc0bd66cf723871f37be68d31f36cac51f959c02d419ffed0895e",
     "skills/math-solver/harness/search_controller/admission.py": "d6786e5cc8e6c4e46e997112ecc2390bec9672a05966277e187bf8680e075cd5",
@@ -1888,7 +1901,7 @@
     "skills/math-solver/harness/search_controller/journal_io.py": "9b32fda84f44ee3ae277780fb901283665ca60019671a40cbd17acee47114b16",
     "skills/math-solver/harness/search_controller/provenance.py": "c1e44339c47513b8df886ba17989c4e957d87e0e7201810bcc410932ea8a5826",
     "skills/math-solver/harness/search_controller/computation.py": "e52c1a79a0b3b95a8fc8759b2f1b81f470420be67ef599426f502f718fe2e204",
-    "skills/math-solver/harness/search_controller/evidence.py": "be0e6061a7fa17019ae773aea552cf0ca051fa72d0de746a98c22af6cdd0aa55",
+    "skills/math-solver/harness/search_controller/evidence.py": "2506b9155808e6c53d2c93776a953bedf3d7b58c3e9734cb825c723334f9236b",
     "skills/math-solver/harness/search_controller/schema.py": "02588f90114cd09d8ab9b44f7bad6d9b4d1534edcc52a06d988d8aea47674a75"
   }
 }

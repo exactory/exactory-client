@@ -12,6 +12,7 @@ from strategy_fixtures import StrategyCase
 import test_research_problem_delivery as fixtures
 import test_research_problem_objections as objection_fixtures
 import test_research_problem_slate as slate_fixtures
+from slate_refresh_fixtures import cite_in_refresh_chain, cite_review
 
 SHARED_ID = "counterexample-unverified"
 QUALIFIED_ID = SHARED_ID + "@review-bar-second"
@@ -344,6 +345,8 @@ class BlindObjectionIdentityTests(fixtures.ProblemDeliveryCase):
         refresh["value"]["bar_ids"] = bar_ids
         refresh["value"]["objection_findings"] = [self.make_finding(QUALIFIED_ID, "continuing")]
         refresh["objections"] = [dict(self.make_objection("second"), id=QUALIFIED_ID, candidate_ids=[])]
+        # The refresh is a new chain whose packet delivers the bars as records, so its answer cites the reviewer's bar.
+        refresh = cite_in_refresh_chain(refresh, self.supporting, cite_review(self, "review-bar-second-v2"))
         refreshed = self.observe("slate", "second", refresh, identifier="slate-second-v2")
         saved = self.confirm_repaired_copy(refreshed, [first["id"], refreshed["id"]], objection_id=SHARED_ID)
         packet = json.loads(self.artifacts.read(

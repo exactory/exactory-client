@@ -15,10 +15,36 @@ from .errors import ResearchError
 from .evidence import digest
 from .problem_openness import serialize_record
 
-FINAL_PAGES_RECEIPT = 'This final is assigned in pages, followed by one closing page; condensing turns precede entries that exceed their room.'
-FINAL_PAGES_RELEASE_TEXT = 'A v7 chain whose final exceeds one request takes its final in pages and records one composed finding.'
-PAGE_PLAN_INVALID_MESSAGE = 'The final page plan or its turn differs from the stored plan and the preceding chain state.'
-COMPOSED_REFUSAL_TEXT = 'The composed finding was refused; correct the closing answer using this check and composed path.'
+# The message of capacity_forecast.by_kind.final in the receipt of a turn of a final in pages. It serves a chain of
+# protocol v7 and a chain of the math protocol v2.
+FINAL_PAGES_RECEIPT = (
+    'final_form is pages: the final of this chain is taken in pages. pages, condensing_turns and closing_pages '
+    'count the turns of its present page plan: the pages, the condensing turns, which reduce entries that do not '
+    'fit a page or the closing turn, and the closing turn. A turn that asks for text or stores an argument is '
+    'assigned again. The counts hold for the present plan alone: after a capacity event or a denser token ratio, '
+    'review-series plans a smaller task under a new page plan, the same turn once more, or a stop or a handoff '
+    'with its own message. Run review-series after each turn and take the step that it plans, until the closing '
+    'turn has its answer.')
+# The message of artifact_corrupt for the page plan of a final, of protocol v7 or of the math protocol v2.
+PAGE_PLAN_INVALID_MESSAGE = (
+    'The page plan of this final does not verify, so the harness cannot use it for this operation. The stored plan '
+    'differs from its recorded digest or protocol, or the plan, the position of a turn or the packet of a turn '
+    'differs from what the harness builds again from the stored capacity plan, the chain state, the native packet, '
+    'the inventory and the recorded attempts. The turns that are recorded stay in the store. Check the record with '
+    'record-check.')
+# The member message of output_refusal.composed_finding, which the replacement of a refused closing turn carries to
+# the reviewer. The notice holds it beside check, path, closing_answer and, for a field of a page, decision_row.
+COMPOSED_REFUSAL_TEXT = (
+    'The harness composed the finding from the answers of the pages and your closing answer, and a check refused the '
+    'composed finding. For this refusal, path of the last entry of output_refusal.refused and path of this member '
+    'point into the composed finding, not into your closing answer. The composed finding is '
+    '{schema_version,subject_digest,claim_digest,reviewer,findings:{statement,assumptions,scope,dependencies,policy,'
+    'openness:{outcome,coverage,reason,grounds}}}: coverage holds the coverage that the pages wrote, in the order of '
+    'the targets, and grounds holds the grounds of the pages in that order, followed by the grounds of your closing '
+    'answer. closing_answer is the refused closing answer; an object with head and complete false holds its start. '
+    'decision_row, where it is present, is the decision row of the target whose page wrote the field at path. The '
+    'answers of the pages stand. Return the closing answer again, so that the finding composed with it passes the '
+    'check.')
 
 
 def read_binding(packet):
@@ -60,7 +86,8 @@ def build_full_final(artifacts, route, logical, chain, number, inventory, state,
     # This transient inventory view is never transmitted. The paged builder
     # selects its material before assigning the ordinary request bounds.
     packet = v7.build_turn_packet(artifacts, route, logical, chain, number, inventory,
-        dict(state, notes=state['notes'][-1:]), plan, dict(limits, material_allowance=10 ** 18), 'final')
+        dict(state, notes=state['notes'][-1:]), plan, dict(limits, material_allowance=10 ** 18), 'final',
+        include_turn_members=False)
     packet['reading_final']['state_digest'] = digest(state)
     return packet
 
@@ -174,7 +201,9 @@ def prepare_final_packet(records, artifacts, prior, route, logical, number, inve
     completed, pending = list_final_progress(state, page_plan)
     selected = next((turn for turn in page_plan['turns'] if turn['number'] not in completed), None)
     if selected is None:
-        raise ResearchError('review_resampling_forbidden', 'This final already has its terminal closing answer.')
+        raise ResearchError('review_resampling_forbidden',
+            'Every turn of this final has its answer, the closing turn included, so the chain takes no further turn. '
+            'Run review-series on the chain and take the step that it plans.')
     floor = min(row['material_allowance'] for row in plan['task']['final']['levels'])
     while True:
         prepared = pages.prepare_final_turn(page_plan['turns'], selected['number'], room, limits['target_allowance'],
@@ -238,15 +267,28 @@ def publish_page_plan(artifacts, plan, *, previous=None):
     return reference
 
 
-def read_final_position(artifacts, reference, number):
+def read_final_position(artifacts, reference, number, *, include_currency=False):
     """Condensation keeps its page/closing position; target splits start positions."""
-    plans = [read_page_plan(artifacts, item) for item in reference.get('predecessors', []) + [reference]]
-    selected = next(turn for turn in plans[-1]['turns'] if turn['number'] == number)
-    for plan in reversed(plans[:-1]):
+    from .evaluation import Evaluation
+
+    def read_position_plan(item):
+        if isinstance(artifacts, Evaluation):
+            return artifacts.once(('final_position_plan', item['digest'], digest(item['artifact'])),
+                                  lambda: read_page_plan(artifacts, item))
+        return read_page_plan(artifacts, item)
+
+    current = read_position_plan(reference)
+    selected = next(turn for turn in current['turns'] if turn['number'] == number)
+    for item in reversed(reference.get('predecessors', [])):
+        plan = read_position_plan(item)
+        if include_currency and plan['currency'] != current['currency']:
+            break
         parent = next((turn for turn in plan['turns'] if turn['number'] == selected.get('split_of')), None)
         if (parent is not None and selected['kind'] in ('page', 'closing')
                 and parent['kind'] in (selected['kind'], 'final') and parent['targets'] == selected['targets']):
             selected = parent
+    if include_currency:
+        return digest(current['currency']), selected['number']
     return selected['number']
 
 
@@ -294,7 +336,8 @@ def build_final_packet(records, artifacts, route, logical, chain, number, invent
         inventory=artifacts.put(serialize_record(inventory), 'application/json'),
         state=artifacts.put(serialize_record(state), 'application/json')))
     rule_packet['handle_table'] = v7.build_handle_packet(full, artifacts, handle_assignment)['handle_table']
-    rows = composition.build_decision_rows(composition.find_rule('native_math', rule_packet), rule_packet, list_page_outputs(state),
+    rule = composition.find_rule('native_math', rule_packet)
+    rows = composition.build_decision_rows(rule, rule_packet, list_page_outputs(state),
         measure=lambda row: capacity.measure_capacity_value(route, dict(handle='decision:' + row[0], value=row)) + 1)
     for row in rows:
         catalog['decision:' + row[0]] = dict(handle='decision:' + row[0], value=row)
@@ -315,6 +358,8 @@ def build_final_packet(records, artifacts, route, logical, chain, number, invent
         material_allowance=min(turn['context']['page_room'], limits['material_allowance']),
         level_material_allowance=limits['material_allowance'])
     binding['fill'] = []
+    unread_value = None
+    requests = state.get('pending_requests', [])
     if turn['kind'] == 'combine':
         block = copy.deepcopy(turn['block'])
         block['artifact'] = artifacts.put(serialize_record(dict(block=turn['block'], entries=[dict(handle=row['handle'], value=value)
@@ -326,6 +371,7 @@ def build_final_packet(records, artifacts, route, logical, chain, number, invent
         packet = {key: full[key] for key in ('protocol', 'role', 'reviewer_id', 'dossier_id')}
         packet.update(reading_combine=binding, evidence=[])
     else:
+        unread_value = v7.read_unread_value(artifacts, state)
         binding['notes'] = binding['notes'] if turn['context']['notes'] else None
         common = read_values(turn['pool'])
         binding['material'] = [row for row in common if isinstance(row, dict) and row.get('handle', '').startswith('m')]
@@ -340,8 +386,9 @@ def build_final_packet(records, artifacts, route, logical, chain, number, invent
                 for entry in part['rows']:
                     value = catalog[entry['handle']]
                     binding['sources' if entry['handle'].startswith('source:') else 'gaps'].append(copy.deepcopy(value))
-            if 'unread' in binding:
-                unread = binding.pop('unread')
+            if unread_value is not None:
+                unread = v7.describe_unread_packet(artifacts, state, allowance=0, route=route,
+                                                   unread_value=unread_value)
                 binding['unread_summary'] = {key: copy.deepcopy(unread[key]) for key in ('digest', 'count', 'causes')}
         else:
             binding['material'] = recorded_material
@@ -351,13 +398,20 @@ def build_final_packet(records, artifacts, route, logical, chain, number, invent
             binding = {key: binding[key] for key in ('protocol', 'chain', 'turn', 'plan_digest', 'inventory_digest',
                 'state_digest', 'subject_digest', 'claim_digest', 'reviewer', 'page_plan_digest', 'final_turn', 'capacity',
                 'material', 'allowances')}
+            binding['capacity']['answer_bound'] = min(limits['answer_bound'], rule['limits']['closing'])
             binding['closing'] = dict(rows=[value['value'] if isinstance(value, dict) and value.get('handle', '').startswith('decision:')
                                           else value for value in read_values(turn['rows'])])
             if state.get('material_state', {}).get('pending'):
                 binding['material_request'] = copy.deepcopy(state['material_request'])
-            if 'unread' in state:
-                binding['unread'] = v7.describe_unread_packet(artifacts, state, route=route,
-                    allowance=max(0, turn['context']['closing_room'] - turn['characters']))
+            # The decision rows, the retained material, the unread rows and a pending delivery share one allowance.
+            used = (capacity.measure_capacity_value(route, binding['closing'])
+                    + capacity.measure_capacity_value(route, binding['material']))
+            if unread_value is not None:
+                room = min(turn['context']['closing_room'] - turn['characters'],
+                           binding['capacity']['material_allowance'] - used)
+                binding['unread'] = v7.describe_unread_packet(artifacts, state, route=route, unread_value=unread_value,
+                    allowance=max(0, room) - (v7.FINAL_DELIVERY_ROOM_CHARACTERS if requests else 0))
+                used += v7.compute_unread_rows_charge(route, binding['unread'])
         if turn['kind'] in ('page', 'final'):
             original_handles = {row['handle'] for item in page_plan['turns'] for target in item['inputs']
                                 for row in target['entries'] + target['rows']}
@@ -385,12 +439,12 @@ def build_final_packet(records, artifacts, route, logical, chain, number, invent
         full['reading_final'] = binding
         full['evidence'] = []
         packet = full
-    requests = state.get('pending_requests', [])
     if requests and turn['kind'] != 'combine':
-        used = (capacity.measure_capacity_value(route, binding.get('closing', {})) if turn['kind'] == 'closing' else
-                v7._measure_final_material(route, {key: binding.get(key, []) for key in v7.FINAL_MATERIAL_FIELDS}))
+        if turn['kind'] != 'closing':
+            used = v7._measure_final_material(route, {key: binding.get(key, []) for key in v7.FINAL_MATERIAL_FIELDS})
         now, evidence, _ = v7._pack_deliveries(artifacts, route, inventory, dict(state, _plan=plan),
-            max(0, binding['capacity']['material_allowance'] - used), requests, include_remaining=False)
+            max(0, binding['capacity']['material_allowance'] - used), requests, include_remaining=False,
+            unread_value=unread_value)
         binding['plan'] = dict(now=now)
         packet['evidence'] = evidence
     packet.pop('digest', None)
@@ -398,6 +452,8 @@ def build_final_packet(records, artifacts, route, logical, chain, number, invent
         labels = {row['handle']: row['formulation'] for row in v7.list_target_labels(logical['native'])}
         packet['finding_index'] = v7.fit_packet_finding_index(route, inventory, plan['finding_index'],
                                                               formulations=[labels[key] for key in turn['targets']])
+    if turn['kind'] != 'combine':
+        v7.append_turn_members(binding, plan, 'final', state, artifacts, unread_value=unread_value)
     packet['digest'] = digest(packet)
     return packet
 
@@ -471,8 +527,10 @@ def read_composite_currency(records, artifacts, assignment):
 
 def validate_composite_output(records, artifacts, assignment, packet, output):
     from .openness_reading_v7 import describe_protocol
+    from .review_refusal import refuse_unreadable_answer
     try:
-        describe_protocol(packet=packet)['validate_final'](packet, output, artifacts=artifacts, assignment=assignment)
+        with refuse_unreadable_answer():
+            describe_protocol(packet=packet)['validate_final'](packet, output, artifacts=artifacts, assignment=assignment)
     except ResearchError as error:
         error.details['composed_finding'] = True
         raise
@@ -489,9 +547,11 @@ def prepare_closing_composite(records, artifacts, assignment, attempt, output):
     if classify_final_capacity_attempt(records, artifacts, attempt) is not None:
         return []
     from .openness_reading_v7 import validate_turn_output
+    from .review_handles import expand_observed_output
     from .review_refusal import contract_check
+    output = expand_observed_output(packet, output, attempt, artifacts=artifacts, assignment=assignment)
     with contract_check('native.output'):
-        validate_turn_output(packet, output, artifacts=artifacts, assignment=assignment)
+        validate_turn_output(packet, output, artifacts=artifacts, assignment=assignment, expanded=True)
     if output.get('stage') in ('reading', 'material'):
         return []
     composite, (reference, content) = review_composite.prepare_composite(records, artifacts, assignment, attempt, output)

@@ -94,6 +94,20 @@ class CodexInvocationTests(unittest.TestCase):
                 self.assertFalse(self.verify(self.capture(response, events)),
                                  'Both unchanged adapters require actual high effort.')
 
+    def test_the_native_turn_must_name_the_effort_of_the_route(self):
+        for adapter in (plain, framed):
+            for configured, observed, verified in (('xhigh', 'xhigh', True), ('xhigh', 'high', False),
+                                                   (None, 'xhigh', False)):
+                with self.subTest(adapter=adapter.ADAPTER, route=configured, turn=observed):
+                    self.route['adapter'] = adapter.ADAPTER
+                    self.route['configuration'] = {'max_output_tokens': 1000, 'timeout_seconds': 5}
+                    if configured is not None:
+                        self.route['configuration']['effort'] = configured
+                    events = self.build_events(adapter)
+                    events[1]['payload']['effort'] = observed
+                    response = self.build_response(events, adapter)
+                    self.assertEqual(self.verify(self.capture(response, events)), verified)
+
     def test_missing_or_duplicate_native_turn_context_is_rejected(self):
         for adapter in (plain, framed):
             self.route['adapter'] = adapter.ADAPTER
