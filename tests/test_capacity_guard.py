@@ -1,5 +1,6 @@
 """Closure checks keep installed implementation, executed evidence and stops independent."""
 
+from unittest.mock import patch
 import ast
 import copy
 import json
@@ -20,6 +21,10 @@ STAGE3_CONSTRUCTED = ('A1', 'A2', 'A5', 'A6', 'A7', 'A8', 'A12', 'A14', 'A15', '
 
 class CapacityGuardTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.matrix = guard.read_matrix()
         self.inventory = guard.read_transport_inventory()
 

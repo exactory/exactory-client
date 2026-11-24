@@ -17,6 +17,13 @@ from research_harness.report_views import next_summary, obligations_page, status
 
 
 class PostFactTests(CheckCommandMixin, fixtures.ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare_post(self, *, gated=False, legacy=False):
         if gated:
             self.prepare_ready()

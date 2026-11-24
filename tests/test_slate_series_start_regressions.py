@@ -456,6 +456,10 @@ class ResultStartRegressionTests(PartsResultCase):
     output_tokens = 128000
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         limit = {
             'test_lossy_refresh_single_stays_ineligible_after_v3_refusal': 65000,
             'test_route_discovery_does_not_replan_projected_result_read': 245000,
@@ -641,6 +645,13 @@ class ResultStartRegressionTests(PartsResultCase):
 
 
 class RepairStartRegressionTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_selected_source_request_retry_keeps_the_ordinary_repair(self):
         for limit in (65000, 165000):
             with self.subTest(limit=limit):

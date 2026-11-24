@@ -9,6 +9,13 @@ from research_harness import literature, reading, research_decisions as decision
 
 
 class ProblemAdjudicationContractTests(delivery_fixtures.ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     make_objection = objection_fixtures.ProblemObjectionTests.make_objection
     make_finding = objection_fixtures.ProblemObjectionTests.make_finding
     prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence

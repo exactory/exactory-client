@@ -12,6 +12,13 @@ from research_harness.errors import ResearchError
 
 
 class CapacityGuardFixTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def make_case(self, characters=50000):
         from test_route_capacity_properties import ReadingCapacityCommandTests
         driver = ReadingCapacityCommandTests()

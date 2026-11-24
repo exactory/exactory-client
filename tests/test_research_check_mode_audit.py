@@ -1,5 +1,6 @@
 """Exercise every check command and real fixture preparations without workspace writes."""
 
+from unittest.mock import patch
 import copy
 import argparse
 from contextlib import contextmanager
@@ -102,6 +103,13 @@ def build_required_arguments(parser, payload_path):
 
 
 class PartsPlanCheckTests(CheckCommandMixin, PartsViewCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_recorded_parts_assignment_and_status_show_the_marked_plan_before_run(self):
         self.prepare_parts()
         self.root, self.store = self.case.root, self.case.store

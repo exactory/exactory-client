@@ -152,6 +152,10 @@ class ArtifactParseCostTests(LiteratureCase):
 
 class LegacySeriesCostTests(ResultPartsCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.oversized()
         self.series = []
@@ -379,6 +383,13 @@ class HistoryCostTests(LiteratureCase):
 
 
 class DeliveryValidationTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def retain_delivery_while_streaming(self, records, evaluation, assignment_id):
         with patch.object(evaluation, 'reuse_value', wraps=evaluation.reuse_value) as retain:
             for _ in range(2):
@@ -424,6 +435,13 @@ class DeliveryValidationTests(ResultPartsCase):
 
 
 class CoverageRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_changed_visual_emitter_invalidates_warm_coverage_across_command_scopes(self):
         import test_visual_context_repair as fixtures
         from research_harness import review_exact_text_cost_v1 as emitter

@@ -18,6 +18,10 @@ import test_review_continuation as continuation_fixtures
 
 class PendingViewTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         fixture = continuation_fixtures.ContinuationTests()
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)

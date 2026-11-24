@@ -1,11 +1,19 @@
 """A new typed-record revision does not manufacture new scientific grounds."""
 
+from unittest.mock import patch
 from research_harness import research_decisions, strategy
 from research_harness.evidence import digest
 from strategy_fixtures import StrategyCase
 
 
 class TypedRecordIdentityTests(StrategyCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def record_reference(self, record):
         return {"kind": "record", "record_kind": "research_work_item",
                 "id": record["id"], "digest": digest(record)}

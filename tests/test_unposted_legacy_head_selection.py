@@ -1,5 +1,6 @@
 """Unposted legacy metadata preserves the released continuation selection."""
 
+from unittest.mock import patch
 import copy
 import unittest
 
@@ -9,6 +10,10 @@ import test_review_continuation as continuation_fixtures
 
 class LegacyUnpostedHeadSelectionTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = continuation_fixtures.ContinuationTests()
         self.addCleanup(self.fixture.doCleanups)
         self.fixture.setUp()

@@ -122,6 +122,10 @@ class SourceReplyBatchTests(StrategyCase):
                 self.assertEqual(caught.exception.details['source_request'], request)
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.sequence = 0
         self.setup_dossier()
@@ -476,6 +480,13 @@ class SharedReplyProjectionTests(unittest.TestCase):
 
 
 class CompleteVisiblePreflightTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_new_complete_visible_closure_can_restore_delivery_while_a_source_is_unavailable(self):
         fixture = complete_sources.NativeCompleteSourceTests()
         self.addCleanup(fixture.doCleanups)

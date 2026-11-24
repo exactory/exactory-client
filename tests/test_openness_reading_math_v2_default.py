@@ -68,6 +68,11 @@ class ProblemV7BytesTests(unittest.TestCase):
         self.assertEqual(json.loads(json.dumps(build_problem_chain(frames))), expected)
 
 
+class MathDefaultTests(unittest.TestCase):
+    def test_default_holds_math_v2_first_and_math_v1_second(self):
+        self.assertEqual(reading.NEW_MATH_CHAIN_PROTOCOLS, (reading.MATH_PROTOCOL_V2, reading.MATH_PROTOCOL))
+
+
 class MathV1DefaultTests(MathCarriedCase):
     route_output_tokens = 128000
 
@@ -89,8 +94,7 @@ class MathV1DefaultTests(MathCarriedCase):
         self.assertEqual(json.loads(self.artifacts.read(actual['packet'])), expected)
         return actual
 
-    def test_default_new_math_chain_is_the_released_v1_chain(self):
-        self.assertEqual(reading.NEW_MATH_CHAIN_PROTOCOLS, (reading.MATH_PROTOCOL,))
+    def test_new_math_chain_under_v1_is_the_released_v1_chain(self):
         self.compare_with_released(self.build_math_packet(), 'math-1')
 
     def test_v1_chain_in_progress_continues_byte_for_byte_under_either_order(self):

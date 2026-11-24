@@ -84,6 +84,13 @@ class SuppliedCase(OpennessReadingCase):
 
 
 class SuppliedEligibilityTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def create_case(self, shape='pdf', *, route=False):
         case = SuppliedCase()
         case.setUp()

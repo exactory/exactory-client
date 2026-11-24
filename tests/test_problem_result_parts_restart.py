@@ -35,6 +35,13 @@ def record_legacy():
 
 
 class ProblemResultRestartTests(PartsResultCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     output_tokens = 128000
 
     def create_legacy(self, count=3, characters=50000, limit=130000, reviewer='first', closed=False):
@@ -453,6 +460,13 @@ class ProblemResultRestartTests(PartsResultCase):
 
 
 class CurrentResultSlotTests(PartsResultCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_non_result_slot_summary_retains_existing_pending_occupancy(self):
         records = self.case.read_records()
         prior = records['review_assignment']['bar-first']
@@ -573,6 +587,10 @@ class ProblemResultWideRouteTests(PartsResultCase):
     create_legacy = ProblemResultRestartTests.create_legacy
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         with patch('test_research_problem_reviews.ProblemReviewTests.capacity_probe_tokens',
                    self.output_tokens + 245000, create=True):
             super().setUp()

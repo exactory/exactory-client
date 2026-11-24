@@ -15,6 +15,10 @@ from research_harness.review_series import run_series
 
 class ReadingHandoffTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = fixtures.ProblemReviewTests()
         self.addCleanup(self.case.doCleanups)
         self.case.setUp()
@@ -475,6 +479,13 @@ class ReadingHandoffTests(unittest.TestCase):
 
 
 class FocusedReadingHandoffTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare(self):
         from test_review_parts_adjudication_journey import AdjudicationPartsCase
         fixture = AdjudicationPartsCase()

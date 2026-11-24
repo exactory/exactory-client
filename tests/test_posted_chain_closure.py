@@ -309,6 +309,13 @@ class UnboundClosureTests(ClosureCase):
 
 
 class SlateClosureSlotTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_new_slate_root_uses_final_reviewer_slot_after_another_slot_was_posted(self):
         from test_research_problem_slate import ProblemSlateTests
         case = ProblemSlateTests()

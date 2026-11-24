@@ -25,6 +25,11 @@ DATACITE_DOI_LINK_KIND = "datacite_doi"
 SHARED_DOI_LINK_KIND = "shared_doi"
 
 
+class IdentifierURLParseError(ResearchError):
+    """The refusal of an identifier URL that urlsplit cannot parse. Before release 0.93.0 this URL raised the
+    ValueError of urlsplit, and the readers of provider records that handled that ValueError handle this refusal."""
+
+
 _ARXIV = re.compile(r"(?P<base>(?:[0-9]{2}(?:0[1-9]|1[0-2])\.[0-9]{4,5}|(?P<archive>[a-z-]+)(?:\.[A-Z]{2})?/[0-9]{2}(?:0[1-9]|1[0-2])[0-9]{3}))(?P<version>v[1-9][0-9]*)?\Z")
 # The hyphenated archives that arXiv's taxonomy definitions list as begun before
 # the identifier scheme changed in April 2007, keyed by the name without hyphen.
@@ -47,7 +52,7 @@ def normalize_identifier(value):
         try:
             parts = urlsplit(value)
         except ValueError:
-            raise ResearchError("invalid_identifier", "A supported exact identifier is required") from None
+            raise IdentifierURLParseError("invalid_identifier", "A supported exact identifier is required") from None
         if parts.username is not None or parts.password is not None or parts.query or parts.fragment:
             raise ResearchError("invalid_identifier", "Identifier URLs cannot contain credentials, queries or fragments")
         host, path = parts.netloc.lower(), unquote(parts.path)

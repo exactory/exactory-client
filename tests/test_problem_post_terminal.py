@@ -16,6 +16,13 @@ from research_harness.report_views import next_summary
 
 
 class PostedProblemTests(delivery.ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     make_finding = objections.ProblemObjectionTests.make_finding
     prepare_problem_evidence = objections.ProblemObjectionTests.prepare_problem_evidence
     prepare_reviews = objections.ProblemObjectionTests.prepare_reviews
@@ -135,6 +142,13 @@ class PostedProblemTests(delivery.ProblemDeliveryCase):
 
 
 class PostedCarryRaceTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_approved_external_post_is_recorded_after_source_changes(self):
         self.record_approved_post_after_source_change()
 

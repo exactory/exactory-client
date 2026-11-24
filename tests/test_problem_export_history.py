@@ -322,6 +322,13 @@ class OverrideExportHistoryTests(override_fixtures.OverrideCommandMixin, Problem
 
 
 class ReviewedExportHistoryTests(ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_stored_legacy_and_new_v2_reviewed_exports_retire_without_changing_bytes(self):
         self.prepare_ready()
         self.record_post_decision()

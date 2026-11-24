@@ -1,5 +1,6 @@
 """Context repair cannot discard the predecessor's actual source requests."""
 
+from unittest.mock import patch
 from strategy_fixtures import StrategyCase
 import test_research_bar_sources as source_fixtures
 import test_research_context_repair_integration as repair_fixtures
@@ -35,6 +36,10 @@ class RepairSourcePendingTests(StrategyCase):
     probe_repair = repair_fixtures.ContextRepairIntegrationTests.probe_repair
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.sequence = 0
         self.setup_dossier()

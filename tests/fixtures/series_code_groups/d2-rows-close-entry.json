@@ -169,11 +169,6 @@
           "entry"
         ]
       },
-      "execution_pending": {
-        "skills/math-solver/harness/search_controller/deferrals.py:validate_deferrals#1": [
-          "record"
-        ]
-      },
       "expected_outcome_unresolved": {
         "research_harness/development.py:_assess#1": [
           "entry"

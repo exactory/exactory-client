@@ -15,7 +15,7 @@ from .evidence import digest
 from .operations import fields
 
 PROTOCOL = 'exactory-review-parts-v2'
-NEW_SERIES_PROTOCOLS = (PROTOCOL,)
+NEW_SERIES_PROTOCOLS = ('exactory-review-parts-v3', PROTOCOL)
 KEY = 'review_parts'
 KINDS = ('read', 'combine', 'check', 'final')
 STATE_KEY = 'review_parts_state'

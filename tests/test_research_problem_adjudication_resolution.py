@@ -15,6 +15,13 @@ from slate_refresh_fixtures import cite_in_refresh_chain
 
 
 class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     make_objection = objection_fixtures.ProblemObjectionTests.make_objection
     make_finding = objection_fixtures.ProblemObjectionTests.make_finding
     prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence
@@ -1249,6 +1256,12 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
 
 class RecordedReviewEvidenceTests(delivery_fixtures.ProblemDeliveryCase):
     """R65 audits legacy records and refreshes only their affected reviewer slots."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     prepare_reviews = objection_fixtures.ProblemObjectionTests.prepare_reviews
     prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence
@@ -1477,6 +1490,12 @@ class RecordedReviewEvidenceTests(delivery_fixtures.ProblemDeliveryCase):
 
 class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
     """R60 recovery uses authenticated observed bytes, frozen delivery and two refused outputs."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     prepare_reviews = objection_fixtures.ProblemObjectionTests.prepare_reviews
     prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence

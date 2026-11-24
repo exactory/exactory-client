@@ -25,6 +25,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class StopClassificationTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_auto_pass_example_contains_only_the_stop_identity(self):
         args = cli.build_parser().parse_args(["example", "gate-auto-pass"])
         self.assertEqual(cli.run(args), {"stop_id": "SERIES_STOP_ID"})
@@ -207,6 +214,10 @@ class StopClassificationTests(unittest.TestCase):
 
 class RecordedSeriesStopTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = continuation_fixtures.ContinuationTests()
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
@@ -581,6 +592,10 @@ class AutomaticStudyPassTests(DevelopmentCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        cls.addClassCleanup(released.stop)
         case = DevelopmentCase()
         case.setUp()
         cls.addClassCleanup(case.doCleanups)

@@ -681,6 +681,13 @@ class ManyNotesIntegrationTests(CarriedIntegrationSupport, OpennessReadingCase):
 
 
 class FallbackCarriedIntegrationTests(OpennessReadingCase):
+    def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     reading_protocol = None
     route_model = 'gpt-6-astra'
     route_output_tokens = 128000
@@ -1448,6 +1455,12 @@ class SuppliedTextContentChangeTests(SuppliedWorkSupport, ContentChangeSupport, 
 
 class ReadScopeIntegrationTests(CarriedIntegrationSupport, OpennessReadingCase):
     """C9 to C11: the selection reads an artifact of an earlier assignment only when its result can depend on it."""
+    def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def build_payload(self, identifier='new', *, reviewer_id='openness-reviewer', route_id='route', bindings=None):
         bindings = bindings or [dict(formulation=self.selected['statement'], search_id=self.search['id'])]

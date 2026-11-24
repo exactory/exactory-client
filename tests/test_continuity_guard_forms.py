@@ -16,6 +16,12 @@ from test_series_code_reach import record_reachable_errors
 class FormSizeRowTests(unittest.TestCase):
     """K8: each turn of each new kind, protocol and form, and each size outcome, ends at a replacement on the same
     route and reviewer that passes the preflight, or at the decision stop with every answer executed to its end."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def execute_size_rows(self, family):
         """Each turn of the family is built once and each of its six rows works on a copy of its store; the number
@@ -113,6 +119,12 @@ CHAIN_KINDS = {'session-v4': 'session', 'parts-v3': 'parts_v2:problem_result', '
 
 class FormOutcomeRowTests(unittest.TestCase):
     """G1 for the outcomes that are not size limits and for the conditions of D2 4.6 that a chain kind can change."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def execute_families(self, method):
         for family in guard.FORM_FAMILIES.values():
@@ -222,6 +234,12 @@ FLOOR_EVIDENCE = (
 class FormRequiredStopTests(unittest.TestCase):
     """K7: each required stop of the entries that 0.92.0 completes has a registry row, its fixture sends no request
     to the transport, and the steps of every answer are executed to their end."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def execute_floors(self, family):
         """Each replacement is a smaller task on the same route until the floor, whose decision stop is executed
@@ -426,6 +444,12 @@ G4_EVIDENCE = (
 class FormCountingTests(unittest.TestCase):
     """G4 with the positions of a final in pages: the pages of a split are new positions, a capacity replacement
     spends none of the two replacements that carry a refusal, and the executable plans end (the floor rows)."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def test_g4_page_split_starts_new_positions_without_spending_a_refusal_replacement(self):
         self.assertEqual(require_evidence_tests(G4_EVIDENCE), {})
@@ -517,6 +541,13 @@ class FormJourneyTests(unittest.TestCase):
 
 
 class FormFindingTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare(self, cls):
         return forms.prepare_unit_fixture(self, cls, 'runTest')
 
@@ -894,6 +925,13 @@ class FormFindingTests(unittest.TestCase):
 
 
 class ThirdRoundTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare(self, cls):
         return forms.prepare_unit_fixture(self, cls, 'runTest')
 
@@ -1467,6 +1505,13 @@ class FifthRoundTests(unittest.TestCase):
 
 
 class SixthRoundTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_carried_reading_of_a_released_and_a_math_chain_admits_the_next_chain(self):
         """A healthy earlier chain is carried into the check and the record of a new chain, as release 0.92.0 does;
         a required object that is missing still refuses both."""

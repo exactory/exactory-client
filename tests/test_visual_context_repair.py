@@ -19,6 +19,10 @@ from research_harness import review_visual_context_repair as visual_repair
 
 class VisualContextRepairTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         from test_visual_result_delivery import VisualResultDeliveryTests
         self.fixture = VisualResultDeliveryTests()
         self.addCleanup(self.fixture.doCleanups)

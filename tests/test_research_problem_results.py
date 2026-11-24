@@ -91,6 +91,13 @@ class ProblemResultTests(ProblemCase):
 
 
 class ProblemResultReviewTests(ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_empty_attempt_and_results_fields_must_be_present_in_review_packets(self):
         self.initialize_problem()
         self.selected = self.select_statement()

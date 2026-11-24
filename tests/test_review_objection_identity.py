@@ -27,6 +27,13 @@ def list_identity_pairs(objections):
 
 
 class BlindObjectionIdentityTests(fixtures.ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     build_slate_output = slate_fixtures.ProblemSlateTests.build_slate_output
     prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence
     assert_blocked_delivery = objection_fixtures.ProblemObjectionTests.assert_blocked_delivery
@@ -694,6 +701,10 @@ class DossierObjectionIdentityTests(StrategyCase):
     """AI Science dossiers keep one claim per objection id for every reviewer."""
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.setup_dossier()
         self.route()

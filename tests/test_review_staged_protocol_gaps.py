@@ -155,6 +155,13 @@ class StagedPacketGapTests(unittest.TestCase):
 
 
 class StagedObservedGapTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     staged_entry = True
 
     def test_incomplete_provenance_uses_the_terminal_attempt_for_every_child(self):

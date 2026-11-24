@@ -21,6 +21,10 @@ from research_harness.evidence import digest
 
 class ProblemResultContractTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         # Load the native candidate dependency before the existing claim fixture replaces its module.
         importlib.import_module('research_harness.problem_candidates')
         self.case = fixtures.ProblemReviewTests()
@@ -380,6 +384,13 @@ if __name__ == '__main__':
 
 
 class ProblemResultSeriesCoverageTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_two_series_reviews_deliver_all_current_items(self):
         self.oversized()
         reviews = []

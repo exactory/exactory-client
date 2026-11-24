@@ -19,6 +19,13 @@ from tests.openness_chain_support import MathOpennessChainCase, OBJECTIVE_PACKET
 
 
 class MathOpennessReadingTests(MathOpennessChainCase, unittest.TestCase):
+    def setUp(self):
+        from research_harness import openness_reading
+        released = patch.object(openness_reading, 'NEW_MATH_CHAIN_PROTOCOLS', (openness_reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_attempt_links_the_attested_reading_chain_to_its_observed_final(self):
         self.build_fixture(response_sizes=(70000, 60000), text_sizes=())
         turns = self.run_chain()

@@ -19,6 +19,13 @@ MEMBERS = ROOT / 'tests/fixtures/series_code_groups/d2-rows-close-conditions.jso
 
 
 class ConditionsRowTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare_case(self):
         fixture = continuation_fixtures.ContinuationTests()
         self.addCleanup(fixture.doCleanups)

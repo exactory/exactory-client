@@ -248,6 +248,13 @@ def build_parts_fixture_packets():
 
 
 class QuantityFactoryTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_correction_evidence_union_closes_each_legal_locator_shape(self):
         from research_harness.strategy import evidence_fields
         from research_harness.source_links import validate_link_fields
@@ -430,6 +437,13 @@ class QuantityFactoryTests(unittest.TestCase):
 
 
 class ProductionPacketInventoryTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_probe_and_correction_operation_packets_have_closed_wire_variants(self):
         registry = read_packet_registry()
         for name, packet in registry['operation_examples'].items():

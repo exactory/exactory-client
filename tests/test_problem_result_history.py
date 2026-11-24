@@ -36,6 +36,10 @@ class ProblemResultHistoryTests(ResultPartsCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        cls.addClassCleanup(released.stop)
         from research_harness import review_parts
         for target, name, replacement in (
                 (review_parts, 'prepare_packet', lambda records, artifacts, value, route, packet, prompt, history, **kwargs: packet),

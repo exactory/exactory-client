@@ -26,6 +26,10 @@ class V7RefusalTests(OpennessReadingCase):
     finish_reading = turn_fixtures.V7CommandTests.finish_reading
 
     def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         enabled = patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (v7.PROTOCOL, reading.PROTOCOL_V6))
         enabled.start()
@@ -749,6 +753,10 @@ class LegacySuccessorTests(OpennessReadingCase):
     finish_from = V7RefusalTests.finish_from
 
     def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.limit_input(1300000)
 
@@ -1322,7 +1330,7 @@ class NoticeRoomTests(unittest.TestCase):
             for label_set in ('short', 'just_under', 'exact', 'above', 'mixed'):
                 margins, endpoints = [], []
                 with patch.object(v7, 'build_inventory', return_value=fixture.built), patch.object(
-                        capacity, 'read_profile_priors', return_value=priors):
+                        capacity, 'read_profile_priors', return_value=priors), patch.object(v7, 'V7_FINAL_FORMS', ('request',)):
                     for count in range(1, 77):
                         native = self.build_label_native(fixture.route, count, label_set)
                         admission = v7.check_v7_admission(records, fixture.artifacts, fixture.route, native)

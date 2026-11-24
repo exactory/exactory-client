@@ -30,7 +30,7 @@ from . import review_route_capacity as capacity
 from .review_search_delivery import plan_search_delivery
 
 PROTOCOL = 'exactory-openness-reading-v7'
-V7_FINAL_FORMS = ('request',)
+V7_FINAL_FORMS = ('request', 'pages')
 # M1 of the math-v2-final-pages design admits a math v2 final only in one request.
 MATH_V2_FINAL_FORMS = ('request',)
 VISUAL_TEXT_ROUTE_CODE = 'review_visual_text_route_required'

@@ -4,13 +4,20 @@ from unittest.mock import patch
 
 from literature_fixtures import LiteratureCase
 import test_research_review_protocol as fixtures
-from research_harness import cli, review_protocol as protocol, review_route_capacity as capacity
+from research_harness import cli, review_parts as parts, review_protocol as protocol, review_route_capacity as capacity
 from research_harness import review_transport as transport
 from research_harness.errors import ResearchError
 from test_review_capacity_steps import CapacityAnswers
 
 
 class UncoveredReviewTests(CapacityAnswers, LiteratureCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     protocol = fixtures.ReviewProtocolTests.protocol
     seed = fixtures.ReviewProtocolTests.seed
     route = fixtures.ReviewProtocolTests.route
@@ -150,6 +157,9 @@ class UncoveredReviewTests(CapacityAnswers, LiteratureCase):
         self.assertTrue(protocol.assignment_state(self.records(), self.artifacts, 'assignment')['ready'])
 
     def test_serving_parts_fit_the_real_frame_without_writing_artifacts(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         from claude_review_fixtures import RECORDED_CONTEXTS, build_recorded_response, build_recorded_runtime
         from research_harness import review_claude_transport as claude
         def respond(route, request, credential):

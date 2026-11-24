@@ -15,6 +15,13 @@ from research_harness.evidence import digest
 
 
 class ClaimDependencyTests(DevelopmentCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def build_managed_study(self):
         self.prepared_study()
         ManagedStrategy(self).ensure_intent()

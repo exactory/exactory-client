@@ -134,6 +134,13 @@ def entry(error):
 
 
 class ClosingRowTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare_case(self):
         fixture = continuation_fixtures.ContinuationTests()
         fixture.setUp()
@@ -424,6 +431,13 @@ class ClosingAdmissionTests(unittest.TestCase):
 
 
 class MalformedContextAnswerTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_malformed_peer_is_reported_before_scanning_refusal_replacements(self):
         from research_harness.review_continuation import list_chain_heads
 

@@ -41,6 +41,10 @@ class RouteRetirementCase(StrategyCase):
 
 class RetiredRouteTests(RouteRetirementCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.setup_dossier()
         self.route()
@@ -94,6 +98,10 @@ class ExhaustedRepairTests(RouteRetirementCase):
     """An exhausted repair position gives way to a new repair of the same slot."""
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.setup_dossier()
         self.route()
@@ -154,6 +162,10 @@ class RetiredSourceTurnTests(RouteRetirementCase):
     assigned but never run when the route was retired."""
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.setup_dossier()
         self.route()
@@ -197,6 +209,10 @@ class RetiredRouteStateTests(RouteRetirementCase):
     route record holds the completed probe "probe" and the observed assignment "assignment-bar-a"."""
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.setup_dossier()
         self.route()

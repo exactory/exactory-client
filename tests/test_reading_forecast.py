@@ -13,6 +13,13 @@ from test_openness_final_preflight import FinalPreflightCase
 
 
 class ReadingProjectionTests(FinalPreflightCase):
+    def setUp(self):
+        from research_harness import openness_reading
+        released = patch.object(openness_reading, 'NEW_MATH_CHAIN_PROTOCOLS', (openness_reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     reading_protocol = None
     historical_v5 = True
     input_limit = 1300000
@@ -142,6 +149,13 @@ class ReadingProjectionTests(FinalPreflightCase):
 
 
 class MathForecastTests(FinalPreflightCase):
+    def setUp(self):
+        from research_harness import openness_reading
+        released = patch.object(openness_reading, 'NEW_MATH_CHAIN_PROTOCOLS', (openness_reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     reading_protocol = None
     historical_v5 = True
     text_sizes = (125000, 125000, 125000)
@@ -447,6 +461,13 @@ class AdversarialProjectionTests(FinalPreflightCase):
 
 
 class LegacyReadingForecastTests(FinalPreflightCase):
+    def setUp(self):
+        from research_harness import openness_reading
+        released = patch.object(openness_reading, 'NEW_MATH_CHAIN_PROTOCOLS', (openness_reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     reading_protocol = None
     historical_v5 = True
 

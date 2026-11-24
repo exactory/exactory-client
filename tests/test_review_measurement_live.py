@@ -123,6 +123,10 @@ class HistoricalFixtureTests(unittest.TestCase):
 
 class LiveSeriesTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         fixture = continuation_fixtures.ContinuationTests()
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
@@ -288,6 +292,13 @@ class LiveSeriesTests(unittest.TestCase):
 
 
 class LiveCasePreparationTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_focused_case_recreates_retained_payload_with_fixed_route(self):
         from tools.review_measurement import live_cases
         from test_review_parts_adjudication_journey import AdjudicationPartsCase

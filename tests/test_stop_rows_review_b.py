@@ -17,6 +17,13 @@ SCIENTIFIC_REFUSAL_CODES = (
 
 
 class ReviewBRowTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare_fixture(self, fixture_type=continuation_fixtures.ContinuationTests):
         fixture = fixture_type()
         fixture.setUp()

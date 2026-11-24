@@ -39,6 +39,10 @@ class RouteRenewalFixture(unittest.TestCase):
     route_changes = {}
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = problem_fixtures.ProblemReviewTests()
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
@@ -1145,6 +1149,12 @@ class RouteRenewalCompatibilityTests(RouteRenewalFixture):
 class RouteRenewalStoredShapeTests(unittest.TestCase):
     """K1. The fixtures of these stores need the problem modules that the session fixture replaces, so this class
     has no session fixture of its own."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def run_with_membership_check(self, test_class, method, *, set_up=True):
         from research_harness import review_failure_class as failures
@@ -1265,6 +1275,10 @@ class RouteRenewalSessionV4SeriesV3Tests(unittest.TestCase):
         check_stale_procedure(self, fixture.case.store, final['id'], [8, 7, 1], lambda: renew_codex_route(fixture.case))
 
     def test_refused_series_v3_closing_on_a_stale_route_ends_before_any_record(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         from research_harness import review_parts
         fixture = build_series_fixture(self)
         assignment = fixture.reach_page(fixture.start(0))
@@ -1319,6 +1333,10 @@ class RouteRenewalSessionV4SeriesV3Tests(unittest.TestCase):
         self.assertNotIn('renewal', details)
 
     def test_series_v3_continuation_on_a_stale_route_records_nothing(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         fixture = build_series_fixture(self)
         first = fixture.start(0)
         self.assertNotIn('output_refusal', fixture.invoke(first, fixture.answer(first)))
@@ -1328,6 +1346,10 @@ class RouteRenewalSessionV4SeriesV3Tests(unittest.TestCase):
         check_series_stops_on_the_stale_route(self, fixture.case.store, first['id'])
 
     def test_series_v3_capacity_replacement_on_a_stale_route_records_nothing(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         from research_harness import review_route_capacity as capacity
         fixture = build_series_fixture(self)
         page = fixture.reach_page(fixture.start(0))

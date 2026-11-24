@@ -9,6 +9,10 @@ from strategy_fixtures import StrategyCase
 
 class ContextRepairTests(StrategyCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.setup_dossier()
         self.route()
@@ -204,6 +208,13 @@ class ContextRepairTests(StrategyCase):
 
 
 class CrossPhaseContextRepairTests(StrategyCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     probe = ContextRepairTests.probe
 
     def test_slate_repair_preserves_its_slot_and_actual_bar_exposure(self):

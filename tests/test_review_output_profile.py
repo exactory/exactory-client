@@ -1081,6 +1081,13 @@ class MissingFrameBaselineTests(unittest.TestCase):
 
 
 class StagedMetricTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_staged_request_metrics_preserve_controller_and_child_request_digests(self):
         from test_review_staged_protocol import StagedEntryTests
         from research_harness import review_protocol as protocol

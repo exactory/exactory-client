@@ -64,6 +64,10 @@ def build_adapter_prompt(packet):
 
 class SingleEntryTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.artifacts = ArtifactStore(Path(directory.name))
@@ -87,6 +91,9 @@ class SingleEntryTests(unittest.TestCase):
                                     packet, prompt, [], **options)
 
     def test_each_adapter_enters_by_task_with_profile_read_start(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         from research_harness import review_parts_v3
         cases = build_adapter_cases()
         self.assertEqual(set(cases) | {'problem_slate'}, set(ADAPTERS))
@@ -124,6 +131,9 @@ class SingleEntryTests(unittest.TestCase):
                            protocol.transport.local_input_limit(changed))
 
     def test_entry_compares_whole_request_at_the_exact_start_value(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         packet = build_adapter_cases()['study_verification']
         body = 'A complete visible source. ' * 300
         checksum = hashlib.sha256(body.encode()).hexdigest()
@@ -229,6 +239,9 @@ class SingleEntryTests(unittest.TestCase):
                 self.assertIsNone(build_output_replacement(self.records, self.artifacts, assignment))
 
     def test_each_adapter_output_replacement_passes_preflight(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         from research_harness.review_single_request import build_output_replacement
         for adapter, packet in build_adapter_cases().items():
             with self.subTest(adapter=adapter):
@@ -247,6 +260,9 @@ class SingleEntryTests(unittest.TestCase):
                                      planned['preflight']['input_size']['limit'])
 
     def test_each_adapter_replacement_is_accepted_by_the_assignment_command(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         from research_harness.storage import Store
         from research_harness.operations import prepared_mutation
         from research_harness import review_preflight
@@ -478,9 +494,15 @@ class FrozenSingleTests(unittest.TestCase):
                          self.case.artifacts, first_read), before)
 
     def test_capacity_recovery_of_a_refusal_read_keeps_its_frozen_notice(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         self.complete_refusal_read_capacity_recovery()
 
     def test_capacity_recovery_of_a_bounded_refusal_read_keeps_its_frozen_notice(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         self.complete_refusal_read_capacity_recovery(bounded=True)
 
     def complete_refusal_read_capacity_recovery(self, *, bounded=False):
@@ -747,6 +769,9 @@ class FrozenSingleTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'review_task_dependency_changed')
 
     def test_opus_max_128000_output_replacement_reaches_a_recorded_native_final(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         from research_harness import review_claude_transport as claude
         from claude_review_fixtures import build_recorded_response, RECORDED_CONTEXTS
         from research_harness.review_continuation import plan_next

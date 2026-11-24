@@ -13,6 +13,13 @@ DELIVERY_PROTOCOL = 'exactory-problem-slate-delivery-v1'
 
 
 class SlateRefreshCase(SlateDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def record_first_slate(self, claims=()):
         """A slate review of the form of 0.92.1, which continues the bar session and states an objection for each
         (id, claim), then a revised candidate."""

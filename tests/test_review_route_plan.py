@@ -559,6 +559,10 @@ class EarlierTurnRouteTests(unittest.TestCase):
     earlier probe verified it."""
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         import test_visual_result_delivery as fixtures
         self.fixture = fixtures.VisualResultDeliveryTests()
         self.addCleanup(self.fixture.doCleanups)
@@ -669,6 +673,10 @@ class CorrectionRouteTests(unittest.TestCase):
     """The handoff of an output correction, with the store of tests/test_review_correction_origin.py."""
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         import test_review_correction_origin as origin
         self.origin = origin.CorrectionOriginCase('build_refused')
         self.addCleanup(self.origin.doCleanups)

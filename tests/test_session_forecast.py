@@ -19,6 +19,10 @@ FORECAST_CALL_ERROR = 'The forecast must refuse before sending another request.'
 
 class SessionForecastTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         build_response = fixtures.fixtures.ProblemReviewTests.build_provider_response
         def build_bounded_response(case, output):
             response = build_response(case, output)

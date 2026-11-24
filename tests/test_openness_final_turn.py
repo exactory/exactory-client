@@ -520,6 +520,10 @@ class AlternateRepresentationTests(unittest.TestCase):
     small packet under v6 stays a single turn."""
 
     def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         import test_problem_openness_native_reviews as native_fixtures
         import test_research_problem_openness_minimum as minimum_fixtures
         from codex_route_fixtures import record_codex_route

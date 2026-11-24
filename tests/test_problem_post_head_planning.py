@@ -17,6 +17,10 @@ from research_harness.output_views import render_all
 
 class PostedHeadPlanningTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = ResultPartsCase()
         self.addCleanup(self.fixture.doCleanups)
         self.fixture.setUp()

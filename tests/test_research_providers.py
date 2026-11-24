@@ -132,6 +132,17 @@ class ProviderTests(unittest.TestCase):
         self.assertIsNone(work["abstract_text"])
         self.assertEqual(work["abstract_status"], "invalid")
 
+    def test_a_reference_url_that_does_not_parse_makes_the_item_invalid_as_in_0_92_1(self):
+        works = openalex()
+        works["referenced_works"] = ["https://openalex.org/W456", "https://[x"]
+        cited = crossref()
+        cited["message"]["reference"][0]["DOI"] = "https://[x"
+        for provider, data in ((OpenAlex(), works), (Crossref(), cited)):
+            with self.subTest(provider=type(provider).__name__):
+                page = provider.parse(json.dumps(data).encode())
+                self.assertEqual(page.works, [])
+                self.assertEqual([(row["index"], row["code"]) for row in page.failures], [(0, "invalid_work")])
+
     def test_crossref_keeps_unresolved_nonpaper_references_and_date_precision(self):
         work = Crossref().parse(json.dumps(crossref()).encode()).works[0]
         self.assertEqual(work["publication_date"], "2026-01")

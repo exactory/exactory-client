@@ -31534,14 +31534,14 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.identities": {
-      "ast_sha256": "c496f485b3fa0f4526b548a2ea0082e2bc3bad2144b270e1a0aed1f7e7c3be23",
+      "ast_sha256": "b53ea0cf0cbf95b8ae341964d4146fd34e01029545e908e8901dec3aebd0ca43",
       "functions": {
         "family_id": "1419a2efdca05a467a7de928f0301888d2edf10fe8c1f7e00a016533b3498bf2",
         "family_versions": "f322a11b7927d405aeaf6a9238bf6d2b175bf027785f884a04872548a730e48c",
         "find_doi_family_conflicts": "dfb5329234b21a9c91494a40baf9557264994c8716dcacbe73c6e6e604f60b0e",
         "find_family_candidates": "2cb94dc1231c020b14aa05638058a952f1218fdc1b76af846dab77b3fea9fc29",
         "find_work_family_link": "b8c10e64b8f741cabd255dcc6874bf0549ea4d6047b1db94bb4bfb494194f01d",
-        "normalize_identifier": "f7520f3b29d6e32c26e6a739667bb3645372cc921435214da7d45412a88e47b7",
+        "normalize_identifier": "c9b58f4db7879bcb8d448a0638c3540bfb23ac1273963b085964a5a8993866d8",
         "resolve_arxiv_family": "ef67b013525c507deac49bb07f603c57a61160242537fa1e6d0f4bdd4403b528",
         "resolve_family": "29b74e2bf248d970f291a14ba42a66ab03bc92d37eee387ef38d2c060ced5be7",
         "select_family": "54dcf83d595b6545bec851b548b5cd77067eb2e7915a1d533d55f334d2005d8a",
@@ -31890,11 +31890,11 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.oai_records": {
-      "ast_sha256": "1c92dc02310c8051c5a61fb96fbf3e911e4044bf5ab838f83a6eb7fb6e8b2784",
+      "ast_sha256": "f37b40970faa6b698edf71dcab133bf2a41f20d0e534fb53af90ec0f22694ba5",
       "functions": {
         "child": "bea27c2f20e7f026c70babb9fa37454a5fdab096c40157d17c1174774624567c",
         "parse_get_record": "b78145e142108fa428224c415320e54c7b0bb734cd0dc37000324fe61f6f6316",
-        "parse_record": "3a92d1909b07d8d9fe134851fcf94806c8ccf28c3740af6d540e1465f3d1b42d",
+        "parse_record": "a2ea76b442f6427aa3e9993b73e4c8736225f8611e7f421ee058a1e0969538e8",
         "value": "2e4d8faeaffce510bbb7df1253e20b72dca71a06fa855c075130792a785ab2d0",
         "version_date": "f980cf7e14c5be015700bc0cb02ce536fe9baf892f668b7a33ba24acfe053c77"
       },
@@ -32045,7 +32045,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading": {
-      "ast_sha256": "8340242cee4b93bf5d4b1c91ed2274ceea45ff63f13de9b820f592ed48037f61",
+      "ast_sha256": "6406c8fe739b335746d6ed4fd78f769042ccefb538206b25917d935aaae05cd1",
       "functions": {
         "_add_source": "bf750a7009979c804b515fe2fa49795c9649ea87dcafa53f80cef1045aeb2340",
         "_assemble_reading_turn": "9c44a6537d6d1fae1af0dc44b726cd7059da1ee593c0d2f800617c0c1655160a",
@@ -32425,7 +32425,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes. Reviewed 0.91.1: a math openness packet that fits one turn stays a single native turn under (v7, v6); the condition reads the packet kind only, and no packet member, call, write or closed shape changes. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment. Reviewed the merge of 0.91.14 into 0.92.0: describe_unavailable_forecast of 0.91.12 stands beside the bounded chain protocols of 0.92.0; the two sides changed separate functions. Reviewed lane carry-chain-content (rule C16): READING_CONTENT_KINDS names the six content kinds, with capture_selection.SELECTION_KIND; the module imports capture_selection. No function changes. Release 0.93.0, lane chain-content-stop-2: Math inventory comparison can collect all unavailable bound readings and responses through the same row derivation as normal admission."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "8a1cf25002aafcbf083cc0983b6c3df6863043552b0d20128627b6eade604fba",
+      "ast_sha256": "c76b06f69adc72a4c86339c493f3f67351f75c3b8ba007880e42b5f8c3f42cce",
       "functions": {
         "_advance_list_cursors": "417990742c3d0a84260459f0cc86b5d53217f85abb114c883882ea57b4c3320a",
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
@@ -33655,7 +33655,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.providers": {
-      "ast_sha256": "a280c758c1ff76f201bbee01284cd1c89c1517a662c3dcd5bdeeedb2d2a16a68",
+      "ast_sha256": "713899063cfd4bc7d7c7f4b080f0ff790c1bb7dbfa451a97f1cb804be86982a9",
       "functions": {
         "_array": "1c9e7bfb16f78cd59e3f74a57fceaf910a84b94b2385cd328a32a7167e6a3b5b",
         "_count": "dbf2278ce1a5a96ff103564a495c0826be70975c6e3b7da2afcefc384c0da811",
@@ -33666,7 +33666,7 @@
         "_object": "813469b5839f2502da1d57fbffc771449ef6f279cc9bf86ad6256d029663f73b",
         "_page_size": "ee5d3c198afb0f2fb225a704c0872008183c3f02fde0f6345c7fbdefe441e2e4",
         "_query": "bc8fdb838731e36b34f147e3e032a0fb42e84302f7b85328a01b4209786e68bd",
-        "_reference": "05be4a3fa7896fdf01d8ce17d1f1040c945f4ae3692db9681ba862ff8903758a",
+        "_reference": "1a87af9732cd50fb33f9a35023b5e75363b969ebe6860569c399b3a0124403c6",
         "_references": "7d5ab27e9df60209c9c2c1aaeee9f098d3ed7072decc565f28304df5800afdec",
         "_string": "8427c91a348701c4bfc67ce1dff2153b7da17353110f650bcadfb0efa65aebf0",
         "_work": "a804311c9387b3dc61fee6f910c34a8ae23c23cd3ad4163e47953c5e3ed1921e",
@@ -35017,7 +35017,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_parts": {
-      "ast_sha256": "6dd35a556ae6df381f1ef84a1615c1fe8eec1d53bfdf44f684793b0f5e18b254",
+      "ast_sha256": "4b2c9347e327293a2efb01e98bb258a0391b3e8a64fe5e2723a1af521d445f11",
       "functions": {
         "_count_content": "c25e6d5d66bffc953d116e616287a25d6736b3efe6d742762cb95bf3e132e719",
         "_describe_unit": "ab1d1db4be19c42aafe09f942532f14048db0453e54e47de0fe9bf647237ca18",
@@ -36316,7 +36316,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. G8.11 and G8.12 of 0.92.0 (lane g8-finding-index, second change set, for review): the inventory of a bounded chain whose final names values by their bodies lists their spans in finding_units, located by key; its reading turns hold their number and the paragraph finding-units, and the reading frame reserves FINDING_UNITS_CHARACTERS; a carried credit does not cover a named span, in the reading plan and in the report of the carried selection; a capacity replacement selects the paragraphs of its new packet. Reviewed 0.91.6: two registered paragraphs, changes-if-resolved for result and adjudicator and slate-places for slate, each selected by a member of its packet; the text of every earlier version keeps its bytes. Reviewed the merge of 0.91.5 to 0.91.7 into 0.92.0: PARAGRAPHS holds the paragraphs changes-if-resolved and slate-places of 0.91.6 at their places and the paragraph finding-units of G8 before output-refusal-whole; SHARED_PARAGRAPH_NAMES keeps its five names, because the two paragraphs of 0.91.6 apply to problem packets only."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "e96a2cf3d46c093cce2ad0f467dec74a4205118e436511bdaa155a42cdf055fb",
+      "ast_sha256": "544f97c01af2f7dae6214a4888070130ce0b0e54996f3d10c904b64c45795b59",
       "functions": {
         "_assignment_state": "9fc87462eec4ee108c5b77aa7bba8eda202c6129c2484735d3731317fcd511c1",
         "_bars": "32eae33223d02654a4c28ba7d928d16c458c21dd2ebbbc61d0d7b1461580854a",
@@ -38395,7 +38395,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.stop_classes": {
-      "ast_sha256": "c362919c398296cdb0f9f4507d55d44e67b740418d08590f93073fbc07c71ee0",
+      "ast_sha256": "d418fdabcbf0aa4ec9d829990be61ee69952f72f425afd0969481e25664234f0",
       "functions": {
         "classify_stop": "1e04321928b9c5cc04066efccb15f9066e30223fdeaf252aa1f9b578ec3b4dab",
         "describe_terminal": "20690a1fc049ae05acff22cc5884c3300aa6633de018845ab12fde47019c4038",

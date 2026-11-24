@@ -19,6 +19,10 @@ class FrozenPdfCaptureTests(StrategyCase):
     metadata = LiteratureCase.metadata
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.sequence = 0
         self.setup_dossier()

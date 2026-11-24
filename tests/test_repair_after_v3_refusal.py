@@ -17,6 +17,10 @@ SELECTIONS = ((legacy.PROTOCOL,), (parts.PROTOCOL, legacy.PROTOCOL))
 
 class ResultRepairAfterV3RefusalTests(CapacityAnswers, unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = prepare_unit_fixture(self, entry_fixtures.StoredEntryTests,
                                             'test_ordinary_repair_conversion_stores_the_exact_planned_request')
         self.case = self.fixture.case

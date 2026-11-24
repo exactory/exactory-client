@@ -594,6 +594,13 @@ class TurnFormVersionTests(unittest.TestCase):
 
 
 class ParagraphPathTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_assignment_selects_accounts_and_replacement_from_its_delivered_value(self):
         self.case.expected['value']['accounts'] = dict(answer='A supported answer.', replacement=dict(statement='Earlier form.'))
         assignment = self.assign('ordinary-with-accounts')
@@ -655,6 +662,10 @@ class CurrentParagraphPathTests(ParagraphPathTests):
     use_parts_v2 = True
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         from research_harness import review_route_capacity
         from test_review_output_profile import build_row
@@ -702,6 +713,13 @@ class CurrentParagraphPathTests(ParagraphPathTests):
 
 
 class StagedParagraphPathTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     staged_entry = True
 
     def test_staged_controller_and_child_keep_accounts_without_repeating_value(self):

@@ -551,6 +551,10 @@ class FormingImportTests(unittest.TestCase):
                 self.assertEqual(adapter.list_citations(source), [reference])
 
     def test_imported_projection_is_required_even_beside_a_stored_value(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         import problem_parts_fixtures as fixtures
         imported = self.import_history()
         reference = self.reference('forming_call', self.call, imported['source_origin'])

@@ -229,6 +229,10 @@ class VerificationPartsTests(StudyPartsCase):
     adapter = 'study_verification'
 
     def setUp(self):
+        from research_harness import review_parts
+        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = verification_fixtures.ResearchVerificationTests()
         self.addCleanup(self.case.doCleanups)
         self.case.setUp()
@@ -353,6 +357,10 @@ class ReadinessPartsTests(StudyPartsCase):
     adapter = 'study_readiness'
 
     def setUp(self):
+        from research_harness import review_parts
+        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = DevelopmentCase()
         self.addCleanup(self.case.doCleanups)
         self.case.setUp()

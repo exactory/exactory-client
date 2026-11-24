@@ -42,6 +42,13 @@ class RefreshCase(fixtures.ProblemDeliveryCase):
 
 
 class EmptyPairAdjudicationTests(RefreshCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_focused_adjudication_keeps_its_effect_while_both_successors_are_pending(self):
         self.prepare_reviews(bar_reviewer='first')
         self.observe_adjudication()

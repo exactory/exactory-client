@@ -16,6 +16,10 @@ import test_review_staged_frontier as fixtures
 
 class StagedRecordCheckTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = fixtures.FrontierTests()
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)

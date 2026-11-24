@@ -55,7 +55,7 @@ MATH_PROTOCOL = 'exactory-openness-reading-math-v1'
 # The chain of a math-solver result review in the form of protocol v7 (D1 9; unit reading-math-v2).
 MATH_PROTOCOL_V2 = 'exactory-openness-reading-math-v2'
 # A new math chain starts under the first of these whose admission accepts its packet. A chain keeps its protocol.
-NEW_MATH_CHAIN_PROTOCOLS = (MATH_PROTOCOL,)
+NEW_MATH_CHAIN_PROTOCOLS = (MATH_PROTOCOL_V2, MATH_PROTOCOL)
 # The protocols of a chain with a stored capacity plan, built by openness_reading_v7.
 BOUNDED_CHAIN_PROTOCOLS = (PROTOCOL_V7, MATH_PROTOCOL_V2)
 # The protocols whose units carry the identities of review_excerpts.IDENTITY_FIELDS.

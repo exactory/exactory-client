@@ -90,6 +90,13 @@ class ExcerptSessionCase(StrategyCase):
 
 
 class ExcerptSessionTests(ExcerptSessionCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_a_recorded_v2_session_keeps_its_carry_fitting_and_authenticated_request_bytes(self):
         from openness_legacy_fixtures import load_0_65_2_openness_reading
         from research_harness import review_transport as transport
@@ -330,6 +337,10 @@ class SlateExcerptRulesTests(StrategicSourceHelpers, StrategyCase):
     capture = LiteratureCase.capture
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.sequence = 0
         self.setup_dossier()
@@ -357,6 +368,10 @@ class SlateExcerptRulesTests(StrategicSourceHelpers, StrategyCase):
 
 class EarlierProblemBarSessionTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         # Load the native candidate dependency before the existing claim fixture replaces its module.
         importlib.import_module('research_harness.problem_candidates')
         self.case = problem_fixtures.ProblemReviewTests()

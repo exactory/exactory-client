@@ -301,6 +301,10 @@ class ReadingCapacityPropertyTests(unittest.TestCase):
         self.assertEqual(seen, handles)
 
     def test_two_thousand_gaps_remain_an_explicit_final_pages_gap(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         self.artifacts = reading_fixtures.MemoryArtifacts()
         native = reading_fixtures.build_native()
         native['scientific_context']['minimum_gaps'] = [dict(formulation=
@@ -756,6 +760,10 @@ class ReadingCapacityCommandTests(unittest.TestCase):
                 self.assertEqual(self.drive_commands(case, native)['end'], 'recorded_finding')
 
     def test_final_pages_five_and_twenty_thousand_targets_stop_both_admissions_then_execute_smaller_answer(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         from research_harness import review_protocol as protocol
         from research_harness.problem_openness import export_openness
         for count in (5000, 20000):

@@ -24,6 +24,9 @@ class MathCarriedCase(OpennessReadingCase):
     def setUp(self):
         super().setUp()
         self.limit_input(1300000)
+        released = patch.object(reading, 'NEW_MATH_CHAIN_PROTOCOLS', (reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
 
     def build_math_packet(self, name='math-export', assignment_id='math-1', exported=None):
         """The math form of an openness export of this record: exported, or the export of the fixture."""

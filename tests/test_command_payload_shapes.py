@@ -218,6 +218,12 @@ def refuse_adjudication(case, attempt_id, assignment_id):
 
 class FixtureStateShapeTests(unittest.TestCase):
     """Payloads on the stored states that the fixtures of other test modules build."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def test_bind_verdict_refuses_an_assignment_that_is_not_a_text_on_a_bound_task(self):
         case = start_fixture(self, test_research_verification.ResearchVerificationTests)

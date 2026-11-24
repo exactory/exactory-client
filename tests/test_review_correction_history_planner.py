@@ -11,6 +11,13 @@ import test_review_output_correction as fixtures
 
 
 class CorrectionHistoryPlannerTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_forty_long_historical_reviews_replace_without_spending_a_correction(self):
         case = fixtures.CorrectionTests()
         self.addCleanup(case.doCleanups)

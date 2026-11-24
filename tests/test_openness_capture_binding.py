@@ -57,6 +57,13 @@ def build_before_capture_binding():
 
 
 class OpennessCaptureBindingTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import openness_reading
+        released = patch.object(openness_reading, 'NEW_MATH_CHAIN_PROTOCOLS', (openness_reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def open_case(self, version):
         case = (OpennessReadingCase if version == 4 else SearchSharingCase)()
         # Explicit release contexts own historical construction; capture-binding cases use current exports.

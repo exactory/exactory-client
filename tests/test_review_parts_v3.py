@@ -256,6 +256,10 @@ class InventoryTests(unittest.TestCase):
 
 class AdapterJourneyTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         original = capacity.plan_chain_capacity
         def build_request_plan(*args, **kwargs):
             kwargs['final_pages'] = False
@@ -658,6 +662,10 @@ class RecordedSeriesTests(PartsResultCase):
     output_tokens = 128000
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         # Keep these existing journeys on the stored request-plan shape. The
         # page module exercises prospective admission with final_pages=True.

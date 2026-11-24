@@ -194,6 +194,13 @@ class ProblemDeliveryCase(ProblemCase):
 
 
 class CitationMetadataDeliveryTests(CitationMetadataCase, ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_actual_result_delivery_supports_citing_the_nested_metadata_record(self):
         from research_harness.problem_evidence import describe_evidence
         from research_harness.problem_claims import compute_problem_evidence_digest
@@ -242,6 +249,13 @@ class CitationMetadataDeliveryTests(CitationMetadataCase, ProblemDeliveryCase):
 
 
 class ProblemDeliveryTests(ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_both_exports_write_checkable_references_with_initialed_authors(self):
         import contextlib
         import hashlib

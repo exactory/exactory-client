@@ -195,6 +195,12 @@ class RecordedProfileTests(unittest.TestCase):
 class NewWorkTests(unittest.TestCase):
     """After a renderer update the stored records verify and a judgement on a stored answer is recorded; no new
     reviewer work starts on them."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     REFUSAL = ('review_visual_source_mismatch', 'Use the exact native PDF render profile')
 

@@ -20,6 +20,10 @@ class PagedSeriesTests(PartsResultCase):
     output_tokens = 128000
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         selected = patch.object(legacy, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL, legacy.PROTOCOL))
         selected.start()
@@ -1314,6 +1318,14 @@ class AdapterPageTests(unittest.TestCase):
         self.addCleanup(entry.stop)
 
     def setUp(self):
+        from research_harness import review_parts
+        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         from test_review_output_profile import build_row
         from research_harness import review_transport as transport
         for patcher in (

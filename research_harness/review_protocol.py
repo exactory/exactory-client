@@ -1085,7 +1085,7 @@ from . import review_prompt_paragraphs as prompt_paragraphs
 from .review_refusal import record_refusal_on_error
 from .storage import _canonical, read_filtered_records, select_record_groups
 
-NEW_SESSION_RULES = (bar_sources.PROTOCOL_V3,)
+NEW_SESSION_RULES = (review_session_v4.PROTOCOL, bar_sources.PROTOCOL_V3)
 
 ROLES = ('bar', 'slate', 'result', 'adjudicator', 'manuscript', 'standalone', 'verification', 'native_math')
 PAPER_ROLES = ('manuscript', 'standalone')

@@ -73,6 +73,11 @@
           "record"
         ]
       },
+      "execution_pending": {
+        "skills/math-solver/harness/search_controller/deferrals.py:validate_deferrals#1": [
+          "record"
+        ]
+      },
       "exploratory_evidence": {
         "research_harness/problem_evidence.py:validate_computation#1": [
           "record"

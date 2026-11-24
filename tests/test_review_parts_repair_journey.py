@@ -16,6 +16,13 @@ import test_research_context_repair_integration as repair_fixtures
 
 
 class ResultRepairJourneyTests(PartsResultCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def contaminate(self, predecessor):
         evidence = self.case.supporting
         self.case.mutate(protocol.record_context_event, dict(id='contamination', assignment_id=predecessor['id'],
@@ -47,6 +54,9 @@ class ResultRepairJourneyTests(PartsResultCase):
 
     @patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL)
     def test_three_legacy_parts_without_final_enter_fresh_repair(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         # Derive the limit from the rendered ordinary request, with enough room for the new frame.
         ordinary = protocol.build_packet(self.case.read_records(), self.case.artifacts, None, 'result', 'first')
         prompt = protocol.canonical_prompt('result', orchestration='problem_creation', excerpts=True,
@@ -160,6 +170,9 @@ class BarRepairCase(StrategyCase):
     probe_repair_route = True
 
     def setUp(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         if self.route_input_tokens is not None:
             self.capacity_probe_tokens = 128000 + self.route_input_tokens
         super().setUp()
@@ -189,6 +202,13 @@ class BarRepairCase(StrategyCase):
 
 
 class BarRepairJourneyTests(BarRepairCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_fitting_bar_repair_stays_ordinary(self):
         assignment = self.assign_repair()
         self.assertNotIn(parts.KEY, self.packet(assignment))
@@ -346,6 +366,13 @@ class BarRepairJourneyTests(BarRepairCase):
 
 
 class OrdinaryRepairSuccessorTests(BarRepairCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     route_input_tokens = 165000
 
     def test_an_ordinary_repair_successor_keeps_its_form(self):
@@ -378,6 +405,13 @@ class OrdinaryRepairSuccessorTests(BarRepairCase):
 
 
 class FreshRepairStartTests(BarRepairCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     probe_repair_route = False
 
     def test_a_fresh_repair_refused_by_v3_reaches_v2_only_through_the_coverage_check(self):
@@ -415,6 +449,13 @@ class FreshRepairStartTests(BarRepairCase):
         self.assertNotIn(payload['id'], self.store.snapshot()['records']['review_assignment'])
 
 class AdjudicatorRepairJourneyTests(StrategyCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare_adjudicator_repair(self, *, staged):
         import test_research_problem_adjudication_contract as fixtures
 
@@ -529,6 +570,9 @@ class AdjudicatorRepairJourneyTests(StrategyCase):
         self.assertEqual(after['predecessor']['epoch_id'], before['id'])
 
     def test_registered_adjudicator_can_continue_a_repair_with_ordinary_base_prompt(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         import test_research_problem_adjudication_contract as fixtures
         from research_harness import review_context_repair as context_repair
         from research_harness import review_parts_roles as roles

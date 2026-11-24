@@ -190,6 +190,10 @@ class StoredEntryTests(PartsResultCase):
     repair_assignment = repair_fixtures.ResultRepairJourneyTests.repair_assignment
     cap_attempt = turn_fixtures.RecordedTurnTests.cap_attempt
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         selected = patch.object(legacy, 'NEW_SERIES_PROTOCOLS', V3_FIRST)
         selected.start()
@@ -673,6 +677,13 @@ class StoredEntryTests(PartsResultCase):
 
 
 class NaturalEntryTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def _start(self, tokens, identifier):
         from development_fixtures import DevelopmentCase
         import problem_parts_fixtures

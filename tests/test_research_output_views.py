@@ -1,5 +1,6 @@
 """The final/, final/history/ and intermediate/ views that the harness renders from a research store."""
 
+from unittest.mock import patch
 import ast
 import contextlib
 import importlib.machinery
@@ -352,6 +353,13 @@ class StagedOutputViewTests(ViewCase):
 
 
 class PartsOutputViewTests(PartsViewCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_outputs_place_intermediate_turns_and_requests_apart_from_the_final(self):
         from review_parts_fixtures import make_output
         self.prepare_parts()

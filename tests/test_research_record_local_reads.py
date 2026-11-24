@@ -19,6 +19,13 @@ import test_research_claude_transport as claude_fixtures
 
 
 class LocalReadTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_preparation_artifact_wrapper_preserves_local_read_audit(self):
         from research_harness.record_check import OfflineArtifacts
         from research_harness.review_staged_protocol import ControllerArtifacts

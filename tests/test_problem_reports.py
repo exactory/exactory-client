@@ -1,5 +1,6 @@
 """Reports derive their endings, posting-time classifications and currency."""
 
+from unittest.mock import patch
 import copy
 import json
 from pathlib import Path
@@ -543,6 +544,13 @@ class ProblemReportScopeTests(ProblemCase):
 
 
 class ProblemReportGateTests(delivery.ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_a_real_post_decision_passes_and_report_reads_its_covered_accounts(self):
         self.prepare_ready()
         self.record_post_decision()

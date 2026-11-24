@@ -20,6 +20,13 @@ from research_harness.errors import ResearchError
 
 
 class StagedRepairUpgradeTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     staged_entry = True
     output_tokens = 128000
     timeout_seconds = 30
@@ -244,6 +251,10 @@ class StagedRepairUpgradeTests(ResultPartsCase):
 
 class StagedAdjudicatorRepairTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = adjudication.ProblemAdjudicationContractTests(methodName='runTest')
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
@@ -345,6 +356,13 @@ class StagedAdjudicatorRepairTests(unittest.TestCase):
 
 
 class StagedVisualRepairTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_staged_visual_repair_uses_the_fresh_epoch_instead_of_legacy_visual_history(self):
         import test_visual_result_delivery as visual
         import test_visual_context_repair as visual_repair

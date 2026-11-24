@@ -15,6 +15,13 @@ import test_visual_context_repair as fixtures
 
 
 class VisualCorrectionTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_original_visual_delivery_and_negative_science_survive_observed_text_delta(self):
         from research_harness import review_route_capacity
         from test_review_output_profile import build_row

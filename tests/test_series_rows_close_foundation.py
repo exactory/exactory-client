@@ -329,6 +329,13 @@ class NamedCauseRowTests(unittest.TestCase):
 
 
 class ExcludedCodeRecorderTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_driver_recorder_rejects_a_source_written_code_excluded_by_rule_ten(self):
         from research_harness import cli, review_series
         from test_series_code_reach import record_reachable_errors, FIXTURE

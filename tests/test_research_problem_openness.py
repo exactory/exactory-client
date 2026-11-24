@@ -787,6 +787,12 @@ class ProblemOpennessMinimumSchemaTests(ProblemCase):
 
 class ProblemOpennessDeliveryTests(ProblemDeliveryCase):
     """Result reviewers receive the complete openness finding and the searches its minimum binds."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def emulate_truncated_projection(self, *, binding):
         """The result packets of the previous release: four openness fields and no bound searches; with `binding`,

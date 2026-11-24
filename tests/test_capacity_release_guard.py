@@ -19,6 +19,10 @@ from test_review_output_profile import build_request
 
 class ReleaseGuardTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = failure_fixtures.FailureClassTests()
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)

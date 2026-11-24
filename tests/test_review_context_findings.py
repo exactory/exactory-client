@@ -97,6 +97,13 @@ class ReplacementContextTests(context.V7ChainSupport, OpennessReadingCase):
 
 
 class FailureOperationContextTests(context.RoleFixtures, unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_capacity_replacement_discards_the_exposed_failed_position(self):
         from test_review_output_profile import build_row
         from research_harness import review_route_capacity as capacity
@@ -216,6 +223,13 @@ class FailureOperationContextTests(context.RoleFixtures, unittest.TestCase):
 
 
 class ContextStepTests(context.RoleFixtures, unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_excluded_control_without_event_plans_verifying_probe(self):
         case, head = self.build_bar()
         answer_with_excluded_control(case)
@@ -295,6 +309,13 @@ class ContextStepTests(context.RoleFixtures, unittest.TestCase):
 
 
 class ContextReceiptTests(context.RoleFixtures, unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_complete_refusal_step_without_top_level_route(self):
         case, head = self.build_bar()
         context.fail_probe(case, 'route')
@@ -383,6 +404,13 @@ class ContextReceiptTests(context.RoleFixtures, unittest.TestCase):
 
 
 class LegacyExposureTests(context.RoleFixtures, unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_empty_history_keeps_refresh_only_predecessor_with_event(self):
         case, old = self.build_bar()
         context.contaminate(case, old)

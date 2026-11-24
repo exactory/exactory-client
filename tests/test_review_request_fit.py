@@ -230,6 +230,13 @@ class ExactFitTests(LiteratureCase):
 
 
 class RecordedFitTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def seed_continuations(self):
         records = self.case.read_records()
         original = records['review_assignment']['bar-first']
@@ -437,6 +444,13 @@ class RecordedFitTests(ResultPartsCase):
 
 
 class RefusalDependencyTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_dependency_tracing_keeps_the_callers_active_ancestry_guards(self):
         from research_harness.errors import ResearchError
         from pathlib import Path

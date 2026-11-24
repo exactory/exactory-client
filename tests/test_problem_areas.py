@@ -100,6 +100,13 @@ class ProblemAreaMutationTests(AreaMutationCase):
 
 
 class ProblemAreaReviewTests(ProblemDeliveryCase, AreaMutationCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def read_packet(self, assignment):
         return json.loads(self.artifacts.read(assignment["packet"]))
 
@@ -336,6 +343,13 @@ class ProblemAreaReviewTests(ProblemDeliveryCase, AreaMutationCase):
 
 
 class StoredProblemAreaCompatibilityTests(ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_stored_value_and_bars_keep_projection_digests_and_frozen_prompt_bytes(self):
         directory = Path(__file__).parent / "fixtures"
         stored = json.loads((directory / "problem_result_0820.json").read_text())

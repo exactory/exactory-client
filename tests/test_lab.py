@@ -1,6 +1,7 @@
 """Tests for bin/exactory-lab: the study workspace, its state machine, and execution."""
 
 from __future__ import annotations
+from unittest.mock import patch
 
 import contextlib
 import importlib.machinery
@@ -1036,6 +1037,13 @@ class TestDecide(_InsideWorkspaceTestCase):
 
 
 class TestRunLocal(_InsideWorkspaceTestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def write_script(self, name: str, body: str) -> None:
         (self.workspace / "experiment" / "code" / name).write_text(
             body, encoding="utf-8"
@@ -1106,6 +1114,13 @@ class TestRunLocal(_InsideWorkspaceTestCase):
 
 
 class TestColabBackend(_InsideWorkspaceTestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def setUp(self) -> None:
         super().setUp()
         self.sync_root = Path(self._temp_dir.name) / "sync"

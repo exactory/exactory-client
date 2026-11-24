@@ -119,6 +119,12 @@ class ArxivOaiTests(unittest.TestCase):
         self.assertEqual(page.works[0]["aliases"], [])
         self.assertTrue(any(w["code"] == "invalid_alias" for w in page.warnings))
 
+    def test_a_doi_url_that_does_not_parse_fails_the_response_as_in_0_92_1(self):
+        raw = record().replace(b'10.1234/test', b'https://[x')
+        with self.assertRaises(ResearchError) as caught:
+            Arxiv().parse(raw)
+        self.assertEqual(caught.exception.code, "invalid_response")
+
     def test_dtd_and_entity_declarations_are_rejected(self):
         raw = b'<!DOCTYPE OAI-PMH [<!ENTITY injected "false content">]>' + record()
         for encoded in (raw, raw.decode().encode("utf-16")):

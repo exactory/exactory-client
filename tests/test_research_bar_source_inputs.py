@@ -1,5 +1,6 @@
 """Malformed observed source requests refuse continuation without store changes."""
 
+from unittest.mock import patch
 import test_research_bar_sources as source_fixtures
 from strategy_fixtures import StrategyCase
 
@@ -9,6 +10,10 @@ class BarSourceInputTests(StrategyCase):
     invoke = source_fixtures.BarSourceTests.invoke
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.setup_dossier()
         self.route()

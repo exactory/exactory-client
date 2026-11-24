@@ -27,6 +27,13 @@ FULLTEXT_CODES = ('xml_depth_limit', 'xml_element_limit', 'xml_external_entity',
 
 
 class StoreRowTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_public_handoff_roots_follow_the_cli_dispatch_paths(self):
         from ci import series_code_reach
         self.assertIn('search deliver-attempt', series_code_reach.EXTERNAL_COMMAND_ROOTS)

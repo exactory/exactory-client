@@ -14,6 +14,13 @@ from slate_refresh_fixtures import cite_in_refresh_chain, cite_review
 
 
 class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     build_slate_output = slate_fixtures.ProblemSlateTests.build_slate_output
 
     def make_objection(self):

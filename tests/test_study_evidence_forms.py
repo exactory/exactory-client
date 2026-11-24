@@ -76,15 +76,17 @@ class ShapeRefusalTests(unittest.TestCase):
         self.assertEqual(error.details['refused_count'], 150)
 
     def test_a_malformed_entry_after_a_refused_entry_keeps_the_first_refusal(self):
-        # urlsplit raises ValueError for this version id. The check of an earlier release stopped at the refused
-        # entry before it and never read this one.
+        # urlsplit raises ValueError for this version id, and the identifier check refuses it with invalid_identifier.
+        # The check of an earlier release stopped at the refused entry before it and never read this one.
         malformed = {'kind': 'source', 'link': dict(LINK, version_id='https://[x')}
         error = refuse_shape([{'artifact': DESCRIPTOR}, malformed])
         self.assertEqual((error.code, error.message, error.contract_check),
                          ('invalid_strategy', SHAPE_MSG, 'evidence.shape'))
         self.assertEqual((error.details['refused_indexes'], error.details['refused_count']), ([0, 1], 2))
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ResearchError) as caught:
             refusal.validate_evidence_contract(None, None, [malformed])
+        self.assertEqual((caught.exception.code, caught.exception.contract_check),
+                         ('invalid_identifier', 'evidence.shape'))
 
     def test_a_selection_reports_the_positions_of_its_array_without_the_forms(self):
         error = refuse_shape([{'kind': 'source', 'link': {'version_id': LINK['version_id']}}], positions=[2],
@@ -125,6 +127,13 @@ class ShapeRefusalTests(unittest.TestCase):
 
 
 class IncidentSessionTests(ExcerptSessionCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     bundle = LiteratureCase.bundle
     full_note = LiteratureCase.full_note
     link = LiteratureCase.link
@@ -182,6 +191,12 @@ class IncidentSessionTests(ExcerptSessionCase):
 
 class OtherGrammarTests(unittest.TestCase):
     """The arrays of another grammar get the positions in their array and no text of the three forms."""
+    def setUp(self):
+        from research_harness import review_parts
+        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def prepare(self, fixture_type):
         fixture = build_fixture(fixture_type)
@@ -246,6 +261,12 @@ class OtherGrammarTests(unittest.TestCase):
 
 class ArrayPathTests(unittest.TestCase):
     """Each caller of the three forms names the evidence array that the positions count in."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def assert_refused_entry(self, call, path, notice):
         with self.assertRaises(ResearchError) as caught:
@@ -303,6 +324,12 @@ class ArrayPathTests(unittest.TestCase):
 
 class StoredShapeRefusalTests(unittest.TestCase):
     """A store whose evidence.shape refusal and replacement were recorded before the positions existed."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def test_a_stored_replacement_without_shape_details_stays_verified_with_the_same_fingerprint(self):
         fixture = build_fixture(continuation_fixtures.ContinuationTests)

@@ -14,6 +14,13 @@ from research_harness.source_links import span_locator
 
 
 class PartOffsetReplacementIncidentTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def build_revision_200(self):
         """The store of record 7 at revision 200: a repaired bar continuation with two refused answers that cite the
         second part of a split full text with whole-text offsets."""

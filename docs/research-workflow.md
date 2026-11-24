@@ -867,9 +867,13 @@ it belongs to, and they give every grade by the standard of the record's
 subject class, which the thresholds read. An area is added while no slate
 review and no result review has been assigned
 (`problem_area_new_record_required` afterwards). A bar that was given before
-an area was recorded is continued by its reviewer in the same session and slot
-(`problem_bar_calibration_required` until then), and the next slate cites the
-continued bars. After a reviewer has received a candidate, the statement is
+an area was recorded is refreshed by its reviewer in the same slot
+(`problem_bar_calibration_required` until then): in the session of the bar,
+or, for a bar that a session under the source rules v4 recorded, as a new
+chain ([Sessions under the source rules
+v4](research-cli.md#sessions-under-the-source-rules-v4)). The next slate
+cites the refreshed bars.
+After a reviewer has received a candidate, the statement is
 taken up in a new record that names the areas
 ([Further areas](research-cli.md#further-areas)).
 
@@ -899,7 +903,9 @@ The slate cites bars that state the calibration of levels 2 and 3. A bar recorde
 on the version 1 template returns `problem_bar_calibration_required`, and so
 does a bar that was given before a further area was recorded; assigning
 the bar again to the same reviewer refreshes it on the current bar template in
-the same session and slot, with every area. A focused slate review by
+the same slot, with every area: in the session of the bar, or, for a bar that
+a session under the source rules v4 recorded, as a new chain.
+A focused slate review by
 a bar reviewer is required after a carry that imported at least one objection
 (`problem_slate_review_unverified` otherwise), and when the slate selects a
 candidate formed in the record, which is a candidate of the retired source kind
@@ -931,9 +937,10 @@ A result review is refused before dispatch while a current or cited bar is on
 the version 1 template, and every result packet carries the current bars, also
 after a context repair. A result reviewer whose completed review was given under
 other evidence, other bars or other material objection versions, or on a
-supported earlier result template, reassesses in the same session and slot; under
-the same conditions a repeat is refused, unless it repairs
-`review_evidence_undelivered`.
+supported earlier result template, reassesses in the same slot: in the session
+of that review, or, for a review that a session under the source rules v4
+recorded, as a new chain. Under the same conditions a repeat is refused,
+unless it repairs `review_evidence_undelivered`.
 
 Formulate a selected candidate with `problem-statement` and its `candidate_id`;
 the post gate requires the latest slate to select the current statement's

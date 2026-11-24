@@ -18,6 +18,10 @@ from research_harness.errors import ResearchError
 
 class SessionDeliveryTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = problem_fixtures.ProblemReviewTests()
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
@@ -391,6 +395,13 @@ class SessionDeliveryProjectionTests(unittest.TestCase):
 
 
 class DeliveryNoticeProjectionTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_complete_visible_notice_keeps_frozen_history_and_replays_its_stored_request(self):
         import test_research_complete_source_continuation as complete_sources
         from research_harness import review_source_complete as complete

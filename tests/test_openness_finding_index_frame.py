@@ -941,6 +941,12 @@ def run_g8_journey(owner, scenario, *, every_value_leaves=False):
 
 class CarriedChainTests(unittest.TestCase):
     """Test 15 (G8.12): a chain that carries earlier turns reads the values that its final names in its own turns."""
+    def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def read_initial_state(self, case, receipt):
         inventory = json.loads(case.artifacts.read(receipt['reading_chain']['inventory']))

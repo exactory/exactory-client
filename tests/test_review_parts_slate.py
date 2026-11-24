@@ -28,6 +28,7 @@ class SlateSeriesTests(unittest.TestCase):
         self.assertIn('problem_slate', review_parts_roles.ADAPTERS)
         for patcher in (
             patch.object(parts, 'NEW_SERIES_PROTOCOLS', (v3.PROTOCOL, parts.PROTOCOL)),
+            patch.object(protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,)),
             patch.object(capacity, 'read_profile_priors', return_value=[
                 dict(build_row(level=None, kind=kind, thinking=1), largest_output_tokens=12)
                 for kind in ('single', 'read', 'combine', 'check', 'final')])):

@@ -1,5 +1,6 @@
 """Operator progress for fresh-input review series stays bounded and actionable."""
 
+from unittest.mock import patch
 import copy
 import json
 import unittest
@@ -59,6 +60,13 @@ class PartsViewCase(PartsResultCase):
 
 
 class PartsStatusTests(PartsViewCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_status_does_not_offer_to_rerun_an_observed_earlier_turn(self):
         self.prepare_parts()
         first = self.assign()

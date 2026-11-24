@@ -24,6 +24,13 @@ def build_case(case):
 
 
 class PlannedFamilyIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def assert_captured_family(self, store, cited, final):
         records = store.snapshot()['records']
         artifacts = store.build_artifact_store()

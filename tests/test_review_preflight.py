@@ -40,6 +40,13 @@ def inject_usage(output_tokens=None, wall_seconds=None):
 
 
 class DispatchTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def build_case(self):
         from test_research_review_protocol import ReviewProtocolTests
         case = ReviewProtocolTests()
@@ -158,6 +165,10 @@ class DispatchTests(unittest.TestCase):
 
 class CorrectionAdmissionTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         from test_review_output_correction import CorrectionTests
         self.case = CorrectionTests()
         self.addCleanup(self.case.doCleanups)
@@ -259,6 +270,13 @@ class VisualMeasurementTests(unittest.TestCase):
 
 
 class HistoricalAdmissionTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import openness_reading
+        released = patch.object(openness_reading, 'NEW_MATH_CHAIN_PROTOCOLS', (openness_reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_historical_final_prompt_keeps_a_sound_native_input_floor(self):
         from research_harness import openness_reading
         case = OpennessReadingCase()

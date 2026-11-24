@@ -1023,6 +1023,10 @@ class ConstitutionUpgradeTests(RoundsCase):
         self.assertIn("synthesis_dependencies_stale", {o["code"] for o in preparation["obligations"]})
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.shipped = principles.CONSTITUTION_PATH.read_text(encoding="utf-8")

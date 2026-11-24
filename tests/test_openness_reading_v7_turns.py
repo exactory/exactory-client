@@ -121,6 +121,9 @@ class RatioAndAdmissionTests(unittest.TestCase):
         self.assertIsNone(v7.derive_inherited_ratio(self.records, self.artifacts, different, self.route))
 
     def test_q7_final_floor_admits_eight_targets_and_refuses_nine_with_numbers(self):
+        released = patch.object(v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         inventory = v7.plan_inventory([], {})
         route = build_route('codex_cli_v1', 'gpt-6-astra')
         with patch.object(v7, 'build_inventory', return_value=inventory):
@@ -412,6 +415,9 @@ class TurnPacketTests(unittest.TestCase):
         self.assertLessEqual(cost, 15000)
 
     def test_gap_bodies_are_units_and_non_ascii_material_fits_token_bound(self):
+        released = patch.object(v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         many_gaps = build_native()
         many_gaps['scientific_context']['minimum_gaps'] = [dict(
             formulation=many_gaps['scientific_context']['openness_minimum']['statement'], text='Gap %d' % n)
@@ -784,7 +790,7 @@ class V7CommandTests(OpennessReadingCase):
                 if allowance == 15000:
                     self.assertEqual(recovery['kind'], 'decision')
                     self.assertEqual(hashlib.sha256(recovery['details']['range_not_served'].encode()).hexdigest(),
-                                     '2e945792a2e8ef384cf87f71d37e74ffb9f2c4516bc7279bc54db9800d4e3fef')
+                                     'aba20c622d40bd903b6c5321ca60a6e7c3c1c6d210a6ba0995540c3fe54e85c5')
                     break
                 self.assertEqual(recovery['kind'], 'replace')
                 self.assertEqual(recovery['payload']['route_id'], 'route')
@@ -942,6 +948,9 @@ class V7CommandTests(OpennessReadingCase):
                 context=dict(native_packet=native, reading_replacement='turn-1')))
 
     def test_q7_q8_five_thousand_targets_refuse_both_admissions_before_writing(self):
+        released = patch.object(v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         from research_harness import review_protocol as protocol
         from research_harness.check_mode import check_mutation
         native = json.loads(self.artifacts.read(self.export()))
@@ -1000,6 +1009,9 @@ class V7CommandTests(OpennessReadingCase):
         self.assertEqual(actual['prompt'], protocol.canonical_prompt('native_math', reading_stage='reading', reading_protocol=reading.PROTOCOL_V6))
 
     def test_q7_eight_targets_start_v7_and_nine_start_byte_identical_v6(self):
+        released = patch.object(v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         from research_harness import review_protocol as protocol
         from research_harness.problem_openness import export_openness
         from test_research_problem_openness_minimum import ProblemOpennessMinimumTests

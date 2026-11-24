@@ -16,6 +16,13 @@ from research_harness.evidence import digest
 
 
 class ProblemResultPartsContinuedTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def continued_unit(self, duplicates=1, aliases=False, body_characters=4000, limit=42000):
         self.oversized(count=0, limit=limit)
         if aliases:

@@ -17,6 +17,10 @@ class RepairSlotReplacementTests(StrategyCase):
     record_final = fixtures.ContextRepairIntegrationTests.record_final
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.setup_dossier()
         self.route()
@@ -86,6 +90,10 @@ class OrdinarySlotReplacementTests(StrategyCase):
     invoke = fixtures.ContextRepairIntegrationTests.invoke
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.setup_dossier()
         self.route()

@@ -13,6 +13,10 @@ import test_review_output_correction as correction_fixtures
 
 class RefusalPlannerTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = fixtures.RefusalReplacementTests()
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
@@ -144,6 +148,10 @@ class RefusalPlannerTests(unittest.TestCase):
 
 class CorrectionPlannerTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = correction_fixtures.CorrectionTests()
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
@@ -203,6 +211,17 @@ class CorrectionPlannerTests(unittest.TestCase):
 
 
 class PlannerChainRowsTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        from research_harness import review_parts
+        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def execute_planned_replacements(self, test_class, method):
         fixture = test_class()
         self.addCleanup(fixture.doCleanups)

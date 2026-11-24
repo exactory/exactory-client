@@ -236,6 +236,10 @@ class WireNoticeTests(unittest.TestCase):
 
 class RefusalNoticeTests(RefusalCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         from research_harness import review_refusal_notice
         self.notices = review_refusal_notice
@@ -741,6 +745,13 @@ class ContractCheckRegistryTests(unittest.TestCase):
 
 
 class UndeliveredNoticeTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_reduced_history_final_refusal_is_delivered_without_other_reviewer_judgments(self):
         from research_harness import review_refusal_notice
         from research_harness import review_protocol as protocol, review_transport as transport

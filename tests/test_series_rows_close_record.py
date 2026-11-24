@@ -22,6 +22,10 @@ MEMBERS = ROOT / 'tests/fixtures/series_code_groups/d2-rows-close-record.json'
 
 class RecordGroupTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = fixtures.ContinuationTests()
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
@@ -61,7 +65,7 @@ class RecordGroupTests(unittest.TestCase):
         self.assertEqual(self.case.read_records().get('review_attempt', {}), {})
 
     def test_each_named_cause_member_ends_with_the_group_decision(self):
-        self.require_group_decisions('named_cause', stop_classes._NAMED_CAUSE_CODES_RECORD, 58)
+        self.require_group_decisions('named_cause', stop_classes._NAMED_CAUSE_CODES_RECORD, 59)
 
     def test_each_stored_state_member_ends_with_the_group_decision(self):
         self.require_group_decisions('stored_state', stop_classes._STORED_STATE_CODES_RECORD, 1)
@@ -115,7 +119,7 @@ class RecordGroupGuardTests(unittest.TestCase):
                     expected = ('stored_state' if conditions <= {'store', 'content', 'payload'} else 'named_cause')
                     self.assertEqual(group, expected)
                     total += len(sites)
-        self.assertEqual(total, 172)
+        self.assertEqual(total, 177)
 
 
 if __name__ == '__main__':

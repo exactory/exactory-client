@@ -16,6 +16,10 @@ import test_research_problem_adjudication_contract as focused_fixtures
 
 class ActualDeliveryContractTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = fixtures.ProblemReviewTests()
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
@@ -161,6 +165,13 @@ class ActualDeliveryContractTests(unittest.TestCase):
 
 
 class FocusedActualDeliveryTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_focused_ordinary_adjudicator_cannot_cite_a_withheld_body(self):
         case = focused_fixtures.ProblemAdjudicationContractTests()
         case.setUp()

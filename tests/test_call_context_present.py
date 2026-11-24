@@ -263,6 +263,13 @@ class V7ChainSupport(CarriedIntegrationSupport):
 
 
 class CallContextRoleTests(RoleFixtures, unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_w1_review_run_waits_for_a_probe_of_its_route_record_in_every_role(self):
         """On 12ce6199 review-run sends the request ('ResearchError not raised'), except for the bar continuation,
         whose refusal has another code and no step."""
@@ -526,6 +533,13 @@ class CallContextRefreshTests(refresh_edges.EdgeFixture):
 
 
 class CallContextCorrectionTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_w15_output_correction_reads_the_context_of_the_review_of_its_result(self):
         """review-output-correction starts a reviewer call too (finding F4 of the review of the design). Its packet
         checks the context of the result itself; the start of the call also reads the earlier turns of the review of
@@ -554,6 +568,13 @@ class CallContextCorrectionTests(unittest.TestCase):
 
 
 class CallContextStaleRouteTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_k7_stale_route_record_keeps_its_refusal_and_its_plan(self):
         """A recorded bar on a route record whose latest probe answered with a wrong control and whose runtime is
         then stale. A stale record takes no probe, so the rules of a stale route decide: review-run is refused with
@@ -610,6 +631,13 @@ class CallContextStaleRouteTests(unittest.TestCase):
 
 
 class CallContextChainTests(V7ChainSupport, OpennessReadingCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_w7_recorded_assignment_is_not_sent_after_a_contamination_of_an_own_earlier_turn(self):
         """On 12ce6199 review-run sends the request: 'ResearchError not raised'."""
         self.start_two_turns()

@@ -125,6 +125,13 @@ class V6NotesSelectionTests(NotesSelectionCases, OpennessReadingCase):
 
 
 class StoredCaptureJourneyTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_g8_c8_chosen_and_stopped_capture_new_export_records_and_verifies(self):
         from unbound_packet_fixtures import open_stored_case
         from codex_route_fixtures import limit_codex_input, record_codex_route

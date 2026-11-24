@@ -232,6 +232,9 @@ class MathEstimateStopTests(forecasts.FinalPreflightCase):
         return packet
 
     def test_finding5_estimate_stop_keeps_continue_and_the_continued_chain_ends_under_v1(self):
+        released = patch.object(reading, 'NEW_MATH_CHAIN_PROTOCOLS', (reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         self.limit_input(self.input_limit)
         native = self.export_math()
         for number in (1, 2):

@@ -1,5 +1,6 @@
 """Replacements preserve every stage of a real fresh-input series."""
 
+from unittest.mock import patch
 import copy
 import unittest
 
@@ -10,6 +11,13 @@ from research_harness.evidence import digest
 
 
 class PartsReplacementTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_every_parts_kind_can_be_replaced_and_the_corrected_series_records(self):
         fixture = fixtures.PartsResultCase()
         fixture.setUp()

@@ -1,5 +1,6 @@
 """Old scientific bytes cannot become new evidence through dossier bookkeeping."""
 
+from unittest.mock import patch
 import copy
 
 from strategy_fixtures import StrategyCase
@@ -7,6 +8,13 @@ from research_harness import research_decisions, strategy
 
 
 class ScientificEvidenceLineageTests(StrategyCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_scientific_scope_kind_is_not_an_evidence_wrapper(self):
         intent = self.intent()
         intent["objective"]["scope"] = {"kind": "source", "domain": "calibrated emission sources"}

@@ -132,6 +132,10 @@ class CapacityParagraphTests(unittest.TestCase):
 
 class CapacityAssignmentTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = problem_fixtures.ProblemReviewTests()
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
@@ -256,6 +260,13 @@ class CapacityProfileSelectionTests(unittest.TestCase):
 
 
 class CapacityChainTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_legacy_parts_refresh_binds_the_prompt_after_capacity_selection(self):
         import problem_parts_fixtures as fixtures
         case = fixtures.ResultPartsCase()

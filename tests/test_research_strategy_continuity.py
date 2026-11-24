@@ -1,5 +1,6 @@
 """Failure-based pivots, complete claim groups and scientific source stability."""
 
+from unittest.mock import patch
 import copy
 
 from research_harness.evidence import digest
@@ -7,6 +8,13 @@ from strategy_fixtures import StrategyCase
 
 
 class StrategyContinuityTests(StrategyCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def initial(self, *, claims=()):
         value = self.dossier()
         value["claims"] = [{"id": claim, "statement": "The calibrated control has its stated finite bound.",

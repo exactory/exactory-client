@@ -23,6 +23,13 @@ RULES = 'exactory-independent-review-sources-v3'
 
 
 class SessionRulesTests(ExcerptSessionCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_a_paragraph_wrapped_v3_prompt_requires_the_packets_source_rules(self):
         prompt = protocol.canonical_prompt('slate', orchestration='problem_creation', source_rules=RULES,
             problem_paragraphs=['exactory-problem-slate-forming-v2'])

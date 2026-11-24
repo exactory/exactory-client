@@ -21,6 +21,10 @@ from test_research_codex_visual_transport import png
 
 class VisualContractIntegrationTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.data = png(90)
         self.image = describe_artifact(self.data, 'image/png')
         self.pdf = describe_artifact(b'%PDF-1.4\nAn untransmitted original.\n', 'application/pdf')

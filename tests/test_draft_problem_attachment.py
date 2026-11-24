@@ -2,6 +2,7 @@
 recovery journal, and attach-problem (design 2026-10-12 §17)."""
 
 from __future__ import annotations
+from unittest.mock import patch
 
 import contextlib
 import http.server
@@ -405,6 +406,13 @@ class _PendingAttachmentTests:
 
 
 class TestManagedDepositForAProblem(_PendingAttachmentTests, _DepositTestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     # The same manuscript resumes the completed intent, so a new record needs another manuscript or a new version.
     _NEXT_DEPOSIT_ADVICE_MSG = ("To publish another record for this problem, change the manuscript or add --new-version."
                                 " The same manuscript resumes the same completed deposit.")

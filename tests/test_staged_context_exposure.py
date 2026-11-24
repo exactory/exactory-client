@@ -15,6 +15,10 @@ from research_harness.errors import ResearchError
 
 class StagedExposureTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = staged_fixture.StagedContinuationTests()
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
@@ -150,6 +154,13 @@ class StagedExposureTests(unittest.TestCase):
 
 
 class StagedAdjudicatorExposureTests(context.RoleFixtures, unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_s6_staged_adjudicator_tasks_share_the_controller_exposure(self):
         """Write two task assignment rows with prepare_child's lineage members for the staged adjudicator."""
         case, head = self.build_adjudicator()

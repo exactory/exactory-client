@@ -1,5 +1,6 @@
 """Typed pages preserve the ordinary scientific object and exact raw bindings."""
 
+from unittest.mock import patch
 import copy
 import unittest
 
@@ -1201,6 +1202,17 @@ class OriginalValidatorParityTests(unittest.TestCase):
 
 
 class StoredFinalAcceptanceTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        from research_harness import review_parts
+        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def assert_stored_final(self, role, packet, output):
         rule = composition.find_rule(role, packet)
         targets = composition.list_targets(rule, packet)

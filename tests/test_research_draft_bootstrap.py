@@ -1,5 +1,6 @@
 """Study writing entry creates the marker used by the unchanged authorship hook."""
 
+from unittest.mock import patch
 import copy
 import json
 import os
@@ -24,6 +25,10 @@ METADATA = {"title": "A finite bound", "category": "math.CO"}
 
 class DraftBootstrapTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name) / "study"

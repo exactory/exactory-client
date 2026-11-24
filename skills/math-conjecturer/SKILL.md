@@ -1656,6 +1656,21 @@ each of these refusals.
      reviewer returns the finding, it can ask for passages again, and `review-series` runs
      the turns that deliver them. The final answer is the finding of step 6a; a ground cites
      notes, gaps and arguments by handle (`refs`).
+   - Since 0.93.0 a final that one request does not hold is taken in pages: page turns that
+     assess the targets of their page, condensing turns where entries do not fit, and one
+     closing turn that states the outcome. `review-series` assigns and runs them like every
+     other turn, and it records the finding that the harness composes from their answers.
+     Run it after each stop or handoff and take the step that it plans, until the closing
+     turn has its answer. The receipt of a turn states the form under
+     `reading_chain_admission.final_form`. When a content record changed after the first
+     assignment so that a unit of the chain differs, the command ends with the handoff
+     `openness_packet_outdated`, whose `details.units` lists the units that differ: take
+     `details.step`, and then the steps of its `then` in their order. The new chain carries
+     the reading turns that still verify. When the review records no longer give a verified
+     context for a reading turn that the chain carries from an earlier chain, the command
+     ends with `openness_carried_turn_unverified`: `details.turns` names each earlier chain
+     with its `recovery` (`probe`, `retire` or `export`), and `details.step` is the step to
+     take.
    - Keep the `reviewer_id`, the author and the route of the earlier chain when you export
      again for the same statement and formulations. The harness looks at every earlier
      chain of the record with the same reviewer, author, statement, formulations and route
@@ -1734,8 +1749,10 @@ each of these refusals.
      (`review_input_too_large` or `review_chain_projection_over_limit`), a turn position
      that is exhausted (`review_slot_exhausted` or
      `review_refusal_notice_metadata_too_large`), and a v7 chain whose denser measured
-     ratio leaves its final, with the allowances that the chain has granted, without room
-     in one request (`review_chain_projection_over_limit` with `details.ratio`). When a new
+     ratio leaves its final without room: a final in one request with the allowances that
+     the chain has granted, or, where the final can run in pages, its smallest turn
+     (`review_chain_projection_over_limit` with `details.ratio`).
+     When a new
      chain is admitted, the command ends with the handoff `export`, which states that chain:
      `details.successor.protocol`, `details.successor.carried_readings` for a v7 chain or
      `details.successor.planned_reading_turns` for a v6 chain that reads again, and
@@ -2563,7 +2580,27 @@ accounts with the parts that the harness derives, and the records that their ent
    is unchanged: the assurance
    `problem_value` covers the accounts, and the grades and evidence texts of A3, significance,
    priority, accessibility, calibration and A7 carry the reviewer's judgments. Run the
-   assignment with `review-run` and record the observed review with `value-review`. When the result packet does not fit one input of the route, or its fitted
+   assignment with `review-run` and record the observed review with `value-review`.
+   Since 0.93.0 a new bar, slate or result review can run as a session under the source rules
+   `exactory-independent-review-sources-v4`, and a new series can run under
+   `exactory-review-parts-v3`; the receipt of `review-assignment` names what was chosen
+   (`session_admission`, `review_parts.protocol`). Run either with `review-series`, as below.
+   A session delivers the required units of the packet over its first turns, and its final,
+   like the final of a series under parts v3, can take page turns and a closing turn. Three
+   things differ for you. First, a new review on a route below the capacity floor of the
+   rules v4 is refused with `review_route_capacity_below_floor` and `details.reason:
+   "session_below_floor"` before any call: report the stop, and when the owner authorizes an
+   answer of `details.then`, take its steps. Second, a review that such a session recorded
+   is refreshed as a new chain in its slot: assign the same role to the same reviewer with
+   an empty `context`, or take the payload that `review-series` plans for the recorded
+   head, and do not name the recorded final as `prior_assignment_id`. Third, a slate review
+   that does not fit one request is a series under parts v3, and a slate whose forming
+   records reference a body that is not text stops before its first call for a capture of
+   a text form: store the text with the `artifact` step that the stop names, and assign
+   again. The
+   [CLI reference](../../docs/research-cli.md#sessions-under-the-source-rules-v4) states the
+   turns, the checks and the stops of a session.
+   When the result packet does not fit one input of the route, or its fitted
    request would withhold an evidence body, the harness delivers the review as a series of
    fresh-input turns (`exactory-review-parts-v2`): read turns that card the evidence, combine and
    check turns when needed, possibly more than one of each, followed by final turns, each a new

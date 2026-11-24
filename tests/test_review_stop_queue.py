@@ -663,6 +663,13 @@ class ClosedCallTests(StopQueueFixture):
 
 
 class CapturedStopTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_release_continues_the_same_chain_to_a_recorded_final(self):
         import test_review_continuation as continuations
         from research_harness import review_protocol as protocol, review_series, review_continuation
@@ -778,6 +785,13 @@ class StopReceiptTests(StopQueueFixture):
 
 
 class StagedCaptureSettlementTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_acceptance_read_conflict_keeps_capture_retryable_without_a_refusal(self):
         import sys
         import test_review_staged_frontier as frontier

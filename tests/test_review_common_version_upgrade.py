@@ -55,6 +55,13 @@ def assert_verified(test, case, assignment):
 
 
 class ProblemSessionUpgradeTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_a_source_session_replays_its_completed_turn_after_upgrade(self):
         case = open_fixture(self, problem_fixtures.ProblemReviewTests)
         with patch.object(protocol, 'COMMON_VERSION', 2):
@@ -172,6 +179,10 @@ class ProblemSessionUpgradeTests(unittest.TestCase):
 
 class PartsSessionUpgradeTests(parts_fixtures.ResultPartsCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         with patch.object(protocol, 'COMMON_VERSION', 2):
             super().setUp()
 
@@ -241,6 +252,10 @@ class StagedEpochUpgradeTests(parts_fixtures.ResultPartsCase):
     staged_entry = True
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         with patch.object(protocol, 'COMMON_VERSION', 2):
             super().setUp()
 
@@ -299,6 +314,13 @@ class StagedEpochUpgradeTests(parts_fixtures.ResultPartsCase):
 
 
 class AssignmentInstructionsUpgradeTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def check_request_instructions(self, adapter):
         case = open_fixture(self, problem_fixtures.ProblemReviewTests)
         case.supporting = case.artifacts.put(

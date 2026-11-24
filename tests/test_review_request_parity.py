@@ -7,6 +7,7 @@ The separate r6 fixture pins only added advisory fields and cannot replace any
 field authenticated by the original oracle.
 """
 
+from unittest.mock import patch
 import copy
 import gzip
 import hashlib
@@ -23,6 +24,13 @@ CAPACITY_PATH = fixtures.FROZEN_PATH.with_name('review-capacity-advisory-r6.json
 
 
 class ReviewRequestParityTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     @classmethod
     def setUpClass(cls):
         cls.frozen = json.loads(gzip.decompress(fixtures.FROZEN_PATH.read_bytes()))

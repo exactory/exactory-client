@@ -28,6 +28,13 @@ def load_legacy_parts():
 
 
 class StagedScaleEntryTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     staged_entry = True
     timeout_seconds = 600
 
@@ -156,6 +163,13 @@ class StagedScaleEntryTests(ResultPartsCase):
 
 
 class StagedVisualScaleEntryTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_explicit_visual_upgrade_refuses_without_new_pages_or_inventory(self):
         import test_visual_result_delivery as fixtures
         from test_research_binary_pdf import authored_pdf
@@ -202,6 +216,13 @@ class StagedVisualScaleEntryTests(unittest.TestCase):
 
 
 class StagedOmittedBodyEntryTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     staged_entry = True
     output_tokens = 1000
 

@@ -54,6 +54,13 @@ PREVIOUS_HASHES = {
 
 
 class ProblemDirectionTests(ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def build_current_assessment(self):
         payload = build_assessment(self.selected)
         payload['grades']['admission']['A7'] = 'pass'

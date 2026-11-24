@@ -528,10 +528,24 @@ class CarriedSelectionCases(CarriedSelectionSupport):
 
 
 class V5CarriedSelectionTests(CarriedSelectionCases, OpennessReadingCase):
+    def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     historical_v5 = True
 
 
 class V6CarriedSelectionTests(CarriedSelectionCases, OpennessReadingCase):
+    def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def assign_first(self, identifier, bindings=None, *, reviewer_id='openness-reviewer', route_id='route'):
         from research_harness import review_protocol as protocol
         from test_openness_carried_integration import export_bindings
@@ -618,6 +632,12 @@ def build_refusing_observer(assignment_id, code):
 
 class CarriedRefusalTests(CarriedSelectionSupport, OpennessReadingCase):
     """Only the two refusals that state that a prefix is not ready send the selection to the turn before."""
+    def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def replace_observers(self, observer):
         return patch.object(self.carried, 'CHAIN_OBSERVERS', dict.fromkeys(self.carried.CHAIN_OBSERVERS, observer))

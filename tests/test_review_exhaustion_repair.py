@@ -14,6 +14,10 @@ import test_research_problem_reviews as problem_fixtures
 
 class ExhaustionRepairTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = problem_fixtures.ProblemReviewTests()
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
@@ -386,6 +390,13 @@ class ExhaustionRepairTests(unittest.TestCase):
 
 
 class ExhaustionDeliveryTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_predecessor_input_is_credited_only_for_the_same_reviewer_and_route(self):
         from research_harness.review_delivered_evidence import read_chain_delivery, read_selected_delivery
         fixture = ExhaustionRepairTests()

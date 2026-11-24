@@ -11,6 +11,13 @@ from research_harness.evidence import digest
 
 
 class HistoricalCallTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def command(self, name, payload, request_id):
         with patch.object(correction, 'prepare_packet', return_value={'diagnostic': {}}), \
                 patch.object(correction, '_route', side_effect=lambda records, artifacts, assignment, route_id:

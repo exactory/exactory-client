@@ -65,6 +65,10 @@ class CallCaptureRecoveryTests(LiteratureCase):
     records = fixtures.ReviewProtocolTests.records
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.route()
 
@@ -349,6 +353,13 @@ class CallCapturePreparationTests(TaskExecutionFixture):
 
 
 class NativeCorrectionCaptureTests(LiteratureCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_correction_uses_retained_native_rollout_after_source_is_removed(self):
         import test_visual_context_repair as visual
         from research_harness import research_decisions as decisions, review_codex_transport as codex

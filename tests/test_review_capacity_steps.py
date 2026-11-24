@@ -536,6 +536,10 @@ class CapacityRepairStepsTests(CapacityAnswers, unittest.TestCase):
 
 class CapacitySlateSeriesStepsTests(CapacityAnswers, unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = prepare_unit_fixture(self, slate_fixtures.SlateSeriesTests,
                                             'test_route_discovery_offers_local_parts_for_an_oversized_slate')
         mode = patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL)
@@ -627,6 +631,13 @@ class CapacitySlateSeriesStepsTests(CapacityAnswers, unittest.TestCase):
 
 
 class CapacityPublicEntryTests(CapacityAnswers, unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_stopped_study_slate_can_reassess_its_bar_on_the_same_record(self):
         from test_research_context_repair_integration import ContextRepairIntegrationTests
         self.case = prepare_unit_fixture(self, ContextRepairIntegrationTests, 'runTest')
@@ -747,6 +758,12 @@ class CapacityPublicEntryTests(CapacityAnswers, unittest.TestCase):
 
 class CapacityNewEntryTests(CapacityAnswers, unittest.TestCase):
     """A predecessor whose role steps are [7, 3] or [7, 6] moves by a new route record and a new entry on it."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def list_new_entry_answers(self, parent, role):
         """The new-entry answers on the route record wide of the stop of a continuation of the parent on its route,
