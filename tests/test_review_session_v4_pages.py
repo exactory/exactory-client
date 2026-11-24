@@ -679,6 +679,26 @@ class SessionPagesTests(unittest.TestCase):
         self.assertIn('session_combine', self.read_packet(current))
         self.finish_pages(current)
 
+    def test_closing_after_a_capped_one_request_final_counts_only_its_own_cap(self):
+        """Seven targets: a final in one request that splits into pages whose closing condenses after its cap."""
+        from research_harness import review_failure_class as failures
+        current = self.start(targets=7)
+        self.assertNotIn('page', self.read_packet(current)['session_final'])
+        current = self.replace_capacity(current)
+        while 'closing' not in self.read_packet(current).get('session_final', {}):
+            current = self.advance(current)
+        closing = current
+        records = self.case.read_records()
+        self.assertEqual(failures.count_position(records, self.case.artifacts, closing)['failed_attempts'], 0)
+        current = self.replace_capacity(current)
+        while 'session_combine' in self.read_packet(current):
+            current = self.advance(current)
+        self.assertIn('closing', self.read_packet(current)['session_final'])
+        records = self.case.read_records()
+        self.assertEqual(failures.read_paged_position(self.case.artifacts, closing),
+                         failures.read_paged_position(self.case.artifacts, current))
+        self.assertEqual(failures.count_position(records, self.case.artifacts, current)['failed_attempts'], 1)
+
     def test_astra_b8_single_block_above_material_floor_condenses_then_records(self):
         from research_harness import review_condensing
         # A pinned grant can outlive the policy that created it. Restore the

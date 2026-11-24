@@ -525,7 +525,7 @@
         ]
       },
       "review_evidence_undelivered": {
-        "research_harness/research_decisions.py:validate_review_contract#1": [
+        "research_harness/research_decisions.py:_validate_cited_evidence#1": [
           "form"
         ],
         "research_harness/review_composition.py:_validate_packet_evidence#1": [
@@ -534,13 +534,13 @@
         "research_harness/review_context_repair.py:validate_reassessment#1": [
           "form"
         ],
+        "research_harness/review_parts_study.py:_validate_verification_evidence#1": [
+          "form"
+        ],
         "research_harness/review_parts_study.py:validate_study_references#1": [
           "form"
         ],
-        "research_harness/review_parts_study.py:validate_verification_final#1": [
-          "form"
-        ],
-        "research_harness/review_protocol.py:validate_adjudication_contract#1": [
+        "research_harness/review_protocol.py:_validate_adjudication_citations#1": [
           "form"
         ]
       },
@@ -756,7 +756,7 @@
         "research_harness/cli.py:_review_run#1": [
           "record"
         ],
-        "research_harness/research_decisions.py:validate_review_contract#1": [
+        "research_harness/research_decisions.py:_read_contract_packets#1": [
           "record"
         ],
         "research_harness/review_protocol.py:_validate_staged_adjudication_scope#1": [

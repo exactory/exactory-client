@@ -5132,7 +5132,16 @@ def _prepare_assignment(store_artifacts, expected_revision, carry_guards):
             if latest is not None and is_dead_assignment(records, latest):
                 slot_identifier = context_repair.slot_id(records, latest)
         session_admission = None
+
+        def require_open_session_root():
+            # A session of the rules v4 records before the check of the other rule sets below; the store refuses the
+            # assignment that its own run refuses for a root that a post closed.
+            if problem:
+                from .problem_delivery import require_unposted_review
+                require_unposted_review(records, dict(value, slot_id=slot_identifier, recorded_revision=expected_revision + 1),
+                                        artifacts)
         if parent is not None and parent.get('session_chain'):
+            require_open_session_root()
             return review_session_v4.prepare_session_assignment(records, artifacts, value, route,
                 expected_revision + 1, parent=parent, slot=slot_identifier)
         if (parent is None and upgrade is None and value['role'] in bar_sources.ROLES
@@ -5157,6 +5166,7 @@ def _prepare_assignment(store_artifacts, expected_revision, carry_guards):
                 admission = review_session_v4.check_v4_admission(records, planning, route, value['role'], logical)
                 session_admission = {key: value for key, value in admission.items() if key not in ('inventory', 'bodies', 'capacity_members')}
                 if admission['state'] == 'record':
+                    require_open_session_root()
                     return review_session_v4.prepare_session_assignment(records, artifacts, value, route,
                         expected_revision + 1, logical=logical, admission=admission, slot=slot_identifier)
         diagnostics = {}
@@ -6513,14 +6523,40 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
             evidence_validator=lambda r, a, values, **kwargs:
                 validate_evidence_contract(r, a, values, packets=packets, **kwargs))
     if packet.get('subject', {}).get('kind') == 'problem':
-        missing = supplied_evidence.adjudicator_undelivered_references(records, artifacts, assignment['id'],
-            collect_adjudication_evidence(output), frozen=True, attempt=attempt)
-        if missing:
-            with contract_check('adjudication.evidence_delivery'):
-                raise ResearchError('review_evidence_undelivered',
-                    'Cite only content that this adjudicator received in its own packets.', missing[0])
-        from .review_refusal import validate_source_links_contract
-        validate_source_links_contract(records, output, packets)
+        from .review_refusal import evidence_arrays
+        _validate_adjudication_citations(records, artifacts, assignment, evidence_arrays(output, with_paths=True),
+                                         packets, attempt=attempt)
+
+
+def _validate_adjudication_citations(records, artifacts, assignment, rows, packets, *, attempt):
+    """Check the citations of a problem adjudicator's answer against the records: each cited item reached this
+    adjudicator, and each source link cites a full text. rows holds (path, evidence) for its evidence arrays."""
+    from .review_refusal import contract_check, validate_source_link_rows
+    missing = supplied_evidence.adjudicator_undelivered_references(records, artifacts, assignment['id'],
+        [reference for _, evidence in rows for reference in evidence], frozen=True, attempt=attempt)
+    if missing:
+        with contract_check('adjudication.evidence_delivery'):
+            raise ResearchError('review_evidence_undelivered',
+                'Cite only content that this adjudicator received in its own packets.', missing[0])
+    validate_source_link_rows(records, rows, packets)
+
+
+def validate_adjudication_page(records, artifacts, assignment, output, *, attempt):
+    """Run on each evidence field of a page answer of a problem adjudicator the checks of its citations that
+    validate_adjudication_contract runs with the records, so that the page is refused at its own place."""
+    from .research_decisions import read_review_citation_delivery
+    from .review_composition import list_page_evidence
+    from .review_refusal import validate_evidence_contract
+    header = _read_json(artifacts, assignment['packet'])[review_parts.KEY]
+    if review_parts.read_logical_packet(artifacts, header).get('subject', {}).get('kind') != 'problem':
+        return
+    packets = read_review_citation_delivery(records, artifacts, assignment, attempt=attempt)['packets']
+    for pointer, path, evidence in list_page_evidence(output):
+        with describe_error_at(path):
+            if pointer == '/evidence':
+                validate_evidence_contract(records, artifacts, evidence, packets=packets)
+            _validate_adjudication_citations(records, artifacts, assignment, [(path, evidence)], packets,
+                                             attempt=attempt)
 
 
 @record_refusal_on_error

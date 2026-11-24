@@ -58,6 +58,12 @@ def read_page_plan(artifacts, reference):
     return value
 
 
+def read_page_room(artifacts, reference):
+    """The page room that the stored chain of page plans holds (review_final_pages.read_plan_room)."""
+    return pages.read_plan_room([read_page_plan(artifacts, item)
+                                 for item in reference.get('predecessors', []) + [reference]])
+
+
 def read_final_currency(native, inventory):
     return dict(packet_digest=digest(native), inventory_digest=digest(inventory))
 
@@ -185,7 +191,7 @@ def prepare_final_packet(records, artifacts, prior, route, logical, number, inve
         old_level = prior_binding.get('capacity', {}).get('level_material_allowance', prior_binding.get('capacity', {}).get('material_allowance'))
         cause_kind = ('level' if limits['target_allowance'] != previous['target_allowance'] or
                       limits['material_allowance'] != old_level else
-                      'ratio' if room < previous['page_room'] else None)
+                      'ratio' if room < read_page_room(artifacts, reference) else None)
         if cause_kind is not None:
             cause = dict(kind=cause_kind, attempt_id=attempt_id, page_room=room,
                          completed=completed, pending=pending)
@@ -268,7 +274,8 @@ def publish_page_plan(artifacts, plan, *, previous=None):
 
 
 def read_final_position(artifacts, reference, number, *, include_currency=False):
-    """Condensation keeps its page/closing position; target splits start positions."""
+    """Condensation keeps its page/closing position; target splits start positions. The closing that a split of a
+    final creates starts its own position: only a closing split from a closing keeps one."""
     from .evaluation import Evaluation
 
     def read_position_plan(item):
@@ -284,8 +291,8 @@ def read_final_position(artifacts, reference, number, *, include_currency=False)
         if include_currency and plan['currency'] != current['currency']:
             break
         parent = next((turn for turn in plan['turns'] if turn['number'] == selected.get('split_of')), None)
-        if (parent is not None and selected['kind'] in ('page', 'closing')
-                and parent['kind'] in (selected['kind'], 'final') and parent['targets'] == selected['targets']):
+        if (parent is not None and selected['kind'] in ('page', 'closing') and parent['targets'] == selected['targets']
+                and (parent['kind'] == selected['kind'] or (parent['kind'], selected['kind']) == ('final', 'page'))):
             selected = parent
     if include_currency:
         return digest(current['currency']), selected['number']

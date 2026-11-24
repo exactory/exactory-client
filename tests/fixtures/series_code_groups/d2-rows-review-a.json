@@ -38,6 +38,9 @@
         "research_harness/openness_final_pages.py:verify_final_turn_binding#3": [
           "content"
         ],
+        "research_harness/review_final_pages.py:read_plan_room#1": [
+          "content"
+        ],
         "research_harness/review_final_pages.py:verify_page_plans#1": [
           "content"
         ],

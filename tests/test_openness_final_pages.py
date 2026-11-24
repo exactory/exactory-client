@@ -569,6 +569,27 @@ class UnreadPagesTests(FinalPagesSupport):
         stored = self.store.snapshot()['records']['problem_openness'][final]
         self.assertTrue(stored['unread']['rows'])
 
+    def test_page_citing_the_unread_set_is_refused_at_the_page(self):
+        """S-F1 of the review of the merged tree of 0.93.0. The checks of a composed v7 finding that read stored bytes
+        are those of the unread set. A page holds no unread set: a page that cites the set is refused at its own
+        place, and the plan replaces the page. The closing holds the set and answers for it."""
+        import test_openness_unread_final as unread_fixtures
+        from research_harness.review_continuation import plan_next
+        native = self.export_targets()
+        self.assign('turn-1', native)
+        self.invoke('turn-1', self.build_v7_answer(self.read_packet('turn-1')))
+        self.assign('refused', native, prior='turn-1')
+        self.refuse_provider = unread_fixtures.UnreadFinalSupport.refuse_provider.__get__(self)
+        native, assigned, packet = unread_fixtures.UnreadFinalSupport.exhaust_head(self, native, 'refused')
+        self.assertIn('page', packet['reading_final'])
+        output = dict(targets=[dict(formulation=target, coverage='Required sources were read.',
+            grounds=[dict(kind='packet_defect', text='Required ranges remain unread.', refs=[dict(ref='x1')])],
+            sentence='The target remains unresolved.') for target in packet['reading_final']['page']['targets']])
+        refusal = self.invoke(assigned['id'], output)['output_refusal']
+        self.assertEqual(refusal['details']['path'], '/targets/0/grounds/0/refs/0', refusal)
+        action = plan_next(self.store.snapshot()['records'], self.artifacts, assigned['id'])
+        self.assertEqual(action['state'], 'replace', action)
+
 
 class IncidentFinalPagesTests(FinalPagesSupport):
     text_sizes = (150000,) * 29

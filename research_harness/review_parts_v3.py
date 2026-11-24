@@ -1813,8 +1813,12 @@ def validate_turn_output(records, artifacts, assignment, packet, output, *, atte
     state = _read_value(artifacts, header['state'], header['state_digest'])
     legacy._require(header['plan_digest'] == assignment['capacity_plan']['digest'], DELIVERY_INVALID_MESSAGE,
                     'review_parts_delivery_invalid')
+    from functools import partial
+    from .research_decisions import validate_page_citations
     return validate_planned_output(packet, output, inventory, plan, state, route,
-                                   artifacts=artifacts, assignment=assignment, expanded=expanded)
+                                   artifacts=artifacts, assignment=assignment, expanded=expanded,
+                                   check_citations=partial(validate_page_citations, records, artifacts, assignment,
+                                                           attempt=attempt))
 
 
 def _require_page_target_keys(output, definitions):
@@ -1848,12 +1852,14 @@ def require_final_role_fields(output):
                                                  '{"kind":"requests","unit_requests":[...],"source_requests":[...]} in place of the answer.'), path='/' + name)
 
 
-def validate_planned_output(packet, output, inventory, plan, state, route, *, artifacts, assignment, expanded=False):
+def validate_planned_output(packet, output, inventory, plan, state, route, *, artifacts, assignment, expanded=False,
+                            check_citations=None):
     """Validate against already authenticated plan, inventory and prior state.
 
     Keeping artifact resolution at the public command edge also permits bounded
     streaming simulations to reuse their immutable inventory without parsing it
-    again for every read. Both paths execute the same checks.
+    again for every read. Both paths execute the same checks. check_citations, where given, checks the citations of
+    an expanded page answer against the records.
     """
     from .operations import fields
     from .review_handles import is_material_output, validate_material
@@ -1921,7 +1927,19 @@ def validate_planned_output(packet, output, inventory, plan, state, route, *, ar
                 rule = composition.find_rule(envelope['role'], envelope)
                 if header['final_form'] in ('page', 'final'):
                     _require_page_target_keys(expanded_output, composition.list_targets(rule, envelope))
-                    composition.validate_page_output(rule, envelope, header['page']['targets'], expanded_output)
+                    try:
+                        composition.validate_page_output(rule, envelope, header['page']['targets'], expanded_output)
+                    except ResearchError as error:
+                        # The envelope carries the bodies of the logical packet and of this turn. A cited body that it
+                        # does not carry is no finding of the page check; the check of the citations against the
+                        # records decides whether this review received it.
+                        if error.code != 'artifact_missing' or check_citations is None:
+                            raise
+                        with refuse_unreadable_answer():
+                            check_citations(expanded_output)
+                        raise
+                    if check_citations is not None:
+                        check_citations(expanded_output)
                 else:
                     composition.validate_closing_output(rule, envelope, header['closing']['rows'], expanded_output)
         return delta
@@ -3150,7 +3168,7 @@ def prepare_series_final(records, artifacts, prior, route, logical, inventory, p
                          packet, *, split=False, keep_level=False):
     """Freeze or replay a series final plan, retaining pending and split pages."""
     from . import review_final_pages as pages, review_condensing
-    from .openness_final_pages import read_page_plan, publish_page_plan
+    from .openness_final_pages import read_page_plan, read_page_room, publish_page_plan
     header = packet[legacy.KEY]
     old_packet = _read_value(artifacts, prior['packet']) if prior else {}
     old = old_packet.get(legacy.KEY, {})
@@ -3232,7 +3250,7 @@ def prepare_series_final(records, artifacts, prior, route, logical, inventory, p
     cause_kind = None if keep_level else (
         'level' if previous['target_allowance'] != limits['target_allowance'] or
         old_level is not None and old_level != current_level else
-        'ratio' if room < previous['page_room'] else None)
+        'ratio' if room < read_page_room(artifacts, reference) else None)
     if cause_kind:
         completed, pending = _read_final_progress(state, page_plan)
         cause = dict(kind=cause_kind, attempt_id=attempt_id, completed=completed, pending=pending, page_room=room)

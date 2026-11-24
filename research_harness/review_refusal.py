@@ -103,9 +103,9 @@ CONTRACT_CHECKS = {
     'review.session_turn': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS + _READING_NOTICE_FIELDS +
                             ('pending_requests', 'minimum_page', 'maximum_page', 'predicate')},
     'review.value': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS +
-                     ('required', 'bar_ids', 'candidate_id', 'candidate_ids', 'items', 'minimum_items')},
+                     ('required', 'bar_ids', 'candidate_id', 'candidate_ids', 'items', 'minimum_items', 'missing_ids')},
     'review.objections': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('objection_id', 'candidate_ids')},
-    'review.reassessment': {'notice_fields': _SHAPE_NOTICE_FIELDS + _DELIVERY_NOTICE_FIELDS},
+    'review.reassessment': {'notice_fields': _SHAPE_NOTICE_FIELDS + _DELIVERY_NOTICE_FIELDS + ('missing_ids',)},
     'review.support': {'notice_fields': _SHAPE_NOTICE_FIELDS},
     'review.source_requests': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS +
                               ('request_id', 'page', 'minimum_page', 'maximum_page', 'page_size', 'total')},
@@ -298,9 +298,14 @@ def validate_source_links_contract(records, output, packets):
     Capture identities are immutable; current readings and bundle selection do not
     participate in this output refusal. Delivery depth comes from the frozen chain.
     """
+    validate_source_link_rows(records, evidence_arrays(output, with_paths=True), packets)
+
+
+def validate_source_link_rows(records, rows, packets):
+    """The check of validate_source_links_contract on rows of (path, evidence) of an answer."""
     from .reading import validate_fulltext_link
     from .review_delivered_evidence import resolve_part_source_link
-    for path, values in evidence_arrays(output, with_paths=True):
+    for path, values in rows:
         for index, reference in enumerate(values):
             if reference.get('kind') != 'source':
                 continue

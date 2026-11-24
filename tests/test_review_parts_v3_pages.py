@@ -1102,6 +1102,26 @@ class PagedSeriesTests(PartsResultCase):
                 return
         self.fail('The pinned floor did not reach its D2 decision stop.')
 
+    def test_floor_decision_through_plan_next_is_taken_by_the_store(self):
+        """S-F4 of the review of the merged tree of 0.93.0, for the parts protocol v3: a page whose answers are whole
+        at the output limit ends, through plan_next, with the decision of its capacity recovery. Its answer moves the
+        series to a route of another class (the condition of item A16), because the store refuses a route of the same
+        class for this series."""
+        from research_harness.review_continuation import plan_next
+        from research_harness.review_route_capacity import OUTPUT_CLASS_ROUTE_CONDITION
+        assignment = self.reach_page(self.start(0))
+        for index in range(30):
+            self.invoke_usage(assignment, tokens=128000, attempt_id='floor-cap-%d' % index)
+            action = plan_next(self.case.read_records(), self.case.artifacts, assignment['id'])
+            if action['state'] == 'replace':
+                assignment = self.case.mutate(protocol.record_assignment, action['payload'])['result']
+            elif action['state'] != 'run':
+                break
+        self.assertEqual((action['state'], action['code']), ('stop', 'review_output_over_cap'), action)
+        self.assertEqual(action['details']['decision']['then'], action['details']['recovery']['then'])
+        [answer] = action['details']['decision']['then']
+        self.assertEqual((answer['answer'], answer['condition']), ('Move to another route', OUTPUT_CLASS_ROUTE_CONDITION))
+
 
     def run_adaptation(self, starting, tokens, ratio=False):
         import math
@@ -1182,6 +1202,25 @@ class PagedSeriesTests(PartsResultCase):
         self.assertEqual(record['closing']['assignment_id'], final['id'])
         self.assert_frozen(frozen)
 
+    def test_page_citing_an_unrequested_unit_is_refused_at_the_page(self):
+        """S-F1 of the review of the merged tree of 0.93.0. The rule that a page cites only what this series delivered
+        reads the records, so it ran only on the composed answer. A page that cites an optional unit that no turn
+        requested is refused at its own place, and the plan replaces the page."""
+        source = self.case.metadata(95)
+        self.case.capture(source, pdf_text='An optional source was never requested.')
+        assignment = self.reach_page(self.start(0))
+        packet = self.packet(assignment)
+        inventory = legacy.read_inventory(self.case.artifacts, packet[legacy.KEY]['inventory'])
+        optional = next(row for row in inventory['units'] if not row['required'] and
+                        row['source']['identity'].get('version_id') == source)
+        output, field = self.answer_citing(assignment, dict(ref=optional['handle']))
+        receipt = self.invoke(assignment, output)
+        refusal = receipt['output_refusal']
+        self.assertEqual(refusal['check'], 'review.evidence_delivery', refusal)
+        self.assertEqual(refusal['details']['path'], '/targets/0/fields/' + composition._escape_field(field))
+        action = continuation.plan_next(self.case.read_records(), self.case.artifacts, assignment['id'])
+        self.assertEqual(action['state'], 'replace', action)
+
     def test_closing_capacity_condenses_rows_and_refused_block_keeps_its_level(self):
         from research_harness.review_continuation import plan_next
         assignment = self.reach_page(self.start(0))
@@ -1204,6 +1243,38 @@ class PagedSeriesTests(PartsResultCase):
         self.assertEqual(len(record['closing']['condensing']), 2)
         self.assert_frozen(frozen)
 
+
+    def test_closing_after_a_capped_single_final_counts_only_its_own_cap_and_records(self):
+        """A final in one request that splits into pages whose closing condenses after its cap. Each turn after the
+        caps measures the room of the plan again, and the page plans that the turns leave replay in verify_series."""
+        from test_review_output_profile import build_row
+        from research_harness import review_failure_class as failures
+        measured = patch.object(capacity, 'read_profile_priors', return_value=[
+            dict(build_row(level=None, kind=kind, thinking=1), largest_output_tokens=12)
+            for kind in ('read', 'combine', 'check', 'final', 'single')])
+        measured.start()
+        self.addCleanup(measured.stop)
+        assignment = self.start(0)
+        while self.packet(assignment)[legacy.KEY]['kind'] != 'final':
+            assignment = self.advance(assignment)
+        self.assertNotIn('page_plan_digest', self.packet(assignment)[legacy.KEY])
+        self.invoke_usage(assignment, tokens=128000)
+        assignment = self.replace_capacity(assignment)
+        while self.packet(assignment)[legacy.KEY].get('final_form') != 'closing':
+            assignment = self.advance(assignment)
+        closing = assignment
+        records = self.case.read_records()
+        self.assertEqual(failures.count_position(records, self.case.artifacts, closing)['failed_attempts'], 0)
+        self.invoke_usage(assignment, tokens=128000)
+        assignment = self.replace_capacity(assignment)
+        while self.packet(assignment)[legacy.KEY].get('final_form') == 'combine':
+            assignment = self.advance(assignment)
+        self.assertEqual(self.packet(assignment)[legacy.KEY]['final_form'], 'closing')
+        records = self.case.read_records()
+        self.assertEqual(failures.read_paged_position(self.case.artifacts, closing),
+                         failures.read_paged_position(self.case.artifacts, assignment))
+        self.assertEqual(failures.count_position(records, self.case.artifacts, assignment)['failed_attempts'], 1)
+        self.finish(assignment)
 
     def test_refused_page_keeps_level_notice_and_notice_survives_capacity_split(self):
         from research_harness.review_continuation import plan_next
@@ -1354,6 +1425,126 @@ class AdapterPageTests(unittest.TestCase):
         self.assertEqual(saved['composite']['id'], record['id'])
         self.assertEqual(continuation.plan_next(case.case.read_records(), case.case.artifacts, final['id'])['state'],
                          'done')
+
+    def answer_page(self, assignment, read_packet, full_output, artifacts):
+        """The answer of a page: the part of the full answer that holds the targets of the page."""
+        header = read_packet(assignment)[legacy.KEY]
+        native = dict(legacy.read_logical_packet(artifacts, header), review_parts=header)
+        rule = composition.find_rule(assignment['role'], native)
+        reference = parts._read_value(artifacts, header['final_page_plan'])
+        plan = parts._read_value(artifacts, reference['artifact'])
+        groups = [row['targets'] for row in plan['turns'] if row['kind'] in ('page', 'final')]
+        pages, _ = composition.split_output(rule, native, full_output(assignment), groups)
+        return next(row['output'] for row in pages if row['targets'] == header['page']['targets'])
+
+    def reach_adapter_page(self, assignment, read_packet, full_output, invoke, assign, artifacts):
+        """Take the turns before the first page of an adapter series. Return the page and its answer."""
+        for index in range(60):
+            packet = read_packet(assignment)
+            header = packet[legacy.KEY]
+            if header.get('final_form') == 'page':
+                return assignment, self.answer_page(assignment, read_packet, full_output, artifacts)
+            if header.get('final_form') == 'combine':
+                output = dict(block=header['block']['handle'], summary='Retained evidence.', refs=header['block']['entries'][:1])
+            else:
+                output = make_turn_output(packet)
+            self.assertNotIn('output_refusal', invoke(assignment, output))
+            assignment = assign('adapter-turn-%d' % index, assignment['id'])
+        self.fail('No page was assigned.')
+
+    def replace_refused_page(self, records, artifacts, page, mutate):
+        action = continuation.plan_next(records(), artifacts, page['id'])
+        self.assertEqual((action['state'], action['command']), ('replace', 'review-assignment'), action)
+        return mutate(protocol.record_assignment, action['payload'])['result']
+
+    def test_verification_page_citing_an_undelivered_source_is_refused_at_the_page(self):
+        """S-F1 of the review of the merged tree of 0.93.0, for the verification adapter. The rule that a verification
+        cites only source content that its series delivered reads the records, so it ran only on the composed answer.
+        A page whose evidence cites stored bytes that no turn delivered is refused at its own place, and the
+        replacement of the page is accepted."""
+        from test_review_parts_study import VerificationPartsTests
+        from research_harness import review_transport as transport
+        case = VerificationPartsTests()
+        self.addCleanup(case.doCleanups)
+        case.setUp()
+        self.pin_read_profile()
+        quote = 'An unrequested note.'
+        unsent = case.case.artifacts.put(quote.encode('utf-8'), 'text/plain; charset=utf-8')
+        def answer(assignment):
+            output = case.final_output(assignment)
+            for check in output['checks']:
+                check['evidence'] = [case.case.linked]
+            return output
+        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 1300000):
+            page, output = self.reach_adapter_page(case.assign(), case.packet, answer, case.invoke, case.assign,
+                                                   case.case.artifacts)
+            field = next(path for path in output['targets'][0]['fields'] if path.endswith('/evidence'))
+            output['targets'][0]['fields'][field].append(dict(case.case.linked, artifact=unsent,
+                locator=dict(kind='text', start=0, end=len(quote), quote=quote)))
+            refusal = case.invoke(page, output)['output_refusal']
+            self.assertEqual((refusal['code'], refusal['check']), ('review_evidence_undelivered', 'verification.parts'),
+                             refusal)
+            self.assertEqual(refusal['details']['path'], '/targets/0/fields/' + composition._escape_field(field))
+            replacement = self.replace_refused_page(case.records, case.case.artifacts, page, case.case.mutate)
+            receipt = case.invoke(replacement, self.answer_page(replacement, case.packet, answer, case.case.artifacts))
+        self.assertNotIn('output_refusal', receipt, receipt.get('output_refusal'))
+
+    def test_adjudicator_page_citing_an_undelivered_record_is_refused_at_the_page(self):
+        """S-F1 of the review of the merged tree of 0.93.0, for the problem adjudicator adapter. A page whose evidence
+        cites a record that no packet of the adjudicator carried is refused at its own place, and the
+        replacement of the page is accepted."""
+        from test_review_parts_adjudication_journey import AdjudicationPartsCase
+        from research_harness import review_transport as transport
+        case = AdjudicationPartsCase()
+        case.output_tokens = 128000
+        self.addCleanup(case.doCleanups)
+        case.setUp()
+        case.oversized(count=2, paragraphs=800)
+        self.pin_read_profile()
+        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 1300000):
+            page, output = self.reach_adapter_page(case.assign(), case.packet, lambda assignment: case.final_output(),
+                                                   case.invoke, case.assign, case.case.artifacts)
+            field = next(path for path in output['targets'][0]['fields'] if path.endswith('/evidence'))
+            output['targets'][0]['fields'][field].append(
+                dict(output['targets'][0]['fields'][field][0], id='unsent-statement'))
+            refusal = case.invoke(page, output)['output_refusal']
+            self.assertEqual((refusal['code'], refusal['check']),
+                             ('review_evidence_undelivered', 'adjudication.evidence_delivery'), refusal)
+            self.assertEqual(refusal['details']['path'], '/targets/0/fields/' + composition._escape_field(field))
+            replacement = self.replace_refused_page(case.case.read_records, case.case.artifacts, page,
+                                                    case.case.mutate)
+            receipt = case.invoke(replacement, self.answer_page(replacement, case.packet,
+                                                                lambda assignment: case.final_output(),
+                                                                case.case.artifacts))
+        self.assertNotIn('output_refusal', receipt, receipt.get('output_refusal'))
+
+    def test_adjudicator_page_citing_a_record_without_its_digest_is_refused_at_the_page(self):
+        """S-F1 of the review of the merged tree of 0.93.0, for the problem adjudicator adapter. The composed check
+        reads /evidence in the grammar that requires the digest of a record reference; the page check admitted a
+        reference without it, and the closing was refused. Such a page is refused at its own place, and the
+        replacement of the page is accepted."""
+        from test_review_parts_adjudication_journey import AdjudicationPartsCase
+        from research_harness import review_transport as transport
+        case = AdjudicationPartsCase()
+        case.output_tokens = 128000
+        self.addCleanup(case.doCleanups)
+        case.setUp()
+        case.oversized(count=2, paragraphs=800)
+        self.pin_read_profile()
+        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 1300000):
+            page, output = self.reach_adapter_page(case.assign(), case.packet, lambda assignment: case.final_output(),
+                                                   case.invoke, case.assign, case.case.artifacts)
+            field = next(path for path in output['targets'][0]['fields'] if path.endswith('/evidence'))
+            output['targets'][0]['fields'][field][0].pop('digest')
+            refusal = case.invoke(page, output)['output_refusal']
+            self.assertEqual((refusal['code'], refusal['check']), ('invalid_strategy', 'evidence.shape'), refusal)
+            self.assertEqual(refusal['details']['path'], '/targets/0/fields/' + composition._escape_field(field))
+            replacement = self.replace_refused_page(case.case.read_records, case.case.artifacts, page,
+                                                    case.case.mutate)
+            receipt = case.invoke(replacement, self.answer_page(replacement, case.packet,
+                                                                lambda assignment: case.final_output(),
+                                                                case.case.artifacts))
+        self.assertNotIn('output_refusal', receipt, receipt.get('output_refusal'))
 
     def test_native_pages_authenticate_the_final_assignment(self):
         from test_review_parts_native import NativePartsTests

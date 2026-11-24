@@ -1175,6 +1175,10 @@ def plan_after_failure(records, artifacts, assignment_id, *, check_recovered_cal
                 # Earlier reductions do not spend the identical retry at this floor.
                 details.update(recovery['details'], recovery=recovery)
                 return result
+            if recovery['kind'] == 'decision' and assignment.get('reading_chain', {}).get('final_page_plan'):
+                # The identical run of a turn of a v7 or math v2 final in pages at its floor holds the decision that a
+                # second capped run reaches; the plan ends with it when the admission refuses that run.
+                details['recovery'] = recovery
     if position['sequence_ended']:
         if row['exhausted'] == 'sequence':
             result.update(_plan_sequence_end(last, classification, position))

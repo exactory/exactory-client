@@ -684,6 +684,19 @@ def build_page_plan(chain, plan_digest, state_digest, currency, turns, replaces=
     return result
 
 
+def read_plan_room(plans):
+    """Return the page room of the last of a chain of page plans: the room of its latest level or ratio cause, else the
+    room of the latest plan without a cause or with the cause inventory, which its turns hold. A split keeps the room.
+    A ratio cause records a room below this one; the live side and the replay both compare with it."""
+    for plan in reversed(plans):
+        cause = plan.get('cause', {})
+        if cause.get('kind') in ('level', 'ratio'):
+            return cause['page_room']
+        if cause.get('kind') in (None, 'inventory'):
+            return plan['turns'][0]['context']['page_room']
+    raise ResearchError('artifact_corrupt', INVALID_PAGE_PLAN_MESSAGE)
+
+
 def verify_page_plans(plans, read_inputs):
     """Replay frozen state and cause.completed; never consult later live progress.
 
@@ -732,7 +745,7 @@ def verify_page_plans(plans, read_inputs):
                         if turns is None:
                             raise ValueError
                     else:
-                        if kind == 'ratio' and cause['page_room'] >= room:
+                        if kind == 'ratio' and cause['page_room'] >= read_plan_room(plans[:index]):
                             raise ValueError
                         room = cause['page_room']
                         if kind == 'level':

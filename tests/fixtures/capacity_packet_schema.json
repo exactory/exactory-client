@@ -13927,24 +13927,6 @@
       ]
     },
     {
-      "ast_sha256": "6b11e9e44d18158a9abb2d6c1a80364c9e14af89055cf5f4d585fb6997cbb1ab",
-      "callee": "research_harness.review_supplied_evidence.adjudicator_undelivered_references",
-      "caller": "research_harness.review_protocol.validate_adjudication_contract",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_supplied_evidence.adjudicator_undelivered_references"
-      ]
-    },
-    {
-      "ast_sha256": "1648baa9515d5d75b7344d4e1ae43643b63dbc8e8c68aa2f0c9a4496c978d872",
-      "callee": "research_harness.review_refusal.validate_source_links_contract",
-      "caller": "research_harness.review_protocol.validate_adjudication_contract",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_refusal.validate_source_links_contract"
-      ]
-    },
-    {
       "ast_sha256": "9dc8ba907fc068971aaf0927136b6a1640fdf8c6acf91f183fd9d69d330e3822",
       "callee": "research_harness.review_refusal.validate_evidence_contract",
       "caller": "research_harness.review_protocol.validate_adjudication_contract",
@@ -13960,15 +13942,6 @@
       "classification": "listed module",
       "targets": [
         "research_harness.review_protocol.collect_references"
-      ]
-    },
-    {
-      "ast_sha256": "6c807a779aa51412ae8a9f771689e2c6289ca2b67dbc4028054191c72092bb81",
-      "callee": "research_harness.review_protocol.collect_adjudication_evidence",
-      "caller": "research_harness.review_protocol.validate_adjudication_contract",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_protocol.collect_adjudication_evidence"
       ]
     },
     {
@@ -13997,15 +13970,6 @@
       "classification": "listed module",
       "targets": [
         "research_harness.artifacts.validate_reference"
-      ]
-    },
-    {
-      "ast_sha256": "9d08c265ba3f12c5d5703f9dbeaea888c46b6dccb2d1cfd638cfedb84eb6f31a",
-      "callee": "research_harness.errors.ResearchError",
-      "caller": "research_harness.review_protocol.validate_adjudication_contract",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.errors.ResearchError"
       ]
     },
     {
@@ -20272,24 +20236,6 @@
       ]
     },
     {
-      "ast_sha256": "7c6efbf34f0b4eae6d1e35e5839eb10cbe82869620b2cef0f36b7bedf9d7e3a4",
-      "callee": "research_harness.reading.validate_fulltext_link",
-      "caller": "research_harness.review_refusal.validate_source_links_contract",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.reading.validate_fulltext_link"
-      ]
-    },
-    {
-      "ast_sha256": "7e8d0a69cfd821d085d07ce4ca0bf1e1b597b8e6c7f4a37693b01d41e80a6e23",
-      "callee": "research_harness.review_delivered_evidence.resolve_part_source_link",
-      "caller": "research_harness.review_refusal.validate_source_links_contract",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_delivered_evidence.resolve_part_source_link"
-      ]
-    },
-    {
       "ast_sha256": "5ee4f930e8f991d9a3bac4cf336c535fa19d1d85931464d338b46f46132416d3",
       "callee": "research_harness.review_route_capacity.describe_plan_preflight",
       "caller": "research_harness.review_refusal_notice.select_refusal_notice",
@@ -26442,15 +26388,6 @@
       ]
     },
     {
-      "ast_sha256": "eddb0ec7b06a06afc950f7fe029d69393666da13fdaea0e4af28f06dab7f8564",
-      "callee": "dict",
-      "caller": "research_harness.openness_reading_v7.describe_admission_stop",
-      "classification": "standard library",
-      "targets": [
-        "dict"
-      ]
-    },
-    {
       "caller": "research_harness.openness_reading_v7.validate_turn_output",
       "ast_sha256": "b11329041f07d596cc365fb2ecec4d8b37e3d5c6c1358f29f7db4c6f8ffaf97c",
       "reason": "T6.1-T6.7 reviewed call: the finding version is selected from the stored prompt; the index is built from bound originals, preserved as mandatory measured frame data, and the six named-gap checks and page composition consume only that immutable contract. The complete caller AST pins arguments.",
@@ -27582,15 +27519,6 @@
       "classification": "standard library",
       "targets": [
         "set"
-      ]
-    },
-    {
-      "ast_sha256": "622f6f9d8c0ab759beceb94cae36e6bd035b2ed9ea762f8fbbb1c99d5028cc2b",
-      "callee": "research_harness.review_parts_v3.validate_planned_output",
-      "caller": "research_harness.review_parts_v3.validate_turn_output",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_parts_v3.validate_planned_output"
       ]
     },
     {
@@ -30596,6 +30524,268 @@
       "targets": [
         "research_harness.errors.ResearchError"
       ]
+    },
+    {
+      "ast_sha256": "e22185548ba329954e5cf096f0a0dad8d7e89eb9d040f5c6fa0c31f129e4f901",
+      "callee": "research_harness.review_parts_v3.validate_planned_output",
+      "caller": "research_harness.review_parts_v3.validate_turn_output",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_parts_v3.validate_planned_output"
+      ]
+    },
+    {
+      "ast_sha256": "1e01f87f80f8c7dfb593ded268abf3ca6d2df809ca79199d5aefe890aa45a688",
+      "callee": "research_harness.errors.ResearchError",
+      "caller": "research_harness.review_protocol.validate_adjudication_contract",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.errors.ResearchError"
+      ]
+    },
+    {
+      "ast_sha256": "ba7ff1d625715adba04efd9fea23dd43af41381a434f56aa1e4f353bc4edcb39",
+      "callee": "research_harness.errors.ResearchError",
+      "caller": "research_harness.review_protocol.validate_adjudication_contract",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.errors.ResearchError"
+      ]
+    },
+    {
+      "ast_sha256": "d747d22f80656d40340d666b5322674cd81ccbde6480ac1fb5133806c2eaa92c",
+      "callee": "research_harness.errors.ResearchError",
+      "caller": "research_harness.review_protocol.validate_adjudication_contract",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.errors.ResearchError"
+      ]
+    },
+    {
+      "ast_sha256": "f51e64302926c6e520d2466305c3c28046b6f4344970748d1e2098f3cd7f5fd8",
+      "callee": "research_harness.errors.ResearchError",
+      "caller": "research_harness.review_protocol.validate_adjudication_contract",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.errors.ResearchError"
+      ]
+    },
+    {
+      "ast_sha256": "cd180f8dd3c9addf7e7f7f0af4619f6e3bad1f783f6d164f13d1b47afa7fed28",
+      "callee": "research_harness.review_refusal.validate_evidence_contract",
+      "caller": "research_harness.research_decisions._validate_cited_evidence",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_refusal.validate_evidence_contract"
+      ]
+    },
+    {
+      "ast_sha256": "8043b49717735c40dfe6c1f20404b2291c85c7ed00f04471c05d286d5ab6fbb9",
+      "callee": "research_harness.review_delivered_evidence.project_delivery_view",
+      "caller": "research_harness.research_decisions._validate_cited_evidence",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_delivered_evidence.project_delivery_view"
+      ]
+    },
+    {
+      "ast_sha256": "06675c89d5664a36c9775ec04e68c10087736df624c2d5e1ab353f088bdf04dc",
+      "callee": "research_harness.research_decisions.find_review_undelivered_references",
+      "caller": "research_harness.research_decisions._validate_cited_evidence",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.research_decisions.find_review_undelivered_references"
+      ]
+    },
+    {
+      "ast_sha256": "bc63a208393b4a5ceb0f92392104c2edbf44e1fa0516064f9877184bc4503078",
+      "callee": "research_harness.review_session_v4.describe_partial_abstract_citation",
+      "caller": "research_harness.research_decisions._validate_cited_evidence",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_session_v4.describe_partial_abstract_citation"
+      ]
+    },
+    {
+      "ast_sha256": "d2b1c6c7227cfb7908c2456fc51bee95aaaf6919aebea869ef722024d3b13c8d",
+      "callee": "research_harness.review_session_v4.find_session_form",
+      "caller": "research_harness.research_decisions._validate_cited_evidence",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_session_v4.find_session_form"
+      ]
+    },
+    {
+      "ast_sha256": "f0040f15b967d9b5d285124980c40fa2d6f4df30d51ebb4385f10d5b286c74cf",
+      "callee": "research_harness.errors.ResearchError",
+      "caller": "research_harness.research_decisions._validate_cited_evidence",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.errors.ResearchError"
+      ]
+    },
+    {
+      "ast_sha256": "1d36574abd9f5dc296e560364ba0b802182b2874acedc336ba9be6defc888bfc",
+      "callee": "research_harness.review_refusal.validate_source_link_rows",
+      "caller": "research_harness.research_decisions._validate_cited_evidence",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_refusal.validate_source_link_rows"
+      ]
+    },
+    {
+      "ast_sha256": "a621512419d0d3821ff921708bc48cb6925e0a1c63df528409005497671b6f1a",
+      "callee": "research_harness.errors.ResearchError",
+      "caller": "research_harness.review_context_repair.validate_reassessment",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.errors.ResearchError"
+      ]
+    },
+    {
+      "ast_sha256": "606b2165e96dcd19023f056bde8de0cf05af637aed2ab7bd51cbf1ecb257b961",
+      "callee": "dict",
+      "caller": "research_harness.review_context_repair.validate_reassessment",
+      "classification": "standard library",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "9a4192ce41f0ff2f057b01e169fd9c7388566a3b8e34106a9977de69682f5509",
+      "callee": "sorted",
+      "caller": "research_harness.review_context_repair.validate_reassessment",
+      "classification": "standard library",
+      "targets": [
+        "sorted"
+      ]
+    },
+    {
+      "ast_sha256": "59334767ca31f66403c52e0b54ab3b214e520a5c88dad975884889f06104e050",
+      "callee": "research_harness.review_refusal.validate_evidence_contract",
+      "caller": "research_harness.review_parts_study._validate_verification_evidence",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_refusal.validate_evidence_contract"
+      ]
+    },
+    {
+      "ast_sha256": "77a75221c5d8fd9e2990e0ad6ad956721feb60df7b2f05f030c2fb7bf41e1e3a",
+      "callee": "research_harness.review_protocol._validate_adjudication_citations",
+      "caller": "research_harness.review_protocol.validate_adjudication_contract",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_protocol._validate_adjudication_citations"
+      ]
+    },
+    {
+      "ast_sha256": "6039fcbe283f849ccdb9ea70f17659eceeaf2dac71c0e2186de394d36a0bf5f9",
+      "callee": "research_harness.review_refusal.evidence_arrays",
+      "caller": "research_harness.review_protocol.validate_adjudication_contract",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_refusal.evidence_arrays"
+      ]
+    },
+    {
+      "ast_sha256": "055a74f7060f362eb7cc3451700bf859fe57bf09fcb8b83f294eb3efee502b64",
+      "callee": "research_harness.review_refusal.validate_source_link_rows",
+      "caller": "research_harness.review_protocol._validate_adjudication_citations",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_refusal.validate_source_link_rows"
+      ]
+    },
+    {
+      "ast_sha256": "b034cf893600d69ed13c7369e10a3bc5ae5b66e8146b14238f4dca541df9f040",
+      "callee": "research_harness.review_refusal.validate_source_link_rows",
+      "caller": "research_harness.review_refusal.validate_source_links_contract",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_refusal.validate_source_link_rows"
+      ]
+    },
+    {
+      "ast_sha256": "7c6efbf34f0b4eae6d1e35e5839eb10cbe82869620b2cef0f36b7bedf9d7e3a4",
+      "callee": "research_harness.reading.validate_fulltext_link",
+      "caller": "research_harness.review_refusal.validate_source_link_rows",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.reading.validate_fulltext_link"
+      ]
+    },
+    {
+      "ast_sha256": "7e8d0a69cfd821d085d07ce4ca0bf1e1b597b8e6c7f4a37693b01d41e80a6e23",
+      "callee": "research_harness.review_delivered_evidence.resolve_part_source_link",
+      "caller": "research_harness.review_refusal.validate_source_link_rows",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_delivered_evidence.resolve_part_source_link"
+      ]
+    },
+    {
+      "ast_sha256": "48d833ed70bf431947415be76a39ca68da8833ae01d6e0f71e6f88cc21937c64",
+      "callee": "isinstance",
+      "caller": "research_harness.review_session_v4.validate_final_turn_output",
+      "classification": "standard library",
+      "targets": [
+        "isinstance"
+      ]
+    },
+    {
+      "ast_sha256": "848cfe34419682bb40fa88ca7a0f9dcf3c3fe15270872bce5f45311f00979e17",
+      "callee": "research_harness.research_decisions.validate_page_citations",
+      "caller": "research_harness.review_session_v4.validate_final_turn_output",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.research_decisions.validate_page_citations"
+      ]
+    },
+    {
+      "ast_sha256": "c689fcbb92bbcd913ac64c2ccce57740e10601a2e27ffd7a7bc8deebc16cf41c",
+      "callee": "check_citations",
+      "caller": "research_harness.review_parts_v3.validate_planned_output",
+      "classification": "listed module",
+      "reason": "The check_citations parameter is supplied by validate_turn_output as functools.partial of research_decisions.validate_page_citations with the records, the artifacts, the assignment and the attempt; its source and the caller edges are certified.",
+      "targets": [
+        "research_harness.research_decisions.validate_page_citations"
+      ]
+    },
+    {
+      "ast_sha256": "e21d3f9de8725dd41f18758ad024c33e2973a97e3aea6ff8fc475dd6026dbf5c",
+      "callee": "dict",
+      "caller": "research_harness.openness_reading_v7.describe_admission_stop",
+      "classification": "standard library",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "0b058ad567b8691046ed8554ae5ea1768acb526c8d56a4fb9abdd01b08835e47",
+      "callee": "research_harness.openness_reading_v7.describe_unserved_range",
+      "caller": "research_harness.openness_reading_v7.describe_admission_stop",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading_v7.describe_unserved_range"
+      ]
+    },
+    {
+      "ast_sha256": "35b34945d573dc175e7528ce1be79afce8f23508723892d16de116691333ba91",
+      "callee": "research_harness.openness_reading_v7.describe_protocol",
+      "caller": "research_harness.openness_reading_v7.describe_unserved_range",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading_v7.describe_protocol"
+      ]
+    },
+    {
+      "ast_sha256": "6f5c84ec3155190253aaf517039337940819bd5428742f0cd2c53a4c7085e387",
+      "callee": "research_harness.openness_reading.find_protocol",
+      "caller": "research_harness.openness_reading_v7.describe_unserved_range",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading.find_protocol"
+      ]
     }
   ],
   "certificates": {
@@ -32235,7 +32425,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes. Reviewed 0.91.1: a math openness packet that fits one turn stays a single native turn under (v7, v6); the condition reads the packet kind only, and no packet member, call, write or closed shape changes. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment. Reviewed the merge of 0.91.14 into 0.92.0: describe_unavailable_forecast of 0.91.12 stands beside the bounded chain protocols of 0.92.0; the two sides changed separate functions. Reviewed lane carry-chain-content (rule C16): READING_CONTENT_KINDS names the six content kinds, with capture_selection.SELECTION_KIND; the module imports capture_selection. No function changes. Release 0.93.0, lane chain-content-stop-2: Math inventory comparison can collect all unavailable bound readings and responses through the same row derivation as normal admission."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "ec3697f43cf2a38912d26ade41f62594b85cab7f0b425144dad1172c9eee27b0",
+      "ast_sha256": "8a1cf25002aafcbf083cc0983b6c3df6863043552b0d20128627b6eade604fba",
       "functions": {
         "_advance_list_cursors": "417990742c3d0a84260459f0cc86b5d53217f85abb114c883882ea57b4c3320a",
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
@@ -32271,12 +32461,12 @@
         "build_turn_packet": "0128e1cc243bda890fd11bd5b369c0e05de2c091b309f21c76ae76080a08027f",
         "check_v7_admission": "38bdcbd8427b5fdbfd57337252c5e65b955fae7fafc2eb917a79053474186de0",
         "compute_allowance_rows_bound": "43cedd0b96e55219fc11fc700beb8044053e677919c8c6088032814fc1e4703e",
-        "describe_admission_stop": "8ee1083a1d316baf3447ab4a1b5bce5ffd753e970bb6b22820afc29a3dd8e99b",
+        "describe_admission_stop": "07ddcb03cb554f9e830a053708f5f5d9ad9af2f65cb7360272f640291a81f3fb",
         "describe_carried_pool": "b8c0046b42a8d1d5d4d96483e43f2c49afbc294acad7e86f5b965bc922646932",
         "describe_evidence_units": "14dc61ea87eb9e7b1c16eebf763080ff62a5f0e90c684647c5032381d21e3685",
         "describe_uncarried_chains": "8020be9ed8905f510c9b6f513797d7a0c7d022d1e87bcfc4fc50a40306e26216",
         "describe_unread_packet": "4d4658f11404e7ee48cb21842f3d03c19400e90dee5f4affe2f4f51378cbe35a",
-        "describe_unserved_range": "3af28197435fed5e588fdd670acf65093013bb7fb5e785aaf3c16851cdf00e06",
+        "describe_unserved_range": "9468acbf209465eca64985ff4feddec2770373a3ddf8a6810b6be54f599a8d24",
         "describe_visual_text_stop": "927e68cb236d962c4335fe26aa56b413360d4b6490ec47b1cb2e0f1fd35775fc",
         "find_math_searched_through": "c71dc3f6fb1cef746397772c15fe9faab83791e3772fc5372b67b794e189af4d",
         "fit_packet_finding_index": "4e1769d7794c8fb72c60209028cd085991e47dbae812bff33a2d1536c8cc0143",
@@ -32313,6 +32503,7 @@
         "08f03f926db46201446cb03e77f6a921f249dd889965950668a150c75fd1f5fb",
         "0a1a32983dc25d453fea82d67f70090e82acf19a977a5eb0bb1e7b1064a19f26",
         "0a8132d2b43949164eb737bf7553905cdca66e25766ba398483ccd3c530b614f",
+        "0b058ad567b8691046ed8554ae5ea1768acb526c8d56a4fb9abdd01b08835e47",
         "0c04343a61b977b876e8e7ef652d895fef597a0df99d7b43f0488de46d7074a5",
         "0ca478cd4390363420aff01a277de364f1a3c413c98ddabb636d173897a615f4",
         "0e4ab3661555e719e1c56bb345ce4d1c8da78b97e3ac4919c2469101e4b06562",
@@ -32339,6 +32530,7 @@
         "341bab71d8e412a2bf95b4411b96e29a84c2b5e233376c9d0c51a5f136ac4366",
         "342d160efdbbbaca2e315c590c8b81f60d2e80253df8232cf9482ac76646e2d5",
         "343677f4dd84a48b7acacb50a3fba70badabe5bcbc207152890100edc2bfb453",
+        "35b34945d573dc175e7528ce1be79afce8f23508723892d16de116691333ba91",
         "361f940a36fc2c6a9b060f5ed6f2d70334c655db47bab5097bbf54ba77ab410e",
         "38fa227a243ff4022f859d4bb5de80d0126ef02de0e11f6473bf8c99333aab9f",
         "3aaec82ec573a758ae5ee7ec39c0b871627f76909680f9f890d5541cff1262a5",
@@ -32486,6 +32678,7 @@
         "deb4c0f7060c7ec1c5f5ef2c04349f0a90017d5d737c3626450ba9f063e996b0",
         "ded9ee4101c543d7ec988b7299f60d903ec1e194de1b167c266d14f0a720f3d4",
         "e15ab2e38a67d0d579854104751c5effbb70b88611a5e56d793edf3037c6447b",
+        "e21d3f9de8725dd41f18758ad024c33e2973a97e3aea6ff8fc475dd6026dbf5c",
         "e3787386bc3d483aa255c00af3e4585b6fa6eeef4cd7dc9cb81634d56a7d3b0e",
         "e4aa9301b918b47cd572ff364eb50a01ebd9b4d283cc5e1fb7446929f06e0d2b",
         "e4f641e7d225670e29e68020a2aa6c4a8503d028b537770c77cbccf56f17d5db",
@@ -32495,7 +32688,6 @@
         "e98b92944b21d932d17913940baa365645306736e34c4261be777e0197263a45",
         "e9998aa48e9485ab2b20bec6cc0034e330b920b589625aac2c32361fe1447e03",
         "ebec0394f5efa2482d3679e5ec0d0612d4bd10c46e75a457501bb78fc15c136c",
-        "eddb0ec7b06a06afc950f7fe029d69393666da13fdaea0e4af28f06dab7f8564",
         "ee40fa0154dd550b5e1956b30fd0089c7e28eceb5a623ab0241aba4b4f0fd5c8",
         "ef3924b960cf592904bd2ed4f285a559d6abfb063b39c399bfc06fd9901e0a9a",
         "f3a68bc489851a3b17717bb845f68d2efc8a28fbb90e9a5b9d608b0c2ed91b05",
@@ -33725,7 +33917,7 @@
       "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.research_decisions": {
-      "ast_sha256": "927535246137271f0f345ce093a6e140011596c5e531ec4bfe537c54f157e71a",
+      "ast_sha256": "f1796b3c03a116c1596e1fa4481abc0749eb14da908d3573b8707aa6a706cfd4",
       "functions": {
         "_accept_support_digests": "420d7e37980f2ff3f96d01bf8a8444a24c3070e2dfbc7c2b1ffa79a6c6999aba",
         "_all_objections": "4afbf09db02d0799095d8052b6dac4239aa34b9ed355127d0910e67a049b94ef",
@@ -33750,7 +33942,7 @@
         "_validate_checks": "9822859f561e239c4c2a3eba8731dbbbdb625af95dd993f2fd40bcdc7791022a",
         "_validate_review_bar_records": "5391e5967fc65147a8845b1b69e1f810d204a57695ecb31bd9fcee1cd7cb66da",
         "_validate_slate_potential": "1039386d834e426e282d29c4a210ab4efe521535b7c28dd58dd74f76825c273a",
-        "_validate_value": "e8a68715aab9bfd2a98be0b1405c22706309294d3d74bb37200568ceb2d36f99",
+        "_validate_value": "b1a65771612e8bb7f8280f5a857f625ca5e14cbb33f826bec1cff9480eed7760",
         "_visual_supplied_context": "099f00d598628427e2d23ade01e923a11c90564ea44e34ab8031613831e39bdb",
         "_work_obligations": "e08b77a7a3c8a127c5fec3f4432015ab2f333b612edf7d352cbe6dc0fc97f6b4",
         "apply_objection_identities": "97ba1a95828bf29eeef0ffedca91854608db24779f21c2eefdb9b57df5367382",
@@ -33778,17 +33970,24 @@
         "select_problem_slot_assignments": "610a5cec1d39c1293898c6ae41c51d9683ed622316b24ebe53101e1352cc4004",
         "state_objection": "2d1eaa8a024ba69d821df278ba51499535c610ccc9d080fc70b1c115838b5c04",
         "validate_cycle_decision": "1728a877d7503c453a9596667e25b2136f4957244d7c4c894dd8db30eafc567c",
-        "validate_review_contract": "ae3874f43d80e3579ddee36648e1a4237c7ac643cd78225bf4daedcb9178416e",
+        "validate_review_contract": "7c0d4dec4744273c9d16c5a13eb963d1df8ab451b41b786410b734de641a929f",
         "validate_source_impact": "36386d4ad7bd4989973a5eb089a2558964834305c6cf2d87c96b160e641b1107"
       },
       "packet_call_digests": [
+        "06675c89d5664a36c9775ec04e68c10087736df624c2d5e1ab353f088bdf04dc",
         "0c2e80e469de1a1e4f07991b55cfdbe498a182ebabda4dcc956a4cbe3536d4e7",
         "1bb95343971b0f75af638f134c9aff50b678220d589e1015c205b3c472f9949e",
+        "1d36574abd9f5dc296e560364ba0b802182b2874acedc336ba9be6defc888bfc",
         "2100631f66dbbd6b70a5e6128725168e20381dde4b43149902bb58d27db5cc23",
         "25a74334bef1e9c2cbf836be0f744795622f016490446a18c21e56563b9daa3b",
         "40dfff30817466bb68d2b897fffdfef004e15903c3525ac172a8a80399f5bbc5",
+        "8043b49717735c40dfe6c1f20404b2291c85c7ed00f04471c05d286d5ab6fbb9",
         "8dbc1ae5d8479e8303fac6815b2f01e99924d2523cc83a73a3a251c1078cf784",
-        "ebe38f71323c64b1948e633f1400bc74b184e3de2a3fcf8cd4804aaff7e05b82"
+        "bc63a208393b4a5ceb0f92392104c2edbf44e1fa0516064f9877184bc4503078",
+        "cd180f8dd3c9addf7e7f7f0af4619f6e3bad1f783f6d164f13d1b47afa7fed28",
+        "d2b1c6c7227cfb7908c2456fc51bee95aaaf6919aebea869ef722024d3b13c8d",
+        "ebe38f71323c64b1948e633f1400bc74b184e3de2a3fcf8cd4804aaff7e05b82",
+        "f0040f15b967d9b5d285124980c40fa2d6f4df30d51ebb4385f10d5b286c74cf"
       ],
       "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision. Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_review_contract passes the positions of the source links that it selects from a readiness check and forms_notice false. No packet member, packet call or stored record changes. Reviewed the merge of 0.91.5 to 0.91.7 into 0.92.0: validate_review_contract passes the positions of the source links of each support check with forms_notice false, as 0.91.7 does, in the block that 0.92.0 also runs for a session chain of the rules v4, and keeps the session, handle and composite branches of 0.92.0. Reviewed lane session-v4-refresh-edges (task T2.14, rules E1 to E5 of designs/session-v4-refresh-edges.md): _collect_problem_reviews takes the evaluation of its caller for historical_reviews, and assess_problem_reviews shares one evaluation with its selections of bar, result and slate reviews. No packet member changes."
     },
@@ -34038,7 +34237,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_composition": {
-      "ast_sha256": "27d857b4f1246b261192062b0da59a968e6b68d089ae1c242299f7a52fe29c26",
+      "ast_sha256": "7f9b84058a0ef9c14bc44a22694db04ea71f7fe8c0668ca079a4f89bf4555778",
       "functions": {
         "_attach_answer_schemas": "7e739e51780ad4675987225496c298eb912be8c06a11f5277cde2f56acd17e8c",
         "_build_harness_fields": "76a404b204a7b182d785eefc7cf83b8b3091fd4c938b207ac3846d174a845217",
@@ -34305,7 +34504,7 @@
       "reason": "Reviewed slate-series adapter, v3-only ordered admission, session precedence and preserved legacy repair delegation; authenticated slate journey and compatibility tests pin this source."
     },
     "research_harness.review_context_repair": {
-      "ast_sha256": "b08b14bad41894c273d8776ea61875e007477a7891039d841b8ad56a174dc9c8",
+      "ast_sha256": "b62a1c98b8018272976e96ebece11d8d154126511f6143282efac5e66d978149",
       "functions": {
         "_assignment": "dc3dccd91bf18f17b04d64ca887c63fd89393a9441c73b7d45a5b70ebea77148",
         "_exposure_lineage": "1161ce072b359b069f18babc0fdfa548919315756b61b841f1c3b537867c6990",
@@ -34321,7 +34520,7 @@
         "build_exhaustion_binding": "bb3d9f6cd032711fcfaba3c12434a867a5907cfb70bb94905155124c9a7f1b64",
         "cause_events": "5258100a2b517e1e89cde87b05d442113675104f50f01863ba0a0d00ff220747",
         "collect_problem_review_history": "bbe9940a2600e1984ff19237d39c5699f14df2412344d1bbb406bf5cb32f3721",
-        "collect_scientific_history": "8dc9cba81f0b37378c67cb32ded0822395086f344fe228da49647b6434d7e4c3",
+        "collect_scientific_history": "cc732c1d3f0f3cb4a8ca0d51a2297db4815de7f50747ed4cbfb80f9b943be711",
         "find_chain_head": "09438caf5ab0aeaa787b98a363d479eb16dde09709b99b800591dde724534b55",
         "frozen_reassessment_packet": "4a26e198a5d3329af2a8db61f715926475d2c2bb7f6657612ce59da0255a8f1c",
         "historical_reviews": "7877c5eee171faefd22963c0f632bbfd0f381fd1689335de544544db22814185",
@@ -34330,13 +34529,16 @@
         "reassessment_reviews": "e5f95e700a3098015b620f67aae7912a881ed45c05de6b14c573d56a273dca1e",
         "require_current_slot": "2f6f700c08244155927095c16347857535fd77341de26afcc03429f14e93e620",
         "slot_id": "e9c10198b61850c7187feb684b07d791ec324db01e707dc5b2de203ee5ab5763",
-        "validate_reassessment": "a52a3adf9f0729c79156c4b7f62f6a13fc55d82c08e059c3ab05fcf5be8799fc",
+        "validate_reassessment": "42f1a5dcc7d26279484a5ae8d4b6e8d75f4b50b2b31f71aa8988f437560a5826",
         "validate_repair_binding": "ec8f35c4b821621592db40d97ea860d7fd825d774fbb0069bfa595589379cb38",
         "validate_repair_origin": "8f83043528ce20753f7ef1d3569584a034674e21fb1d77e6538bf58b9793bb51"
       },
       "packet_call_digests": [
+        "606b2165e96dcd19023f056bde8de0cf05af637aed2ab7bd51cbf1ecb257b961",
+        "9a4192ce41f0ff2f057b01e169fd9c7388566a3b8e34106a9977de69682f5509",
         "9c64a628e44cc5c4cc536e9ce7b7f36026bdab05ec44d8e3917ed5ef4c73aecb",
         "9dae0f42db8f1f484fa20fadbf2bda339a85cd93ca985465e36ff40ba55db88a",
+        "a621512419d0d3821ff921708bc48cb6925e0a1c63df528409005497671b6f1a",
         "b231893eed26d4bbef8678226ddc83606851aca1e1d476cb305cbc7aeeeefae4",
         "c2a428540d7d05dc378f28d188a7d102aff41528fd8c660368b616af59e7885a",
         "c3be66f3f57ad03ff5fed07ad9e39c66d61e5b6268fc12d887d8bc64538f400c"
@@ -34344,7 +34546,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_reassessment names the path of the evidence of each finding for the evidence check. No packet member, packet call or stored record changes. Reviewed the merge of 0.91.5 to 0.91.7 into 0.92.0: validate_reassessment names the array /reassessment/findings/<i>/evidence of each finding, as 0.91.7 does; the session chain branches of 0.92.0 stand in other functions. Reviewed lane session-v4-refresh of 0.92.0 (rules F1 to F8): the refresh of a problem review that a chain of the session rules v4 recorded is a new chain in the same slot, linked by the context member session_refresh; its packet is the first packet of the role with problem_refresh and the earlier reviews in historical_reviews. Reviewed lane call-context-present (requirement R3.5, rules PC1 to PC8 with findings F1 to F6 of its review): a new reviewer call, an output correction, the next assignment of a v7 or math v2 chain and the plan of a head read the state of the route record and the contamination events of each turn of the review, and refuse or hand off with review_context_unverified or review_context_contaminated; historical_reviews reads the same turns through list_context_turns with the same result; packet members, packet builders, prompts, requests, writes and closed shapes are unchanged. Reviewed lane session-v4-refresh-edges (task T2.14, rules E1 to E5 of designs/session-v4-refresh-edges.md): find_latest_chain_repair gives the latest repair of the chain of an assignment, back to the first assignment after the last session_refresh link, and reassessment_reviews, frozen_reassessment_packet and validate_reassessment read it (rule E2); find_review_context_issue states whether the review of a refreshed lineage counts today (a contamination on the repair or refresh segment, or a repair that does not cover the cause events of its predecessor), and historical_reviews and validate_repair_binding read it (rule E5); cause_events and validate_repair_origin can read the event index of an evaluation; a lineage without a refresh link keeps its rules (rule E4), and historical_reviews reads the context turns of lane call-context-present for it with the same result. Reviewed lane call-context-refresh-link (task T2.16): iter_refresh_contaminations walks the turns that rule E5 reads for a refreshed lineage, and find_review_context_issue and the call rule both read it; find_last_repair_index gives the place of the latest repair of a list of turns; list_context_turns can take the exposure that its caller read. The result of find_review_context_issue and of historical_reviews is unchanged. Writer's pass of release 0.92.0 (task T5.1, the texts that an installed command can show): REFRESH_CONTAMINATED_MSG states the state and the step; no statement of code changes."
     },
     "research_harness.review_continuation": {
-      "ast_sha256": "7cefa2f1436aec978144d6dbd86bee61e39bbc7980b764f0b84bf9f478b4ceb8",
+      "ast_sha256": "d6a13b8d4fda42e6cb5d93610c741a6549f0c99b5344a1f9772b18c40cecaf94",
       "functions": {
         "_build_assignment_payload": "e3303fe41aa0507724cc8ecc4a76f33b41ad1145e6ffd12e7a5e5ee7884dad76",
         "_build_run_payload": "0a14cde861381a8aa9b30ce38e832e66d3021f9e6751e0446c81c53afa19a18d",
@@ -34601,7 +34803,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_failure_class": {
-      "ast_sha256": "7ae6c61ea18c581ae27df115a10f8ce2b26dc3efc3da3899bfc032eeca36714a",
+      "ast_sha256": "a397288cc2b93a043911db3268a578409b431d2816c11a92a3e587668e6b4826",
       "functions": {
         "_describe_sequence_counts": "1903571802ceebaa2e6413b445ccec82fa398d7cf4b738a57b18c5747957e01c",
         "_is_scheduled_unknown": "18dbfaffb3993eab30b42d6bf376556828c162d79bcca21ce050df0f51cd2f2e",
@@ -34617,7 +34819,7 @@
         "list_turn_assignments": "8189c5e5851b07549b3d4e421ea3de87850c9c432f6008f005de948266c5e7fa",
         "parse_observation_time": "a45e9741d77a027bf18518e09c8b1a262125934f0d6cecd3ac63c3c30df7f367",
         "parse_reset_time": "329cd60d6bb86719c819441543f5e9aae44305bd754318af2996e51f1dc23488",
-        "plan_after_failure": "437871a54459767d007385e99df7a11456a316f1ade2fce97916277bba954ad1",
+        "plan_after_failure": "cb9577e2b0eac8cae06cffdfdd3784f8414a58ebc136188a1c1f2da0e70e9888",
         "plan_output_replacement": "3287661c2f5b828c294c95d44740e9c2d9458892ff9883062d89c8c49324bf15",
         "plan_refusal_recovery": "3bd37ad5153b6ada2f846a86284fce17fc8a2541a844e654299e446485870a61",
         "plan_scheduled_retry": "d9de465ba74c6d4fc57df8aa62eee4c4073cad20d97b2a126860705d1ff0748e",
@@ -35363,7 +35565,7 @@
       "reason": "Reviewed slate-series adapter, v3-only ordered admission, session precedence and preserved legacy repair delegation; authenticated slate journey and compatibility tests pin this source."
     },
     "research_harness.review_parts_study": {
-      "ast_sha256": "37dbe6fd16a0f075f3fa1e8b6b17d6a3fd488d8e96432a38a1e798c8a25306d7",
+      "ast_sha256": "982a4a1c1c0a657c628b978c36a831ba27d9a47152e02d25ce024f39276f655d",
       "functions": {
         "applies_readiness": "004058601f155e1bfda14a818b3aa77ea963d73b0b4b2448037bd7ababbc1c14",
         "applies_verification": "edf073cba7afa509dea5e55d39f4a935f71c2a65fc0d8083a2ddde9b29e7ddb2",
@@ -35383,7 +35585,7 @@
         "validate_readiness_final": "1e52ec9a253d4725f6f8d9676ecd7819e44312205098e9f4e9e9673a1dbbaaeb",
         "validate_series_evidence": "c5343602f320ac9dc3e77aa2e2e75fe689946ff8b68d3dfc914d8ebae57769dc",
         "validate_study_references": "9d719556a8756aba1c672a9a82e35f3f4f58f890b450444ea08bb592485e54fb",
-        "validate_verification_final": "3ac27e7c53ee80c07ad771bb509f5232d6d36e24cd44dcc5f156080e39e3a09d"
+        "validate_verification_final": "38b4c707bb484d59101a39f0d95c7ecc957ddeaa7f76637aeab451fcb0de56db"
       },
       "packet_call_digests": [
         "070bb964845514859bd5253f8be1a03898ca78251e7895de75f5453d56daedc3",
@@ -35393,6 +35595,7 @@
         "42d971356ff61fe4b52e20da164b9d2e0f58d95e4d5100bf46eef2d8224c45d6",
         "48cd444615aed922a289d681dc4127ff16d222a5613b649b5dbd9b930162fe2b",
         "5765538f1e924e00723e7606c42a0f89e68dbbd5772783dd4c436968e34a82b1",
+        "59334767ca31f66403c52e0b54ab3b214e520a5c88dad975884889f06104e050",
         "5a79ae52e987b6aa21213ebb72f7a4b0b765769f6eec80019f0f0163a6f5aa3f",
         "640fd2316dd4a7c855728a62a432055c9743376c74196e5fe66333f9b2b74a59",
         "828ca56d1841c0067d829e33cf7a291c9b79db2fae51e1c146a71db782f4c8fb",
@@ -35406,7 +35609,7 @@
       "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision. Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_study_references and validate_verification_final pass forms_notice false, and the verification names the path of the evidence of each check. No packet member, packet call or stored record changes. Reviewed the merge of 0.91.5 to 0.91.7 into 0.92.0: validate_study_references and validate_verification_final pass forms_notice false, and the second names /checks/<i>/evidence, as 0.91.7 does; list_bearing_references keeps the parts v3 branch of 0.92.0."
     },
     "research_harness.review_parts_v3": {
-      "ast_sha256": "624772916ff9595db6e03698ecd2034b1d7ec1ec031078a7445d7db9bd6cce68",
+      "ast_sha256": "275c37f8d538f7fbcd8c6aa235112da1ec5cd9ae4c8ac6047228c7c61e43f39e",
       "functions": {
         "_advance_group": "c2a09676e335c9fa314f690d454f9660c1af77273d094f796173780e526b33f9",
         "_advance_requested_ranges": "47a2de2aa833ca0fce6ac60d3e5fd75ab4546889e00ddce30fa66caa32180cd4",
@@ -35488,8 +35691,8 @@
         "read_series_delivery": "45a61b00aae290eba20acb85a706c96c7ad036aeb364abbfb4107b56c6a98447",
         "size_read_turn": "b61e82d2f7d98e2024a02382ea592137d7801ad152f84c3a86d806c775699987",
         "validate_deliveries": "d612cff82072c777e726e594314a26be85b1733b291e70c7c40f629bda837e1f",
-        "validate_planned_output": "34a884076e7814f81910c801a3fd3001d1fcfcb9be478aceebded9d4ad34687c",
-        "validate_turn_output": "ad5d48f11c1be14f4bf654b71dea9f3456a43c41cf3e05398b42f1204b5f740d",
+        "validate_planned_output": "7ce230d38a87d7dab07095bcbd6a63c4b4fce8e6197a6d527bc43c8b090a15f5",
+        "validate_turn_output": "cc8ebf72f740b6a11d803980a63cb295a9dca919a35300c34e4476c6530daa66",
         "verify_series": "d1063c8b24e13f7c6d017c0e03bae9e68459192b2a7dd14d903864db16cec28f"
       },
       "packet_call_digests": [
@@ -35611,7 +35814,6 @@
         "5e8046083c59e0b84212bb20602b67bd64acee9dfdd8000ba7f144bfaca218d2",
         "5fcf1e27a7e21dd626039d8bd1e94aef4966005952905ecffd5903ff55790417",
         "60414f548a6eea64dda7d184996457e366143dbb2362ad33aba94c752e262ec7",
-        "622f6f9d8c0ab759beceb94cae36e6bd035b2ed9ea762f8fbbb1c99d5028cc2b",
         "62fd5ff77c0ab1379f409e4f8235607d8b251957afe9679015abc6f67db1b112",
         "63b962d4a03b92985f91c8d53988ff8a8af9e993bc09361d34c63321d0cb11cd",
         "6422160e144c61a0dcfce350f83584ea892345ce6d851daf1297f84aca2ec566",
@@ -35741,6 +35943,7 @@
         "c51fc7b01a21163dff75fcdb969801814a4990f1a1f203c4696e006d1b8eefb6",
         "c57374e245e2733e44f89f80057b678c78e72434fe24341925acaaca14d85906",
         "c6447cdbf2296ebd20176f4ca82b0fdae367ca4cc8bb2417fc7ae11b473563fe",
+        "c689fcbb92bbcd913ac64c2ccce57740e10601a2e27ffd7a7bc8deebc16cf41c",
         "c73dda62fff58711e9561a8321cee8ba9ba2faa36795bc509ed0de5c8b00574d",
         "c7539174f596ada468db7062df104034cef7ce0dc47be1850c6435ea047551df",
         "c84353bcc94c1104fb7c3f6b817260f657aea01a97947546fef83886157cb024",
@@ -35781,6 +35984,7 @@
         "dffd442fe622175eabf56c1b2806026af35a27b31513fa063b0ec19ec1d4ce04",
         "e0c7fa797754aef123327f6c0a61ca39fc5b8db21c2c49def5181ea1b8de18d3",
         "e16bc9673afdd176c3f1a64f7e4d922d3a2fb257b9fdb936a85576b936c1058f",
+        "e22185548ba329954e5cf096f0a0dad8d7e89eb9d040f5c6fa0c31f129e4f901",
         "e30ef796ef58c47a4191f5384f9edb77e0823e1dc4784a88e12cb974998bfb34",
         "e4430785db579c9f0e44244b542b6cc0b08201578f80f9cea3a0abf40f4f3a49",
         "e501ac234915597a1a6d9255660fe3b97c8d8adf5a86d063f05cf8e14d6b98c9",
@@ -36112,7 +36316,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. G8.11 and G8.12 of 0.92.0 (lane g8-finding-index, second change set, for review): the inventory of a bounded chain whose final names values by their bodies lists their spans in finding_units, located by key; its reading turns hold their number and the paragraph finding-units, and the reading frame reserves FINDING_UNITS_CHARACTERS; a carried credit does not cover a named span, in the reading plan and in the report of the carried selection; a capacity replacement selects the paragraphs of its new packet. Reviewed 0.91.6: two registered paragraphs, changes-if-resolved for result and adjudicator and slate-places for slate, each selected by a member of its packet; the text of every earlier version keeps its bytes. Reviewed the merge of 0.91.5 to 0.91.7 into 0.92.0: PARAGRAPHS holds the paragraphs changes-if-resolved and slate-places of 0.91.6 at their places and the paragraph finding-units of G8 before output-refusal-whole; SHARED_PARAGRAPH_NAMES keeps its five names, because the two paragraphs of 0.91.6 apply to problem packets only."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "422e76c71623e0a44867d537140c6d2f14a6c74e215aba0f39db22950af43631",
+      "ast_sha256": "e96a2cf3d46c093cce2ad0f467dec74a4205118e436511bdaa155a42cdf055fb",
       "functions": {
         "_assignment_state": "9fc87462eec4ee108c5b77aa7bba8eda202c6129c2484735d3731317fcd511c1",
         "_bars": "32eae33223d02654a4c28ba7d928d16c458c21dd2ebbbc61d0d7b1461580854a",
@@ -36231,7 +36435,7 @@
         "route_state": "a09d749a19fca2f87e714801f9c01b8646c569ff35ec8cec56aaf41735079156",
         "source_delivery_packet": "d096a91acf1a700c66a444dd0ea7faabc1b9583e7b7fb8b3275ffea57e11bdc8",
         "usage_report": "0c53dcb11f44e93937f92c9b53a77709388b021a1880c683c87aa76ee6d53251",
-        "validate_adjudication_contract": "ac6fb357167d67665986a134d3030b2a2dd5ce8ee048e9cd568825f5a1d50216",
+        "validate_adjudication_contract": "00fdc66a667a5a835ad72802c3ca56648a8b665a345153f1926e7a6678b45961",
         "validate_assignment_inventories": "f73054328a6e1cd28f4c62afa267e8c8d3f25a0b5d72f46a4b285c545e087893",
         "validate_observation_fields": "196ef273f6fa01aa1966f19aeb02b75a9e34d76ef489cd9e0bc4ee5ebf176b99",
         "validate_problem_bars": "08566bc5f8da8ab4eb3537bfcc3bc7e6a1a8012cb2e0782c79f249e9c12f438b",
@@ -36244,6 +36448,7 @@
         "02b9d345fb86e371d38a191ef63ff06870a58725023fe3823293de97a849288f",
         "02f4ce1e5228f62749d45bacea769043c915244884b43007c797a2cfc2626973",
         "050cf464f976d2294e05d84fcaa4151400056f0b08c685c8c12e4ceddcd0fe04",
+        "055a74f7060f362eb7cc3451700bf859fe57bf09fcb8b83f294eb3efee502b64",
         "066f93d9535ae98527f8cd0a465a8d59cb147b194a9afbb468c4d9c84d1aac08",
         "068448e62da72d51024976c8516f205acb1cf0e0d750aa4e51fc8e97bac7a046",
         "074673d0eaf72ce1f98b5882463a580f0ba5ab92295ac4150773525b3b8597a3",
@@ -36259,8 +36464,8 @@
         "12a172b12686efc3b394f6e7dff3cd29f539e007b4230154df27b39471159f41",
         "12f9c1d980c7e2c12ddb0debae67cab96420631c76b880389dd29709799f2584",
         "14a31118cd3d30a582eaebec7a2c9a52f8670ba373ff9e7b3fae4ebf84b6e42b",
-        "1648baa9515d5d75b7344d4e1ae43643b63dbc8e8c68aa2f0c9a4496c978d872",
         "1d6ed77a571767bac2aa4792d10735fa91f36f5a78bcaeb6faf7d4c94a690edf",
+        "1e01f87f80f8c7dfb593ded268abf3ca6d2df809ca79199d5aefe890aa45a688",
         "20f2c9d61b356eeb75f06e11b64b0cad9c943a4d84682466222c434420d293ce",
         "2100631f66dbbd6b70a5e6128725168e20381dde4b43149902bb58d27db5cc23",
         "2528da94ae7d11bb52675cdd7ccfb74f62d82fd01f790fb8517b6326f38ec34f",
@@ -36288,6 +36493,7 @@
         "56eb2702b70eca9109e8ffddbd86c1381aef294655ed0e4f3b7a51510bd055c4",
         "58e6016ea7b59dd448281cc1d1a1764061e3b02b427a119ac734fa62418e56a3",
         "5b2d848ce133a9e7c5a054ea8ea3a4683edd6f4a5ec90f06788e5205678f08a9",
+        "6039fcbe283f849ccdb9ea70f17659eceeaf2dac71c0e2186de394d36a0bf5f9",
         "6163a45eba5f38a42755d564192651f849abd443d6e3010494033e0b1b8ad40c",
         "63edd355ceb2ed845af2278d1ebd64398d35208f2e040b5463578ae0286863c5",
         "6463fbfb64283214c010db4e0b88bfe8896f5fc29f6e19d41d29b676d4ec38f5",
@@ -36296,11 +36502,10 @@
         "6840ab75a37d974a614df157f58cd211fb4710aa9c17e14b016b15ec3442f36f",
         "6a723e9dd6148d750d83157914c1a5459ff1fcb170aef1f2c4228866488438c4",
         "6b011af5a83380ea22c4e28549f8c5d78ee99c6e69e02f631b35169ad46d46f6",
-        "6b11e9e44d18158a9abb2d6c1a80364c9e14af89055cf5f4d585fb6997cbb1ab",
-        "6c807a779aa51412ae8a9f771689e2c6289ca2b67dbc4028054191c72092bb81",
         "6fc9110de58f18c99943522db3b8ffcc3c8ab45dfd5a0b9cbb548063451211b0",
         "74523a73a0145a30477bbbebd9a26d61541dad25a499c0ee42d514608791f5b9",
         "765508a2716c9de2fc6ecb508fc539f5a5ccc2ca69eda3d981ff186072bb7ed7",
+        "77a75221c5d8fd9e2990e0ad6ad956721feb60df7b2f05f030c2fb7bf41e1e3a",
         "79b7d8b4427cdd44c21a8755ae4b9fec478b12c294513a18adda1adad678b07d",
         "7bce885a8ee1febb6db34003e2294c0d271f7c4c9300c1ecb278d07fa04c3dc9",
         "8065050a20908e4c159eab24aee73cdaafa3df9d8fd970de61e2f78e7a7e761d",
@@ -36320,7 +36525,6 @@
         "9806f4b64ae019bbc60127d2901976ff6c3c635c2ec2edad09b986ba19cdab21",
         "98a250da29c20b3c9cc8585ebd33ce424f8f2368faa3202ff2a62f3c00813b41",
         "992dc06342c0ce620b31fdd894a3125f79ce8cf4a076e8fa82d29559f74d100d",
-        "9d08c265ba3f12c5d5703f9dbeaea888c46b6dccb2d1cfd638cfedb84eb6f31a",
         "9dc8ba907fc068971aaf0927136b6a1640fdf8c6acf91f183fd9d69d330e3822",
         "a3a846ab8e0e5f33484ce92da2101c12720e5d9d62a2b00e5e6db5e2c3151e39",
         "a3c828362c9d47d195bd016c6229aca9ba47c3527bbb17e502333f6a2b379890",
@@ -36333,6 +36537,7 @@
         "b45864df452ff4ae5d95b77374e9fdaa65b3d2c8c8a4ec2d4809b3150ba57d39",
         "b789dc705986d18c3a04864ee8aef26bc4354799f8cd4090120be44acd1d1bdf",
         "b93f3d7b0401e1c33a141a48da18ade11a39ad2f46dffcc00a4b887d92d53375",
+        "ba7ff1d625715adba04efd9fea23dd43af41381a434f56aa1e4f353bc4edcb39",
         "bd568db23de59082762744ee1edab3f902a816a5232ddacbe0af81280a3783ff",
         "bde6353ac3fa0af90543b28faa2ed928b83befffad56d462a3685440a1add5b9",
         "bdef5507d0b8716b7c612aa250fde3e933c12386bcf25c909884dddfff90668d",
@@ -36350,6 +36555,7 @@
         "d35ec70862bf5536d7cfbb3880997922d3b220130f55608ce92e83e4702cbddb",
         "d39f949efae180708796565c7cf7cfaf6859dc88cb1b6accb53a0030c92a3a75",
         "d4c30f0430c4d65b32aaff288d7cfdb505f009318bcaeeae08a1661aa9721f6f",
+        "d747d22f80656d40340d666b5322674cd81ccbde6480ac1fb5133806c2eaa92c",
         "d7ea04db441340ea0841ecbebab6dd48e941584caccd30af2209a986a8d8ca5a",
         "db60c4ff370b83fea5256ae0a513d2a04355e917c8409d4fc953caa48730ea6e",
         "dbe3995d653d5d2e0e494d64a0af5f739957bf1b58370e4aef3471aeb566db23",
@@ -36365,6 +36571,7 @@
         "eea3795cf798158e420cf2cbe463e8fa6e54fa57534e5ae9205550656d3e5fcb",
         "f1f84d428a5e25f0ad328997d35bd6a25e21499055dd495416494281a0f9a6af",
         "f2348c8b962b96093effe1bac671b28bfea9e07217876102e0e949a27fea8c7e",
+        "f51e64302926c6e520d2466305c3c28046b6f4344970748d1e2098f3cd7f5fd8",
         "f54436c89ca079a75d2ba1762dc79e4e5ced84c910047e53a043100ce23b6f59",
         "f68c27960dc08b09973ae2b0408d2e9e90d8309e4ad7c7ce56de84920eca9eb4",
         "f71df93e3effb278f474cea48473ab543f2e3e9f35807725d57775c354ddc1d9",
@@ -36408,7 +36615,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.review_refusal": {
-      "ast_sha256": "1fb24850ad0dd424c173a692b67cc6b69ee7308677fef1bc8e32f77770dc2a7f",
+      "ast_sha256": "1819e69792481657b1f89d51ea6994fedc04bc7d04250283a765de700752068d",
       "functions": {
         "_find_delivered_part": "6fb04e71028feef3ef7ec90682db4f645b14889b69352c9a73a86a0bd5c82bac",
         "_frozen_pdf_capture": "d720f1747e180c4fc1efc6a9923a1691e1b4e554f52a1f3f1879fba5c6589f9b",
@@ -36426,7 +36633,7 @@
         "refused_attempts": "b7937eb65df3da080262c5b451a3947bb4c56ad1cba8ce05aed200983fa4231c",
         "require_contract_check": "ae159027815db170fa65f195db78315ca5ffb0c94a8fe796e49a93a81301fb90",
         "validate_evidence_contract": "bba2dd7be5bef4db000775c08500f26b9a3bc3ef282fcd7fe102c91ffdd20702",
-        "validate_source_links_contract": "64f59906ee3ac3a3b4c5d04dffda71ab93d41cf26713e77b49ddf757d83335c6"
+        "validate_source_links_contract": "3b8241fca88e3076db73f7b292ab7b59e225e69a55ddf0129e25c751f897b57f"
       },
       "packet_call_digests": [
         "12a172b12686efc3b394f6e7dff3cd29f539e007b4230154df27b39471159f41",
@@ -36438,6 +36645,7 @@
         "7e8d0a69cfd821d085d07ce4ca0bf1e1b597b8e6c7f4a37693b01d41e80a6e23",
         "8dbc1ae5d8479e8303fac6815b2f01e99924d2523cc83a73a3a251c1078cf784",
         "aba05bfa59a1aa8259f6ce5719de6a70d031ae65b20e6d241957fefcbd028f5b",
+        "b034cf893600d69ed13c7369e10a3bc5ae5b66e8146b14238f4dca541df9f040",
         "b76249b89c061373cb6ea80448c53ff1a0f0d7e58ad58a3d9d218420a9e510dc",
         "c0fccee6ff7395477b784b4b16f6b28be8131cdde409781ee3ef7dfb2938c299",
         "d291fa131431f7d2db3dbbc9a60db2b293f4bb78d91c62961f0b68f8a85baf55",
@@ -38414,7 +38622,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 2 (0.91.11): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes."
     },
     "research_harness.openness_final_pages": {
-      "ast_sha256": "cb6de985c17accd86a52af6624d82f4607ed1dbe0359c708ec18c2988656ce37",
+      "ast_sha256": "4cfaea6d81efb8279840c8ed31fee0db28bbe3562b2c9fd37a67b11763190bd6",
       "functions": {
         "read_binding": "2da24aa0945dc4a3857c77349290b841384ef906fff06f5393184d39aac5d679",
         "read_page_plan": "edcd39f87509ab69c60c42f8c20a25f9cf0f5e7d311845411344fcf964fe32f7",
@@ -38423,7 +38631,7 @@
         "build_full_final": "7fbc9734a753697495bae8f6705686a3cea4219fafe54a5d716bf9bd9083bf46",
         "build_final_inputs": "1b5e01642db2519e14b5454de3a2e59eaa6d1ab5ad8524ad40cbe2e7e656023f",
         "list_final_progress": "7f408a109e7bbf99406e6dd85d354aa073fde6e60db54e226506d1c50db6dea1",
-        "prepare_final_packet": "b449833fa9e7a91da3b801f93f2807e0ac2ad86613283949bace1f50cc6f1f1b",
+        "prepare_final_packet": "b598d66bbfa959f99390df220ed3604f9331919927c331b399733397870ab4d2",
         "publish_page_plan": "ba2ade2d94b18ebde66d4e82e843d7845bee8d192304b30556c61fc33f909ab1",
         "build_validation_envelope": "7f5d2752c9435d8ff58a8d325a2e18cd666115ef9761720a4f021aa070d7c33c",
         "list_page_outputs": "18373aa1334deb468cfb8a94555dfc70ec0f48242ce36d2ae1582914dd122e39",
@@ -38464,7 +38672,7 @@
       "reason": "Reviewed v7 page-plan integration: bounded packet selection from immutable plan, inventory and state artifacts; complete native validation stays transient. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. Reviewed the byte-measured page-room fallback: it retains the frozen allocation and current material bound; calibrated ratio adaptation is unchanged. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment."
     },
     "research_harness.review_session_v4": {
-      "ast_sha256": "4fdf4b217368ff8475d3dd7ae275150aded745d9f66d9f5bb2cf9be166c73783",
+      "ast_sha256": "b29df5573b0056d6d02c724ddcaa8836b0cb4da32b6b3968c40a2a3331f0a562",
       "functions": {
         "_describe_json": "7c6004e53039a80228d53341ea102c68af46e1cc51855d15c96893ebef98c919",
         "build_session_inventory": "6c17080602defdf017f7d02062e97511e93f35e65de7a180d8270969f769f7f2",
@@ -38511,10 +38719,10 @@
         "read_session_binding": "05a0c31aefbbcb33230139d0dcb15c4192a3e15026d8c022919342e5767c2fb1",
         "build_composition_packet": "8a7155a968a813f5fa75af0db496990d3480a2a50ca8b04bd799501c19236aaf",
         "build_final_inputs": "593c84047e7ef15138c2207ec3024aa7c08e7ecc8a607205fc3769a47711d60f",
-        "prepare_final_packet": "e888d44bce5145829a735dfa041d2c93d11018084d120c2ff1a4ca195e495a48",
+        "prepare_final_packet": "181b8ece783b8a321f249675c8d25d6f771e6a2e4c0bbac95b6ba87045f7d615",
         "build_paged_packet": "4d883fde85c44c434e6c5d9e5171c5d7f96a647df44de877d34d8ce950048212",
         "measure_final_material": "8d4f115c664f75c52a572535e21706f1d0626ac25f0eeb0e467e0eebc5813cfc",
-        "validate_final_turn_output": "67b9631a1152fc6064ac6665480280ee0a1acb7d80e71f4aba96882dd48efe9d",
+        "validate_final_turn_output": "a9d9f1ea2bf37c6678dca654ddc07485c52e493ca389c6b1fa043e98d09be57f",
         "list_composite_turns": "e4ed77ccc3f6ebd810a5aadff26714cdff9646028ade47b6948f6a870c48b928",
         "read_composite_currency": "04b3f6968d6a1af140d36cc81b31730b0286f87ac482bee07555b1b9376174cc",
         "validate_composite_output": "a4917340558407b3b2ff27b8923fc9e3d73684f4bde9dc3b3814e5d7dd919889",
@@ -38573,6 +38781,7 @@
         "43c985c7a4f0d4ebb6ee834c3a9b9800a8c4854a3a5895ce5f0923acc9c8f8bd",
         "46c5bb85192405da61708d71059db99f6f157daca57493bf7b728de6d47a2e88",
         "48b1c85e053bdfa185f4d4e8a2d9bd5d423082807e02a1595e8906d80b0ccebe",
+        "48d833ed70bf431947415be76a39ca68da8833ae01d6e0f71e6f88cc21937c64",
         "49faea6e25d95e2c681ec96fba15db7cf13fee614564cb904e1dbde308fda651",
         "4a4078ec60d8d88225609949dc8afc38328dcdb736ef228e1e39f20ef749bd72",
         "4fb5643ae1bf06438ffd73af799416b3aadf931b600aca23fd11721878d37c24",
@@ -38613,6 +38822,7 @@
         "81109a5936c7e344e642bf4c65b867ce8042d0285b21dec748e94a9c7dfaa966",
         "8282c66ecd08006eb62f91c4ebc8f0ed866862667541db262465cd775399d99e",
         "839231e06b8a2a1a58e0974fd22853e7135298f9f12aa35e6133b8050988bd4b",
+        "848cfe34419682bb40fa88ca7a0f9dcf3c3fe15270872bce5f45311f00979e17",
         "86a3d37d083e0e8f8a660d1a8651d507804efa762c0931dc1efb931be2c481c2",
         "883b54486aa74dadd2976d9a6988ab6f79582d55320a778e560290f3a38cf052",
         "8bb607bf28a29da653a7406a8e03e2f0716783596610010c2e6cb4dd1f791a2b",
@@ -38818,7 +39028,7 @@
       "reason": "Reviewed the data table FIELD_CLASSES and the frame functions. classify_packet, describe_role_frame and list_frame_units read a role packet and return new values: a classified frame, units with handles and sizes, field rows, and per-kind frame bounds with the $descriptors and $unit: tags; plan_role_capacity calls review_route_capacity.plan_chain_capacity until no fixed field moves and returns the plan and the units; describe_unit_references returns the reference rows of a unit descriptor; describe_registry_classes reads the registry for release tooling. No function writes into the packet that it receives. The frame of classify_packet enters the packets of parts protocol v3 and session protocol v4 through their builders; the registry declares it in the parts-v3 wire variants with the provenance of classify_packet, and as the opaque frame of session_v4_binding with the provenance of review_session_v4.build_session_packet. The table rows that classify_packet returns under fields reach no packet. The keys of FIELD_CLASSES (protocol forms, the empty form and dotted field paths) and the row member overflow_unit are table data under non_packet_names. Changed AST requires declaration review. Reviewed for 0.92.1: Declares all reached fields and separates measured exact identity from delivery units."
     },
     "research_harness.review_final_pages": {
-      "ast_sha256": "da38e5e464064c3049fa1a1a0afe6b7be6a1d92ab1851c7eedcc9bb16306b1ae",
+      "ast_sha256": "961f49947d7ce5e7a82fe07fd77b89eb5c57fe24acb753db089ca337cda64f41",
       "functions": {
         "_apply_completed": "b5c6338d434d9d18330d2ed16d5613834f692c4628b626a342fc80f1ec9e5cb9",
         "_build_context": "94e172f57930f1b8c7da62fd3ecae6b0091b0818af8ede4cbc3e62e4f5bc659a",
@@ -38851,7 +39061,7 @@
         "prepare_final_turn": "82e790190c0a8d55f11474e3e6db257a128a545ca18c3c4e14538c01ff7e4013",
         "repack_final_turns": "371bb4a32966e48a6b4490433780505c4b3655211bea54df56eedd6ab8376ce9",
         "split_final_turn": "1671ea3b47d8e5dbbc2bfcce7e5a326b8d892004892175710fed982d315ddb4c",
-        "verify_page_plans": "c1103aa3946db1ff8abde8e27d8ae609a1a1008d0410bb91b1805ae25087ca53"
+        "verify_page_plans": "bc5a127ba9e99f5da79241f4fa92c1a5fcbb5bbb65cebf6bb2f73b40f751c78c"
       },
       "packet_call_digests": [],
       "reason": "Reviewed the pure final page planner. plan_final_turns, split_final_turn, repack_final_turns, prepare_final_turn and their helpers return numbered turns of entry handles and sizes, which the families read to choose the targets and entries of a page packet; count_final_turns returns counts or a marked forecast; allocate_final_targets divides a page room; build_page_plan returns the stored page plan of protocol exactory-final-page-plan-v1, and verify_page_plans replays a list of plans. No function receives or changes a packet. The keys split and ratio of the cause table of _validate_replacement_cause are cause kinds under non_packet_names. Changed AST requires declaration review."
@@ -66150,14 +66360,6 @@
       "reason": "Mutation of the local construction container; all aliases, returned values and subsequent uses are pinned by the complete source certificate."
     },
     {
-      "ast_sha256": "daa9d4b2970085ac2b67e8043e961d76f961128cfccdc89103c0c251f62f80fc",
-      "callee": "error.details.update",
-      "caller": "research_harness.review_refusal.validate_source_links_contract",
-      "classification": "reviewed legacy site",
-      "form": "reviewed local write",
-      "reason": "Mutation of the local construction container; all aliases, returned values and subsequent uses are pinned by the complete source certificate."
-    },
-    {
       "ast_sha256": "fefc881342439aff3090f6b125a123388f1de2ed02e43e342c6bc355d06102e3",
       "callee": "receipts.append",
       "caller": "research_harness.review_search_delivery.verify_search_deliveries",
@@ -68428,6 +68630,14 @@
       "classification": "reviewed local write site",
       "form": "reviewed local write",
       "reason": "The call writes into a container that this function holds in a local. The module certificate pins the call."
+    },
+    {
+      "ast_sha256": "daa9d4b2970085ac2b67e8043e961d76f961128cfccdc89103c0c251f62f80fc",
+      "callee": "error.details.update",
+      "caller": "research_harness.review_refusal.validate_source_link_rows",
+      "classification": "reviewed local write site",
+      "form": "reviewed local write",
+      "reason": "The call adds the path, the delivered depth and the notice to the details of the refusal that this function catches and raises again; it writes no packet. The module certificate pins the call."
     }
   ],
   "modules": [
@@ -115290,7 +115500,8 @@
     "problem_search_origin",
     "problem_search_step",
     "slate_delivery",
-    "validation"
+    "validation",
+    "missing_ids"
   ],
   "stdlib_readers": [
     "len",

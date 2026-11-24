@@ -372,8 +372,14 @@ def _plan_ordinary_call(records, artifacts, assignment, action):
         if error.code == 'review_capacity_wait':
             return _plan_capacity(records, assignment, action, artifacts, refusal=error)
         from .review_failure_class import describe_assignment_call_refusal
-        refused = describe_assignment_call_refusal(assignment, error)
         context = action.get('details', {})
+        recovery = context.get('recovery', {})
+        if (error.code == 'review_resampling_forbidden' and recovery.get('kind') == 'decision'
+                and (assignment.get('session_chain') or assignment.get('reading_chain', {}).get('final_page_plan'))):
+            # The run of a capped turn at its floor again is refused while its capped answer is whole and unrefused:
+            # the plan is the decision of its capacity recovery, the stop that a second capped run reaches.
+            return dict(state='stop', code=recovery['code'], not_before=None, details=copy.deepcopy(context))
+        refused = describe_assignment_call_refusal(assignment, error)
         refused['details'] = dict(context, **refused['details'])
         if error.code == 'review_runtime_missing' and context.get('outcome') == 'runtime_unavailable':
             refused['not_before'] = action.get('not_before')

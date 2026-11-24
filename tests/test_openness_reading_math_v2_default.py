@@ -378,6 +378,23 @@ class MathV2RequestTests(drivers.MathChain):
         self.assertEqual(refusal['details']['path'], '/findings/openness/evidence/0')
 
 
+    def test_admission_stop_states_the_floor_of_the_protocol_of_its_packet(self):
+        """No command gives a math v2 chain the admission stop, so the function is called with the pages of v7 set;
+        a problem packet keeps the statement of each selection of v7."""
+        math = json.loads(self.artifacts.read(self.build_math_packet()))
+        records = self.read_records()
+        value = dict(id='math-1', role='native_math', route_id='route', dossier_id=None,
+                     reviewer_id='openness-reviewer', author_id='problem-author', context={})
+        selection = dict(admissions=[dict(protocol=None, state='stop', targets=1, largest_one_request_targets=0)])
+        for native, forms, statement in ((math, ('request', 'pages'), v7.MATH_ONE_REQUEST_STATEMENT),
+                                         (build_native(3), ('request',), v7.FINAL_PAGES_STATEMENT),
+                                         (build_native(3), ('request', 'pages'), v7.FINAL_PAGE_FLOOR_STATEMENT)):
+            with self.subTest(forms=forms, math='contract' in native), patch.object(v7, 'V7_FINAL_FORMS', forms), \
+                    patch.object(capacity, 'find_serving_routes', return_value=[]):
+                stop = v7.describe_admission_stop(records, self.artifacts, value, records['review_route']['route'],
+                                                  dict(native=native), selection)
+                self.assertEqual(stop['unserved_range'], statement)
+
 class MathV2DuplicateCitationTests(drivers.MathChain):
     text_sizes = (1000, 1000)
 

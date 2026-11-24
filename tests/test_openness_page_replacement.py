@@ -765,6 +765,144 @@ class PageReplacementTests(FinalPagesSupport):
         self.finish(native, head)
 
 
+    def drive_planned(self, head, capped, tokens=None):
+        """Take each planned step to the recorded finding; the first run of each stage in capped meets the cap, and
+        every other answer reports tokens output tokens when tokens is given. Return the plan of the first run of
+        each turn by its stage."""
+        capped, first_runs = list(capped), []
+        for _ in range(40):
+            action = plan_next(self.store.snapshot()['records'], self.artifacts, head)
+            packet = self.read_packet(head)
+            stage = reading.find_stage(packet)
+            if action['state'] == 'run':
+                self.assertEqual(action['payload']['assignment_id'], head)
+                if not any(row['assignment_id'] == head for row in self.store.snapshot()['records']['review_attempt'].values()):
+                    first_runs.append((stage, action.get('code')))
+                cap = stage in capped
+                if cap:
+                    capped.remove(stage)
+                answer, attempt = self.answer(packet), action['payload']['id']
+                receipt = (self.invoke_usage(head, answer, tokens=128000 if cap else tokens, attempt=attempt)
+                           if cap or tokens else self.invoke(head, answer, attempt=attempt))
+                self.assertNotIn('output_refusal', receipt)
+            elif action['state'] in ('continue', 'replace'):
+                head = self.mutate(protocol.record_assignment, action['payload'])['result']['id']
+            else:
+                self.assertEqual((action['state'], action.get('command')), ('record', 'problem-openness'), action)
+                self.assertEqual(capped, [])
+                self.assert_recorded_composite(head)
+                return first_runs
+        self.fail('The planned steps must reach a recorded finding.')
+
+    def start_request_final(self, native):
+        from test_review_output_profile import build_row
+        with patch.object(capacity, 'read_profile_priors', return_value=[build_row(kind='final', level=None, thinking=1000, count=8)]):
+            head, packet = self.start_final(native)
+        self.assertNotIn('page_plan_digest', packet['reading_final'])
+        return head
+
+    def assert_closing_after_capped_request_final_records(self, head, tokens=None):
+        first_runs = self.drive_planned(head, ('final', 'closing'), tokens)
+        # The closing starts its own position, so the cap of the final in one request is not counted again; the
+        # closing after the condensing turns counts the cap of the closing alone, as in a chain admitted in pages.
+        self.assertEqual(first_runs, [('final', None), ('page', None), ('page', None), ('closing', None),
+                                      ('combine', None), ('combine', None), ('closing', 'review_output_over_cap')])
+
+    def test_closing_after_a_capped_request_final_condenses_and_records(self):
+        """Seven targets: the smallest final in one request whose capped closing condenses into two blocks."""
+        self.assert_closing_after_capped_request_final_records(self.start_request_final(self.export_targets(7)))
+
+    def test_closing_after_a_capped_request_final_records_with_answers_at_half_the_cap(self):
+        """Answers of 64,000 output tokens change the level of the final after each cap, so every later turn measures
+        the room of the plan again; the page plans that the turns leave replay when the finding records."""
+        self.assert_closing_after_capped_request_final_records(self.start_request_final(self.export_targets(7)), 64000)
+
+    def test_stored_request_chain_closing_after_a_capped_final_condenses_and_records(self):
+        """A chain admitted with the released forms and no turn members, as release 0.92.1 stored it, then continued
+        with the final in pages."""
+        measure = v7.measure_turn_frames
+
+        def measure_released(*args, **options):
+            frames = measure(*args, **options)
+            for fields in frames.values():
+                for name in ('notes_cost', 'lists'):
+                    fields.pop(name)
+            return frames
+
+        native = self.export_targets(7)
+        with patch.object(v7, 'V7_FINAL_FORMS', ('request',)), patch.object(v7, 'measure_turn_frames', measure_released):
+            head = self.start_request_final(native)
+        self.assertNotIn('notes_cost', self.read_packet(head)['reading_final'])
+        self.assert_closing_after_capped_request_final_records(head)
+
+    def test_closing_of_a_chain_admitted_in_pages_counts_its_capped_closing(self):
+        """Nine targets: a chain that the admission puts into pages from the start keeps the counts of its closing."""
+        head, _ = self.start_final(self.export_targets(9))
+        self.assertIn('page_plan_digest', self.read_packet(head)['reading_final'])
+        first_runs = self.drive_planned(head, ('closing',))
+        self.assertEqual(first_runs[-4:], [('closing', None), ('combine', None), ('combine', None),
+                                           ('closing', 'review_output_over_cap')])
+        records = self.store.snapshot()['records']
+        closings = [row for row in records['review_assignment'].values()
+                    if 'closing' in json.loads(self.artifacts.read(row['packet'])).get('reading_final', {})]
+        self.assertEqual(len(closings), 2)
+        self.assertEqual(closings[0]['reading_chain']['final_position'], closings[1]['reading_chain']['final_position'])
+
+
+
+class FinalFloorDecisionTests(FinalPagesSupport):
+    """S-F4 of the review of the merged tree of 0.93.0, for a final in pages of protocol v7: a turn whose answers are
+    whole at the output limit down to its floor ends, through plan_next, with the decision of its capacity recovery,
+    and the store takes each step of each of its answers. The class takes the helpers of PageReplacementTests and not
+    its tests."""
+    build_v7_answer = PageReplacementTests.build_v7_answer
+    build_v7_finding = PageReplacementTests.build_v7_finding
+    answer = PageReplacementTests.answer
+    invoke_usage = PageReplacementTests.invoke_usage
+    replace = PageReplacementTests.replace
+    start_request_final = PageReplacementTests.start_request_final
+
+    def cap_to_the_floor(self, current, stage):
+        """Answer each turn of the stage whole at the output limit, taking each planned replacement, until the plan
+        is neither a run nor a replacement. Every other turn is answered within its bound."""
+        for number in range(40):
+            packet = self.read_packet(current)
+            if reading.find_stage(packet) == stage:
+                self.invoke_usage(current, self.answer(packet), tokens=128000, attempt='cap-%d' % number)
+            else:
+                self.invoke(current, self.answer(packet), attempt='answer-%d' % number)
+            action = plan_next(self.store.snapshot()['records'], self.artifacts, current)
+            if action['state'] in ('replace', 'continue'):
+                current = self.mutate(protocol.record_assignment, action['payload'])['result']['id']
+            elif action['state'] != 'run':
+                return current, action
+        self.fail('The turns did not reach the floor of the stage.')
+
+    def assert_decision_is_taken(self, current, action):
+        """The stop is the capacity decision, and the store takes each step of each answer, each on a copy."""
+        import continuity_forms_fixtures as forms
+        self.assertEqual((action['state'], action['code']), ('stop', 'review_output_over_cap'), action)
+        form = forms.FormTurn('v7-pages', reading.find_stage(self.read_packet(current)), self, self, current)
+        self.assertTrue(forms.execute_stop_answers(self, form, action))
+
+    def test_page_floor_of_a_chain_admitted_in_pages_ends_with_its_decision(self):
+        current, _ = self.start_final(self.export_targets(9))
+        self.assert_decision_is_taken(*self.cap_to_the_floor(current, 'page'))
+
+    def test_page_floor_after_a_capped_request_final_ends_with_its_decision(self):
+        current = self.start_request_final(self.export_targets(7))
+        self.invoke_usage(current, self.answer(self.read_packet(current)), tokens=128000)
+        self.assert_decision_is_taken(*self.cap_to_the_floor(self.replace(current), 'page'))
+
+    def test_closing_floor_of_a_chain_admitted_in_pages_ends_with_its_decision(self):
+        current, _ = self.start_final(self.export_targets(9))
+        self.assert_decision_is_taken(*self.cap_to_the_floor(current, 'closing'))
+
+    def test_closing_floor_after_a_capped_request_final_ends_with_its_decision(self):
+        current = self.start_request_final(self.export_targets(7))
+        self.invoke_usage(current, self.answer(self.read_packet(current)), tokens=128000)
+        self.assert_decision_is_taken(*self.cap_to_the_floor(self.replace(current), 'closing'))
+
 
 class ClosingDeliveryTests(FinalPagesSupport):
     """A closing over unread rows prices them with its decision rows, its material and a requested passage."""
@@ -852,6 +990,32 @@ class PageFloorTests(unittest.TestCase):
                        context=dict(prior_assignment_id='parent-' + row['id']), capacity_plan='plan', recorded_revision=index + 1)
         records = dict(review_assignment={row['id']: row for row in (raw, page, other)})
         self.assertEqual(set(failures.list_turn_assignments(records, page)), {'request', 'page'})
+
+    def test_closing_of_a_split_final_starts_its_position_and_keeps_it_through_condensing(self):
+        from research_harness import openness_final_pages, review_final_pages as pages, review_condensing as condensing
+        artifacts = turn_fixtures.MemoryArtifacts()
+
+        def read_positions(targets, splits):
+            turns = pages.plan_final_turns(page_room=240000, target_allowance=len(targets), target_minimum=6700,
+                notes=0, pool=[], targets=targets, closing_room=240000, row_characters=3000,
+                condense=condensing.plan_condensing)
+            reference = openness_final_pages.publish_page_plan(artifacts, pages.build_page_plan('chain', 'plan', 'state', {}, turns))
+            for number in splits:
+                previous = pages.build_page_plan('chain', 'plan', 'state', {}, turns)
+                turns = pages.split_final_turn(turns, number, 60000, condensing.plan_condensing)
+                reference = openness_final_pages.publish_page_plan(artifacts, pages.build_page_plan('chain', 'plan',
+                    'state', {}, turns, digest(previous), dict(kind='split', turn=number, attempt_id='attempt',
+                    completed=[], pending=[])), previous=reference)
+            return [(turn['kind'], openness_final_pages.read_final_position(artifacts, reference, turn['number']))
+                    for turn in turns]
+
+        two = [dict(handle='t%d' % n, entries=[], rows=[]) for n in (1, 2)]
+        self.assertEqual(read_positions(two, [1]), [('page', 2), ('page', 3), ('closing', 4)])
+        self.assertEqual(read_positions(two, [1, 4]), [('page', 2), ('page', 3), ('combine', 5), ('combine', 6),
+                                                       ('closing', 4)])
+        # A page that keeps every target of the final keeps its position; the closing starts its own.
+        one = [dict(handle='t1', entries=[dict(handle='e1', characters=60001)], rows=[])]
+        self.assertEqual(read_positions(one, [1]), [('combine', 2), ('page', 1), ('closing', 4)])
 
     def test_capacity_rows_cover_request_page_closing_and_combine(self):
         rows = [row for row in capacity.list_capacity_recovery_rows() if row['protocol'] == v7.PROTOCOL]

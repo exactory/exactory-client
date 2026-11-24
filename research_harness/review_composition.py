@@ -2049,6 +2049,14 @@ def validate_page_output(rule, packet, targets, output, *, finding_version=1):
         _validate_answer_schema(rule, rule['page_schema'], measured)
 
 
+def list_page_evidence(output):
+    """List (pointer, place in the answer, evidence) for each evidence array among the fields of a page answer."""
+    return [(pointer, '/targets/%d/fields/%s' % (index, _escape_field(pointer)), value)
+            for index, row in enumerate(output['targets']) if isinstance(row.get('fields'), dict)
+            for pointer, value in row['fields'].items()
+            if pointer.rsplit('/', 1)[-1] == 'evidence' and isinstance(value, list)]
+
+
 def describe_page_answer_bound(rule, targets):
     """A serialized row cap counts every field, pointer, quote and escape."""
     return PAGE_ENVELOPE_CHARACTERS + (rule['limits']['row'] + 1) * targets

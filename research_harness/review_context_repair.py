@@ -702,6 +702,10 @@ def collect_scientific_history(records, artifacts, chain, roles, *, exhausted_po
         if scientific_output is None:
             allowed.update(('review_output_pending', 'review_output_refused', 'review_task_pending',
                             'assessment_incomplete', 'review_source_coverage_pending', 'review_composition_pending'))
+            if ancestor.get('session_chain'):
+                # A turn of the rules v4 capped at its floor holds no scientific history; the decision of its
+                # capacity recovery moves the chain to another route through this repair.
+                allowed.add('review_output_over_cap')
         if any(item['code'] not in allowed for item in prior_state['obligations']):
             raise ResearchError('review_context_repair_unverified', 'Preserve only the exact observed scientific history with verified invocation provenance')
         from .bar_sources import pending
@@ -950,4 +954,5 @@ def validate_reassessment(records, artifacts, assignment, observed_output, *, re
         if finding['disposition'] == 'confirmed' and not _is_unchanged(originals[finding['review_id']], content, identities):
             raise ResearchError('review_reassessment_mismatch', 'A changed scientific finding cannot be labeled confirmed')
     if seen != set(originals):
-        raise ResearchError('review_reassessment_incomplete', 'Address every inherited final review')
+        raise ResearchError('review_reassessment_incomplete', 'Address every inherited final review',
+                            dict(missing_ids=sorted(set(originals) - seen)))

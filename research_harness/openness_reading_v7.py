@@ -3199,13 +3199,15 @@ def describe_admission_stop(records, artifacts, assignment, route, packet, selec
     answers.append(dict(answer=ADMISSION_ROUTE_ANSWER, steps=[route_step, export]))
     return dict(message=ADMISSION_STOP_MESSAGE, admissions=selection['admissions'],
         targets=targets, largest_one_request_targets=largest, serving_routes=serving,
-        unserved_range=(FINAL_PAGES_STATEMENT if V7_FINAL_FORMS == ('request',) else FINAL_PAGE_FLOOR_STATEMENT) if not serving else None,
+        unserved_range=describe_unserved_range(packet, assignment) if not serving else None,
         decision=dict(owner_decides=question, then=answers))
 
 
 def describe_unserved_range(packet, assignment):
-    """Describe the floor of the protocol and form recorded by the chain."""
-    description = describe_protocol(packet=packet)
+    """Describe the floor of the protocol and form recorded by the chain, or of a new chain over the native packet
+    of a packet that no turn binds yet."""
+    description = (describe_protocol(native=packet['native']) if reading.find_protocol(packet) is None
+                   else describe_protocol(packet=packet))
     if 'pages' in description['list_final_forms']() or assignment.get('reading_chain', {}).get('final_page_plan'):
         return FINAL_PAGE_FLOOR_STATEMENT
     return description['one_request_statement']
@@ -3607,8 +3609,14 @@ def observe_v7_chain(records, artifacts, assignment):
     """Expose only this v7 chain's ready reading turns; carried turns keep their own origin."""
     packet = json.loads(artifacts.read(assignment['packet']))
     from .review_protocol import assignment_state
+    from .review_failure_class import classify_final_capacity_attempt
     terminal = assignment_state(records, artifacts, assignment['id'])
-    final = reading.find_stage(packet) in ('final', 'closing') and terminal['output'] is not None and terminal['output'].get('stage') not in ('reading', 'material')
+    # A final turn whose answer ended at the output limit has no final output: the chain takes a smaller task or the
+    # capacity decision, and a closing turn has no composite for it.
+    final = (reading.find_stage(packet) in ('final', 'closing') and terminal['output'] is not None
+             and terminal['output'].get('stage') not in ('reading', 'material')
+             and classify_final_capacity_attempt(records, artifacts,
+                                                 records['review_attempt'][terminal['attempt_id']]) is None)
     verified = verify_problem_coverage(records, artifacts, assignment, final=final)
     inventory = verified['inventory']
     units = {row['handle']: row for row in inventory['units']}

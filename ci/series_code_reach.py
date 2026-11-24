@@ -315,6 +315,10 @@ COMPUTED_CODE_SITES.update({
     'research_harness/review_parts_repair.py:prepare_packet:error.code': {
         'codes': ['review_parts_frame_too_large', 'review_parts_final_too_large', 'review_parts_inventory_too_large',
                   'review_parts_no_progress']},
+    # A capped session turn or v7 page at its floor plans the decision of the capacity recovery that plan_after_failure
+    # recorded.
+    "research_harness/review_continuation.py:_plan_ordinary_call:recovery['code']": {
+        'sources': ['research_harness/review_failure_class.py:plan_after_failure']},
 })
 
 # These are public command entry points, not a second registry of error codes.

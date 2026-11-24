@@ -9892,6 +9892,230 @@
         "test_series_ending.SeriesEndingTests.test_stop_step_that_names_another_chain_runs_that_chain",
         "test_continuity_guard_stage3.Stage3MatrixTests.test_v7_final_at_its_output_cap_states_no_route_class_condition"
       ]
+    },
+    {
+      "id": "final-pages-charge-expanded-citations-by-reference",
+      "record": "20261122143013",
+      "class": "T8 B1 final page and closing size",
+      "summary": "A legal page answer with four handle citations exceeded its field bound after reference expansion.",
+      "expected": "An evidence-array object costs 80 characters after expansion. The page and closing limits still charge all other JSON and enforce their schema limits.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_page_text_over_the_fields_limit_is_refused",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_math_evidence_digests_keep_their_json_size"
+      ]
+    },
+    {
+      "id": "final-pages-measure-expanded-answer",
+      "record": "20261122143013",
+      "class": "T8 B1 final page and closing size",
+      "summary": "A fixed per-object charge admitted oversized references and opaque JSON and refused legal compact data.",
+      "expected": "Each page and closing limit uses exact compact JSON of the expanded turn, with a size refusal before evidence availability can hide it.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_study_page_charges_literal_source_and_execution_references",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_parts_block_entries_handle_is_charged_at_its_expanded_size",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_page_text_over_the_fields_limit_is_refused",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_parts_native_closing_counts_opaque_evidence_at_the_full_answer_limit",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_v7_coverage_counts_ordinary_objects_at_its_own_limit",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_v7_page_counts_opaque_coverage_at_the_joint_limit",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_session_page_refuses_repeated_written_links_over_its_bound",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_session_closing_enforces_its_expanded_answer_bound",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_oversized_page_is_refused_even_if_a_cited_unit_never_arrived"
+      ]
+    },
+    {
+      "id": "paged-answer-check-failure-records-a-refusal",
+      "record": "20261122143013",
+      "class": "T8 captured paged answer progress",
+      "summary": "A session v4 closing whose evidence link made the URL parser raise ValueError aborted the finish transaction; every exact resume raised again and the plan named the same resume.",
+      "expected": "A value failure inside a paged check or composition is a review.shape refusal at the submitted field when it is known. The exact resume records the attempt and its refusal, the replacement records, and the plan moves on.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_captured_closing_with_an_unreadable_link_records_a_replacement",
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_paged_checks_refuse_an_answer_on_which_they_fail",
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_closing_turn_request_on_which_its_check_fails_is_refused"
+      ]
+    },
+    {
+      "id": "paged-size-notice-keeps-parts-v2-replacement-bytes",
+      "record": "20261122143013",
+      "class": "T8 released refusal compatibility",
+      "summary": "A global notice allowlist copied a requested character count that the released parts-v2 replacement had hashed.",
+      "expected": "The released passage refusal records its diagnosis and produces the same replacement packet and prompt as 0.92.0. The recorded replacement origin authenticates.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_released_parts_v2_passage_refusal_keeps_replacement_bytes"
+      ]
+    },
+    {
+      "id": "review-parts-v3-empty-closing-request-finishes-capture",
+      "record": "20261122143013",
+      "class": "T8 captured parts closing progress",
+      "summary": "An attributed refusal during classification was unattributed in the earlier closing preparation. The captured request stayed pending.",
+      "expected": "The exact resume records a shape refusal for both empty request arrays. The replacement records and its plan is a fresh run.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_captured_parts_v3_closing_empty_request_records_a_replacement"
+      ]
+    },
+    {
+      "id": "session-v4-captured-closing-refusal-finishes",
+      "record": "20261122143013",
+      "class": "T8 captured session closing progress",
+      "summary": "A captured closing reference to a source body with zero delivered parts left the same review-run pending at the planner.",
+      "expected": "Resuming the exact captured request records a refusal and an executable replacement. The oversized reason fails its serialized-string limit. The in-bound reason reaches the delivery refusal.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_captured_closing_above_string_limit_records_its_refusal",
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_captured_closing_within_string_limit_records_delivery_refusal"
+      ]
+    },
+    {
+      "id": "session-v4-long-closing-pointer-keeps-the-notice-bound",
+      "record": "20261122143013",
+      "class": "T8 captured session closing progress",
+      "summary": "The owner check of a closing named an unknown 6,101-character pointer raw, so the replacement notice exceeded its entry bound and the chain ended in a handoff.",
+      "expected": "The owner refusal names the submitted field within the notice bound, with the digest of the full pointer, and the replacement records.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_long_unknown_closing_pointer_records_a_usable_replacement"
+      ]
+    },
+    {
+      "id": "session-v4-malformed-closing-pointer-finishes-capture",
+      "record": "20261122143013",
+      "class": "T8 captured session closing progress",
+      "summary": "Projecting an invalid evidence array pointer interrupted attempt recording and repeated the captured reviewer request.",
+      "expected": "The exact resume records a shape refusal at the submitted closing field. The replacement records and the planner advances to a different request.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_captured_closing_pointer_conflict_records_a_replacement"
+      ]
+    },
+    {
+      "id": "session-v4-page-check-failure-refuses-the-page",
+      "record": "20261122143013",
+      "class": "T8 captured paged answer progress",
+      "summary": "A session v4 page whose evidence check raised was classified as no failure and accepted; every closing after it then raised in its finish transaction.",
+      "expected": "The page is refused at its field, its replacement and the following pages record, and the closing records its composite. Page pointers take the checked projection of the closing fields.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_page_with_an_unreadable_link_is_refused_and_the_closing_records",
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_page_link_failure_is_refused_and_page_pointers_are_checked"
+      ]
+    },
+    {
+      "id": "session-v4-page-fixture-restores-partial-setup",
+      "record": "20261122143013",
+      "class": "T8 regression fixture isolation",
+      "summary": "A failure after the fixture replaced the claims module leaked that replacement to the shard",
+      "expected": "Shared setup registers the inner cleanup before setup begins, so a failure after the claims-module swap restores the original module.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionAdmissionTests.test_partial_session_setup_restores_the_inner_fixture"
+      ]
+    },
+    {
+      "id": "session-v4-page-validates-requested-source-part",
+      "record": "20261122143013",
+      "class": "T8 G1 delivered page evidence",
+      "summary": "The frozen logical packet lacked a requested source body, so artifact_missing interrupted page validation even for an exact delivered part.",
+      "expected": "The page validates the delivered citation and records the composed review. An oversized answer citing the same part records a refusal at the page.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_page_validates_the_delivered_part_and_records_the_review",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_oversized_page_with_delivered_citation_records_a_refusal"
+      ]
+    },
+    {
+      "id": "session-v4-scoped-support-takes-next-rule-set",
+      "record": "20261122143013",
+      "class": "T8 S1 scoped study result admission",
+      "summary": "A scoped study result could enter session v4 although its paged form had no owner for the support target or the extra readiness checks.",
+      "expected": "Admission stops with scoped_support_contract and the next rule set is available. An unscoped support contract is admitted as before.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionAdmissionTests.test_scoped_study_result_stops_session_v4_admission",
+        "test_review_session_v4_page_checks.SessionAdmissionTests.test_unscoped_study_result_is_admitted_to_session_v4"
+      ]
+    },
+    {
+      "id": "session-v4-turn-text-follows-registered-paragraphs",
+      "record": "20261122143013",
+      "class": "T8 O1 recorded turn prompt order",
+      "summary": "The selected slate-forming paragraph followed the session answer grammar and asked for a request field the session refuses.",
+      "expected": "The request instructions follow all selected paragraphs, including the refusal paragraph on a replacement. Both recorded turns authenticate.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionAdmissionTests.test_slate_forming_paragraph_precedes_the_request_text_and_the_turn_verifies"
+      ]
+    },
+    {
+      "id": "merged-session-page-citation-rules",
+      "record": "20261122143013",
+      "class": "page check skips record-dependent rules",
+      "summary": "A page answer that cited a delivered abstract by a source link passed its page check; the composed answer was refused three times at the place of that page and the slot was used up.",
+      "expected": "The rules of the citations that read the records run at each page, and the page is refused at its own place.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_page_citing_a_delivered_abstract_by_a_source_link_is_refused_at_the_page",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_page_citing_an_unrequested_unit_is_refused_at_the_page",
+        "test_openness_final_pages.UnreadPagesTests.test_page_citing_the_unread_set_is_refused_at_the_page"
+      ]
+    },
+    {
+      "id": "merged-session-floor-decision",
+      "record": "20261122143013",
+      "class": "plan names a refused run",
+      "summary": "A v4 page capped at its floor got a handoff to another reviewer: the identical run that the failure planner named was refused because the capped answer was whole.",
+      "expected": "The plan is the decision of the capacity recovery, and the store takes each of its steps.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_capacity_stops.SessionFloorDecisionTests.test_page_floor_through_plan_next_ends_with_the_decision_of_its_recovery"
+      ]
+    },
+    {
+      "id": "merged-session-v5-stop-answers",
+      "record": "20261122143013",
+      "class": "capacity stop without an answer",
+      "summary": "The stop of rule V5 for a new session v4 chain on a record that no route serves gave no answer: its then list was empty.",
+      "expected": "Without a serving route the stop answers with a probe of the route at the input floor and with another route at the output floor, and the store takes each step.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_capacity_stops.SessionBelowFloorAnswersTests.test_input_floor_stop_on_the_only_route_answers_with_a_probe_that_the_store_takes",
+        "test_review_session_v4_capacity_stops.SessionBelowFloorAnswersTests.test_output_floor_stop_on_the_only_route_answers_with_another_route_that_the_store_takes"
+      ]
+    },
+    {
+      "id": "merged-session-adapter-page-citations",
+      "record": "20261122143013",
+      "class": "page check skips record-dependent rules",
+      "summary": "A verification or adjudicator page of parts v3 that cited an item its series did not receive, or a record without its digest, passed its page check; the composed answer was refused at the closing. A page citing bytes that its packet did not carry was accepted with no check.",
+      "expected": "The citation checks of the composed check of each role run at each page, and the page is refused at its own place.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3_pages.AdapterPageTests.test_verification_page_citing_an_undelivered_source_is_refused_at_the_page",
+        "test_review_parts_v3_pages.AdapterPageTests.test_adjudicator_page_citing_an_undelivered_record_is_refused_at_the_page",
+        "test_review_parts_v3_pages.AdapterPageTests.test_adjudicator_page_citing_a_record_without_its_digest_is_refused_at_the_page"
+      ]
     }
   ]
 }

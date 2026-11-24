@@ -796,6 +796,24 @@ def check_v4_admission(records, artifacts, route, role, packet):
 
 
 SESSION_BELOW_FLOOR_REASON = 'session_below_floor'
+# details.coverage of the stop of rule V5 when no verified route serves the new chain (a placeholder for the writer).
+SESSION_UNSERVED_REVIEW_MESSAGE = ('No verified route of this record serves a new chain of this review under the '
+                                   'session rules v4, and a new chain does not start under an older rule set.')
+
+
+def describe_floor_probe_tokens(records, artifacts, assignment, admission):
+    """The input tokens of a capacity probe of the route after which the admission of the rules v4 has the request
+    room that it lacked, or None where a probe cannot raise that room: the admission stopped at another room than
+    the request text of the route, or the input limit of the route is no observation of a probe."""
+    import math
+    route = records['review_route'][assignment['route_id']]
+    limits = capacity.describe_route_capacity(route, records=records, artifacts=artifacts)
+    floor = admission.get('details', {})
+    text = limits['input_text_characters']
+    if floor.get('room') != text['value'] or limits['input_tokens']['source'] not in ('observed', 'default'):
+        return None
+    tokens = math.ceil(floor['minimum'] / (text['characters_per_token'] or 1))
+    return capacity.select_capacity_probe_size(records, route, tokens, artifacts=artifacts)
 
 
 def require_session_capacity(records, artifacts, value, logical, admission, *, prompt, trial_assignment, explain=True):
@@ -807,20 +825,28 @@ def require_session_capacity(records, artifacts, value, logical, admission, *, p
     if admission['state'] != 'stop' or admission['reason'] != 'below_floor':
         return
     from .errors import ResearchError
-    from .review_route_capacity import CAPACITY_STOP_MESSAGE, CAPACITY_OWNER_DECISION, UNSERVED_REVIEW_MESSAGE
-    from .review_plan_steps import describe_capacity_repair, describe_capacity_steps
+    from .review_route_capacity import CAPACITY_STOP_MESSAGE, CAPACITY_OWNER_DECISION
+    from .review_plan_steps import describe_capacity_assignment, describe_capacity_repair, describe_capacity_steps
+    from .review_plan_steps import describe_step
     if not explain:
         raise ResearchError('review_route_capacity_below_floor', CAPACITY_STOP_MESSAGE)
     # A new chain of v4 continues no session of its own bar, so its steps start it on a serving route.
     repair_plan = describe_capacity_repair(records, artifacts, value, None)
     serving = capacity.find_serving_routes(records, value['role'], logical, artifacts=artifacts, assignment=value,
         prompt=prompt, exclude_route=value['route_id'], repair_plan=repair_plan, trial_assignment=trial_assignment)
+    # Without a serving route, the stop leads on through this route: a probe that raises its input, or another route
+    # whose output limit holds the smallest final.
+    probe_tokens = None if serving else describe_floor_probe_tokens(records, artifacts, value, admission)
+    then = describe_capacity_steps(records, artifacts, value, serving, probe_tokens, repair_plan=repair_plan)
+    if not serving and admission.get('details', {}).get('reason') == 'output_floor':
+        assign = describe_capacity_assignment(records, artifacts, value, value['route_id'])
+        assign['chooses'].append('route_id')
+        then.append(dict(answer='Move to another route', steps=[describe_step(records, artifacts, value, 7), assign]))
     details = dict(reason=SESSION_BELOW_FLOOR_REASON, admission={key: copy.deepcopy(admission[key])
                    for key in ('protocol', 'reason', 'code', 'details') if key in admission},
-                   serving_routes=serving, owner_decides=CAPACITY_OWNER_DECISION,
-                   then=describe_capacity_steps(records, artifacts, value, serving, repair_plan=repair_plan))
-    if not serving and not any(answer.get('route_id') for answer in details['then']):
-        details['coverage'] = UNSERVED_REVIEW_MESSAGE
+                   serving_routes=serving, owner_decides=CAPACITY_OWNER_DECISION, then=then)
+    if not serving and not any(answer.get('route_id') for answer in then):
+        details['coverage'] = SESSION_UNSERVED_REVIEW_MESSAGE
     raise ResearchError('review_route_capacity_below_floor', CAPACITY_STOP_MESSAGE, details)
 
 
@@ -2006,7 +2032,7 @@ def prepare_final_packet(records, artifacts, prior, route, logical, number, inve
                          *, replacement=False):
     """Freeze or replay successors using shared page packing and progress rules."""
     from . import review_final_pages as pages, review_condensing as condensing
-    from .openness_final_pages import (measure_page_room, read_page_plan, publish_page_plan,
+    from .openness_final_pages import (measure_page_room, read_page_plan, read_page_room, publish_page_plan,
                                       list_final_progress)
     from .errors import ResearchError
     chain = prior['session_chain']['first_assignment_id']
@@ -2050,7 +2076,7 @@ def prepare_final_packet(records, artifacts, prior, route, logical, number, inve
     cause_kind = ('level' if limits['target_allowance'] != previous['target_allowance']
                   or (find_session_kind(frozen) != 'request'
                       and limits['material_allowance'] != old['level_material_allowance']) else
-                  'ratio' if room < previous['page_room'] else None)
+                  'ratio' if room < read_page_room(artifacts, reference) else None)
     if cause_kind is not None:
         completed, pending = list_final_progress(state, page_plan)
         cause = dict(kind=cause_kind, attempt_id=attempt_id, page_room=room, completed=completed, pending=pending)
@@ -2179,7 +2205,7 @@ def measure_final_material(route, binding):
         (('closing',) if 'closing' in binding else ('notes', 'entries', 'sources', 'fill'))})
 
 
-def validate_final_turn_output(records, artifacts, assignment, packet, output, *, expanded=False):
+def validate_final_turn_output(records, artifacts, assignment, packet, output, *, expanded=False, attempt=None):
     """Validate a written or explicitly expanded answer before cross-page validation."""
     if not expanded:
         from .review_handles import expand_handles
@@ -2197,8 +2223,10 @@ def validate_final_turn_output(records, artifacts, assignment, packet, output, *
                                        plan=binding.get('plan', dict(now=[])))
         from .review_refusal import refuse_unreadable_answer
         with refuse_unreadable_answer():
+            # The rule of the turn comes before the form of an excerpt: a page and a closing turn take none.
+            if isinstance(output.get('excerpts'), list):
+                _require_turn(not output['excerpts'], path='/excerpts', items=len(output['excerpts']), bound=0)
             validate_request_output(artifacts, assignment, adapted, output)
-            _require_turn(not output['excerpts'], path='/excerpts', items=len(output['excerpts']), bound=0)
     else:
         _, _, state = read_bound_session(artifacts, assignment)
         completed = {row['request_id'] for row in binding.get('plan', {}).get('now', [])
@@ -2211,6 +2239,8 @@ def validate_final_turn_output(records, artifacts, assignment, packet, output, *
             composition.validate_closing_output(rule, envelope, binding['closing']['rows'], output)
         else:
             composition.validate_page_output(rule, envelope, binding['page']['targets'], output)
+            from .research_decisions import validate_page_citations
+            validate_page_citations(records, artifacts, assignment, output, attempt=attempt)
 
 
 def list_composite_turns(records, artifacts, assignment):

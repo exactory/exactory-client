@@ -1050,7 +1050,7 @@
         "research_harness/openness_reading_v7.py:read_bound_state#1": [
           "content"
         ],
-        "research_harness/research_decisions.py:validate_review_contract#1": [
+        "research_harness/research_decisions.py:_read_contract_packets#1": [
           "content",
           "record"
         ],
