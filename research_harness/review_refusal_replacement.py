@@ -4,7 +4,7 @@ import copy
 
 from .errors import ResearchError
 from .evidence import digest
-from .operations import fields, immutable_record, normalized_text, text
+from .operations import fields, find_record, immutable_record, normalized_text, text
 from . import review_refusal_notice as notices
 from .storage import overlay_kinds
 
@@ -67,7 +67,11 @@ def find_output_successor(records, assignment):
     if replacement is not None:
         return replacement
     slot = protocol.context_repair.slot_id(records, assignment)
-    return next((later for later in records.get('review_assignment', {}).values()
+    from .evaluation import Evaluation
+    candidates = (records.get('review_assignment', {}).values()
+                  if getattr(records, 'read_filtered_records', None) is not None else
+                  Evaluation.assignment_rows(records, role=assignment['role'], dossier_id=assignment.get('dossier_id')))
+    return next((later for later in candidates
         if later.get('recorded_revision', 0) > assignment.get('recorded_revision', 0)
         and all(later.get(key) == assignment.get(key) for key in ('role', 'dossier_id'))
         and protocol.context_repair.is_same_subject(later, assignment)
@@ -144,7 +148,7 @@ def select_renewal_probe(records, artifacts, value, revision, trials):
     """The size of the capacity probe after which the replacement fits on the renewed route record, with the form
     and the tokens of the request that it serves, or the reason why no capacity probe is offered."""
     from . import review_protocol as protocol, review_route_capacity as capacity
-    from .review_capacity_evidence import describe_capacity_key, read_capacity_evidence
+    from .review_capacity_evidence import describe_capacity_key
     route = records['review_route'][value['route_id']]
     key = describe_capacity_key(route)
     short = sorted(((trial['form'], trial['request_measure']) for trial in trials
@@ -181,7 +185,8 @@ def select_renewal_probe(records, artifacts, value, revision, trials):
         return dict(reason='probes_used', probe_ids=[row['id'] for row in later])
     size = selected['needed']
     if not any(row.get('capacity_verified') for row in probes):
-        size = max(size, read_capacity_evidence(route, records, artifacts=artifacts)['probe_input_tokens'])
+        size = max(size, capacity.describe_route_capacity(route, records=records, artifacts=artifacts)
+                   ['capacity_evidence']['probe_input_tokens'])
     try:
         capacity.build_capacity_probe_request(route, protocol.build_probe_prompt(route),
             dict(allowed_control='a' * 32, evidence_control='b' * 32, evidence=''),
@@ -193,15 +198,17 @@ def select_renewal_probe(records, artifacts, value, revision, trials):
     return dict(input_tokens=size, form=selected['form'], request_tokens=selected['request_tokens'])
 
 
-def prepare_replacement(records, artifacts, value, revision):
-    """Check admission once, then freeze a fresh request over the refused turn's packet."""
+def prepare_replacement(records, artifacts, value, revision, *, check_context=False):
+    """Freeze the replacement, checking v7 context when recording it rather than simulating it."""
     from . import review_protocol as protocol, review_parts, review_prompt_paragraphs as paragraphs
     from . import review_refusal, review_route_capacity as capacity
-    from .review_failure_class import list_turn_assignments
+    from .review_failure_class import (classify_final_capacity_attempt, count_position, identify_paged_chain,
+                                       is_math_request_final, list_failure_position_assignments,
+                                       math_final_cap_exhausted, MATH_FINAL_CAP_EXHAUSTED)
     binding = value['context'][KEY]
     fields(binding, ('assignment_id',), code='invalid_review_context')
     text(binding['assignment_id'], 'Refused assignment ID', code='invalid_review_context')
-    capacity_prior = records.get('review_assignment', {}).get(value['context'].get('reading_replacement'))
+    capacity_prior = find_record(records, 'review_assignment', value['context'].get('reading_replacement'))
     if capacity_prior is not None and capacity_prior.get('context', {}).get(KEY) == binding:
         if (any(capacity_prior.get(key) != value.get(key) for key in ('role', 'dossier_id', 'subject', 'route_id'))
                 or any(normalized_text(capacity_prior[key]) != normalized_text(value[key])
@@ -210,7 +217,11 @@ def prepare_replacement(records, artifacts, value, revision):
         from .openness_reading_v7 import prepare_notice_capacity_assignment
         return prepare_notice_capacity_assignment(records, artifacts, value, revision, capacity_prior)
     prior = protocol._get(records, 'review_assignment', binding['assignment_id'])
-    members = [records['review_assignment'][identifier] for identifier in list_turn_assignments(records, prior)]
+    math_final = is_math_request_final(prior)
+    if math_final and math_final_cap_exhausted(count_position(records, artifacts, prior)):
+        raise ResearchError('review_output_over_cap', MATH_FINAL_CAP_EXHAUSTED)
+    members = [records['review_assignment'][identifier]
+               for identifier in list_failure_position_assignments(records, artifacts, prior)]
     if max(members, key=lambda row: row['recorded_revision'])['id'] != prior['id']:
         raise ResearchError('review_assignment_replaced', NOT_SELECTED_MSG)
     protocol.context_repair.require_current_slot(records, prior)
@@ -252,21 +263,26 @@ def prepare_replacement(records, artifacts, value, revision):
     diagnoses = {identifier: review_refusal.classify_observed_output(records, artifacts, identifier)
                  for identifier in refused_ids}
     completed = [attempt for attempt in attempts if attempt['assignment_id'] == prior['id']
-                 and attempt['status'] == 'completed' and protocol._context_observed(artifacts, attempt)]
+                 and attempt['status'] == 'completed' and protocol._context_observed(artifacts, attempt)
+                 and (not math_final or classify_final_capacity_attempt(records, artifacts, attempt) is None)]
     if (not completed or len(refused_ids) > notices.REFUSED_ATTEMPT_LIMIT
             or any(not protocol._context_observed(artifacts, attempt)
                    or not protocol.authenticate_attempt(records, artifacts, prior, attempt)
                    or diagnoses.get(attempt['id']) is None for attempt in completed)):
         raise ResearchError('review_refusal_replacement_ineligible', INELIGIBLE_REPLACEMENT_MSG)
+    position_binding = notices.PAGED_POSITION_BINDING if identify_paged_chain(prior) is not None else None
     if prior.get('session_chain'):
         from .review_session_v4 import prepare_refusal_assignment
-        return prepare_refusal_assignment(records, artifacts, value, revision, prior, packet, refused_ids, diagnoses)
-    if packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+        return prepare_refusal_assignment(records, artifacts, value, revision, prior, packet, refused_ids, diagnoses,
+                                          position_binding=position_binding)
+    protocols, recorded = review_parts.select_series_protocols(records, artifacts, value, head=prior)
+    if recorded and protocols[0] == 'exactory-review-parts-v3':
         from .review_parts_v3 import prepare_refusal_assignment
-        return prepare_refusal_assignment(records, artifacts, value, revision, prior, packet, refused_ids, diagnoses)
+        return prepare_refusal_assignment(records, artifacts, value, revision, prior, packet, refused_ids, diagnoses,
+                                          position_binding=position_binding)
     if is_v7:
         return v7.prepare_refusal_assignment(records, artifacts, value, revision, prior, packet,
-                                             refused_ids, diagnoses)
+                                             refused_ids, diagnoses, check_context=check_context)
     packet.pop(KEY, None)
     base_prompt = paragraphs.strip_prompt_paragraphs(prior['prompt'], prior['role'])
     parameters = paragraphs.read_paragraph_parameters(prior['prompt'])
@@ -347,7 +363,7 @@ def prepare_replacement(records, artifacts, value, revision):
 def validate_replacement_origin(records, artifacts, assignment, packet=None):
     """Verify every frozen entry, without a validator or a present-day refusal decision."""
     from . import review_protocol as protocol
-    from .review_failure_class import list_turn_assignments
+    from .review_failure_class import identify_paged_chain, list_failure_position_assignments, list_turn_assignments
     binding = assignment.get('context', {}).get(KEY)
     if binding is None:
         return
@@ -384,10 +400,20 @@ def validate_replacement_origin(records, artifacts, assignment, packet=None):
     entries = notice.get('refused', [])
     require(notice.get('protocol') == notices.PROTOCOL and notice.get('form') in ('whole', 'bounded')
             and isinstance(entries, list) and 1 <= len(entries) <= notices.REFUSED_ATTEMPT_LIMIT)
-    position = set(list_turn_assignments(records, prior))
-    certificates = sorted((certificate for certificate in records.get('review_output_refusal', {}).values()
-        if certificate['assignment_id'] in position and certificate['recorded_revision'] < origin['recorded_revision']),
-        key=lambda row: row['recorded_revision'])
+    def select_certificates(identifiers):
+        position = set(identifiers)
+        return sorted((certificate for certificate in records.get('review_output_refusal', {}).values()
+            if certificate['assignment_id'] in position
+            and certificate['recorded_revision'] < origin['recorded_revision']),
+            key=lambda row: row['recorded_revision'])
+
+    if 'position_binding' in notice:
+        require(notice['position_binding'] == notices.PAGED_POSITION_BINDING
+                and identify_paged_chain(prior) is not None)
+        identifiers = list_failure_position_assignments(records, artifacts, prior)
+    else:
+        identifiers = list_turn_assignments(records, prior)
+    certificates = select_certificates(identifiers)
     require([entry.get('attempt_id') for entry in entries] == [row['attempt_id'] for row in certificates])
     for entry, certificate in zip(entries, certificates):
         attempt = records.get('review_attempt', {}).get(entry['attempt_id'])

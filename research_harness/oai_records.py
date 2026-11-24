@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
 from .errors import ResearchError
-from .identities import normalize_identifier, version_of
+from .identities import IdentifierURLParseError, normalize_identifier, version_of
 from .providers import Page, _invalid, _iso_date, _string, _work
 
 OAI = "{http://www.openarchives.org/OAI/2.0/}"
@@ -132,6 +132,8 @@ def parse_record(node, response_date, parsed_response, *, request_identifier=Non
             if not alias.startswith("doi:"):
                 _invalid("doi")
             work["aliases"] = [alias]
+        except IdentifierURLParseError:
+            raise
         except ResearchError:
             page.warnings.append({"index": 0, "code": "invalid_alias", "id": exact, "raw": doi.strip()})
     return page

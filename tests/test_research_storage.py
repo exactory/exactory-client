@@ -35,9 +35,7 @@ def build_nested_value(levels, container=list):
 
 class ResearchStorageTests(unittest.TestCase):
     def test_store_with_a_reading_chain_keeps_its_history(self):
-        """N6 (C21): a store whose review assignment belongs to a reading chain keeps the history, so that a selection
-        reads each earlier chain at its start; assignments without a reading chain give none. On the base a store
-        without a selection of version 2 has no history."""
+        """C21 keeps the history for a chain or a v2 selection. The v2-only row loses its history on the base."""
         store = Store(self.workspace, create=True)
         self.add(store)
         before = store.snapshot()
@@ -63,6 +61,21 @@ class ResearchStorageTests(unittest.TestCase):
         self.assertEqual(current.read_snapshot(1)["work"]["paper"], {"title": "Original"})
         self.assertEqual(current.read_snapshot(2)["review_assignment"]["chain"], assignment)
 
+        other = Store(self.workspace / "v2", create=True)
+        self.add(other)
+        selection = {"recorded_revision": 2, "carried_selection": {
+            "protocol": "exactory-openness-carried-selection-v2"}}
+        other.mutate("assign", {}, lambda tx: tx.put("review_assignment", "chain", selection),
+                     expected_revision=1, request_id="assign")
+        legacy_records = other.snapshot()["records"]
+        self.assertTrue(hasattr(legacy_records, "read_snapshot"))
+        legacy_cutoff = legacy_records.read_snapshot(1)
+        self.assertEqual(legacy_cutoff["work"]["paper"], {"title": "Original"})
+        self.assertNotIn("review_assignment", legacy_cutoff)
+        self.assertEqual(records.read_creation_revision("review_assignment", "chain"), 2)
+        self.assertEqual(records.read_creation_revision("review_attempt", "attempt"), 2)
+        self.assertIsNone(cutoff.read_creation_revision("review_assignment", "chain"))
+
         legacy = {"carried_selection": {"protocol": "exactory-openness-carried-selection-v1"}}
         unrelated = {"reviewer_id": "reading_chain", "reading_chain": None}
         for index, assignments in enumerate(((legacy,), (unrelated,), (legacy, unrelated))):
@@ -73,6 +86,36 @@ class ResearchStorageTests(unittest.TestCase):
                         tx.put("review_assignment", str(ordinal), value)
                 other.mutate("assign", {}, assign_other, expected_revision=0, request_id="assign")
                 self.assertFalse(hasattr(other.snapshot()["records"], "read_snapshot"))
+
+    def test_pin_kinds_accepts_an_iterator(self):
+        """The base leaves the work at its revision-3 value after consuming the iterator."""
+        from research_harness import openness_reading, storage
+        store = Store(self.workspace, create=True)
+        self.add(store)
+        store.mutate("assign", {}, lambda tx: tx.put("review_assignment", "chain", {"reading_chain": {}}),
+                     expected_revision=1, request_id="assign")
+        self.add(store, title="Revised", revision=2, request="replace")
+        records = store.snapshot()["records"]
+        pinned = storage.pin_kinds(records, iter(openness_reading.READING_CONTENT_KINDS), 1)
+        self.assertEqual(pinned["work"]["paper"], {"title": "Original"})
+
+    def test_pinned_membership_and_length_read_only_the_index(self):
+        """A membership hit on the base decodes the row. Length also walks the sorted iterator."""
+        from research_harness import storage
+        store = Store(self.workspace, create=True)
+        self.add(store, managed=True)
+        self.add(store, key="aardvark", revision=1, request="add-earlier-key")
+        self.add(store, key="later", revision=2, request="add-later-key")
+        records = store.snapshot()["records"]
+        rows = storage.pin_kinds(records, ("work",), 2)["work"]
+        with mock.patch.object(storage._RecordHistory, "read_record",
+                               side_effect=AssertionError("Membership must use the index")):
+            self.assertNotIn("later", rows)
+            self.assertIn("paper", rows)
+        with mock.patch.object(storage._PinnedKind, "__iter__",
+                               side_effect=AssertionError("Length must count without sorting")):
+            self.assertEqual(len(rows), 2)
+        self.assertEqual(list(rows), ["aardvark", "paper"])
 
     def test_kind_overlays_preserve_historical_reads_across_snapshot_views(self):
         from research_harness import storage
@@ -518,6 +561,8 @@ class ResearchStorageTests(unittest.TestCase):
 
         with mock.patch.object(storage.json, "loads", count_load):
             snapshot = store.snapshot()
+        # The replay before the transaction keeps no decoded value, so the snapshot decodes each record text once,
+        # in its transaction, as release 0.92.0 does.
         self.assertEqual(counts, dict.fromkeys(encoded_records, 1))
         self.assertEqual(snapshot, {"revision": 1, "records": {
             "reading": {"note": {"read": True}},
@@ -982,7 +1027,8 @@ print("committed", flush=True)
 
         with mock.patch("research_harness.storage.os.stat", side_effect=stat_unlinked_journal):
             self.assertEqual(store.snapshot(), {"revision": 0, "records": {}})
-        self.assertEqual(reads, 2, "Each of the two checks reads the journal once")
+        # The replay before the read takes one transaction on an empty store, and the read takes its own.
+        self.assertEqual(reads, 4, "Each of the two checks of each transaction reads the journal once")
 
     def test_hot_journal_needs_explicit_recovery_and_preserves_committed_state(self):
         store = Store(self.workspace, create=True)

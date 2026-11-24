@@ -49,14 +49,14 @@ class PropertyChain:
             packet = stub.read_packet(message)
             stage, binding = stub.read_binding(packet)
             self.assertEqual(binding['protocol'], self.chain_protocol)
-            kind = stage if stage in ('reading', 'combine') else 'final'
+            kind = assignment['capacity_plan_kind']
             check = capacity.describe_plan_preflight(records, route, request, plan, kind)
             self.assertTrue(check['plan_comparison']['fits'], check['plan_comparison'])
             for name in ('text_characters', 'tokens_upper'):
                 row = check['plan_comparison']['sizes'][name]
                 self.assertIsNotNone(row['bound'], row)
                 self.assertLessEqual(row['value'], row['bound'], row)
-            limits = capacity.derive_plan_task_limits(plan, kind if kind in plan['task'] else 'final', [
+            limits = capacity.derive_plan_task_limits(plan, kind, [
                 dict(material_allowance=binding['capacity'].get('level_material_allowance',
                                                                binding['capacity']['material_allowance']))])
             self.assertLessEqual(binding['capacity']['material_allowance'], limits['material_allowance'])
@@ -294,16 +294,10 @@ class PropertyChain:
         return pages, plan
 
 
-class MathChain(PropertyChain, math_fixtures.MathV2Support):
+class MathChain(PropertyChain, math_fixtures.MathV2RequestSupport):
     chain_protocol = reading.MATH_PROTOCOL_V2
     capacity_probe_tokens = 487900
     floor_command = 'search review-packet'
-
-    def setUp(self):
-        super().setUp()
-        forms = patch.object(v7, 'MATH_V2_FINAL_FORMS', ('request', 'pages'))
-        forms.start()
-        self.addCleanup(forms.stop)
 
     def record_final(self, head, action):
         records = self.read_records()
@@ -321,6 +315,7 @@ class MathChain(PropertyChain, math_fixtures.MathV2Support):
                     | {row['search_digest'] for row in minimum['searches']}
                     | set(minimum['reading_digests']))
         self.assertLessEqual(required, set(finding['evidence']))
+        self.assertLessEqual(set(finding['evidence']), {row['digest'] for row in native['evidence']})
         if composite:
             self.assertEqual(output, review_composite.authenticate_composite(records, self.artifacts, composite))
         return output

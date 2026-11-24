@@ -22,6 +22,10 @@ from review_parts_fixtures import make_output
 
 class NativePartsTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import review_parts
+        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)

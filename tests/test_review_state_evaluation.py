@@ -137,6 +137,10 @@ class StateEvaluationBoundaryTests(unittest.TestCase):
 
 class NativePublicStateTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         import test_visual_bridge_origin as fixtures
         self.fixture = fixtures.VisualBridgeOriginTests()
         self.addCleanup(self.fixture.doCleanups)
@@ -173,6 +177,13 @@ class NativePublicStateTests(unittest.TestCase):
 
 
 class NativeEmitterProfileBoundaryTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_changed_emitter_bytes_invalidate_a_warm_native_visual_repair(self):
         import json
         import test_visual_context_repair as fixtures

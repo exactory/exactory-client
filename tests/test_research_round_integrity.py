@@ -1,5 +1,6 @@
 """Publication boundaries and blind measurements across development rounds."""
 
+from unittest.mock import patch
 import copy
 import json
 import unittest
@@ -14,6 +15,13 @@ from test_draft import _DepositTestCase, _draft
 
 
 class DepositRoundGateTests(_DepositTestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     prepare_stop = False
 
     def test_a_first_deposit_without_an_approved_stop_is_noted_and_deposited_directly(self):

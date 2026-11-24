@@ -18,6 +18,10 @@ class ProblemComputationTests(ProblemToolsCase):
     build_provider_response = review_fixtures.ProblemReviewTests.build_provider_response
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         # The place of a new value record rests on a full reading; the evidence of these values is computations.
         self.place_reading = self.record_full_reading()
@@ -207,6 +211,13 @@ class ProblemComputationTests(ProblemToolsCase):
 
 
 class ProblemFormalGateTests(ProblemToolsCase, ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def build_value(self, evidence, identifier="value-1"):
         return super().build_value(evidence, identifier, place_evidence=[self.full_reading])
 

@@ -663,12 +663,19 @@ class ClosedCallTests(StopQueueFixture):
 
 
 class CapturedStopTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_release_continues_the_same_chain_to_a_recorded_final(self):
         import test_review_continuation as continuations
         from research_harness import review_protocol as protocol, review_series, review_continuation
         fixture = continuations.ContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         store = fixture.case.store
         payload = dict(id='interrupted', assignment_id='bar-first')
         with patch.object(protocol, '_observed', side_effect=KeyboardInterrupt()):
@@ -778,13 +785,20 @@ class StopReceiptTests(StopQueueFixture):
 
 
 class StagedCaptureSettlementTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_acceptance_read_conflict_keeps_capture_retryable_without_a_refusal(self):
         import sys
         import test_review_staged_frontier as frontier
         import test_problem_post_review_terminal as posted
         fixture = frontier.FrontierTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         controller = fixture.create_controller()
         planned = fixture.command('review-assignment', dict(controller_assignment_id=controller['id']))
         with patch.object(worker, '_entry_command', return_value=[sys.executable, '-c', frontier.WORKER]), \
@@ -828,8 +842,8 @@ class StagedCaptureSettlementTests(unittest.TestCase):
         import test_problem_post_review_terminal as posted
         from research_harness import review_staged_protocol as producer
         fixture = frontier.FrontierTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         controller = fixture.create_controller()
         planned = fixture.command('review-assignment', dict(controller_assignment_id=controller['id']))
         payload = planned['next'][0]['payload']
@@ -866,8 +880,8 @@ class StagedCaptureSettlementTests(unittest.TestCase):
         import test_problem_post_review_terminal as posted
         from research_harness import review_staged_protocol as producer
         fixture = frontier.FrontierTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         controller = fixture.create_controller()
         planned = fixture.command('review-assignment', dict(controller_assignment_id=controller['id']))
         payload = planned['next'][0]['payload']
@@ -914,8 +928,8 @@ class StagedCaptureSettlementTests(unittest.TestCase):
         import test_review_staged_frontier as frontier
         import test_problem_post_review_terminal as posted
         fixture = frontier.FrontierTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         controller = fixture.create_controller()
         planned = fixture.command('review-assignment', dict(controller_assignment_id=controller['id']))
         with patch.object(worker, '_entry_command', return_value=[sys.executable, '-c', frontier.WORKER]), \
@@ -952,8 +966,8 @@ class StagedCaptureSettlementTests(unittest.TestCase):
         import test_problem_post_review_terminal as posted
         from research_harness import review_staged_protocol as producer
         fixture = frontier.FrontierTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         controller = fixture.create_controller()
         planned = fixture.command('review-assignment', dict(controller_assignment_id=controller['id']))
         def leave_capacity_held(store, reservation_id, process, request_id):
@@ -988,8 +1002,8 @@ class StagedCaptureSettlementTests(unittest.TestCase):
         import test_problem_post_review_terminal as posted
         from research_harness import review_staged_protocol as producer, review_protocol as protocol
         fixture = frontier.FrontierTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         controller = fixture.create_controller()
         planned = fixture.command('review-assignment', dict(controller_assignment_id=controller['id']))
         with patch.object(worker, '_entry_command', return_value=[sys.executable, '-c', frontier.WORKER]), \

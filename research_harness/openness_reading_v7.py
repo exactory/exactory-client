@@ -13,12 +13,14 @@ Packets bind the inventory and state artifacts by their SHA-256 instead of carry
 
 import copy
 import hashlib
+import io
 import json
 import math
+from contextlib import contextmanager
 from types import MappingProxyType
 
 from . import openness_reading as reading, review_excerpts
-from .artifacts import describe_artifact
+from .artifacts import ArtifactStore, _SEALED_DIRECTORY, _verify_content, describe_artifact, validate_reference
 from .errors import ResearchError, describe_error_at
 from .evidence import digest
 from .operations import JSON_TYPE_NAMES, describe_json_type
@@ -28,9 +30,9 @@ from . import review_route_capacity as capacity
 from .review_search_delivery import plan_search_delivery
 
 PROTOCOL = 'exactory-openness-reading-v7'
-V7_FINAL_FORMS = ('request',)
-# A math chain is new in its release, so both forms of its final are served from its first chain.
-MATH_V2_FINAL_FORMS = ('request', 'pages')
+V7_FINAL_FORMS = ('request', 'pages')
+# M1 of the math-v2-final-pages design admits a math v2 final only in one request.
+MATH_V2_FINAL_FORMS = ('request',)
 VISUAL_TEXT_ROUTE_CODE = 'review_visual_text_route_required'
 VISUAL_TEXT_ROUTE_MESSAGE = ('Protocol v7 delivers text units. Register and probe a text route of the same model, '
                              'then export, check and assign the reading there. Text turns on the visual transport '
@@ -38,6 +40,9 @@ VISUAL_TEXT_ROUTE_MESSAGE = ('Protocol v7 delivers text units. Register and prob
 VISUAL_TEXT_ROUTE_QUESTION = 'Which text route of this model should read the packet?'
 VISUAL_TEXT_ROUTE_ANSWER = 'Register and probe the text route of the same model.'
 LABEL_CHARACTERS = 120
+EVIDENCE_UNITS_CHARACTERS = 20000
+# A final with a pending delivery shortens its optional unread prefix by this room, so the delivery progresses.
+FINAL_DELIVERY_ROOM_CHARACTERS = 8000
 SELECTION_MISMATCH_MESSAGE = (
     'The carried selection of this chain does not verify. One of four cases is the cause. First, under '
     'exactory-openness-carried-selection-v2 or exactory-openness-carried-selection-v3, the stored selection is not '
@@ -121,8 +126,8 @@ UNAVAILABLE_CHAIN_TEXT = ('The earlier reading chain {chain} has the author and 
                           'no action for this chain.')
 SUPERSEDED_TEXT = ('Each superseded excerpt or passage answer of the chain {chain} quotes text that a later chain read '
                    'again (entries: {entries}, units that they quote: {units}). Such an entry stays in the records of '
-                   'its own chain. A chain of exactory-openness-reading-v7 carries the later reading of that text in '
-                   'its place. This needs no action.')
+                   'its own chain. The new chain carries the later reading of that text in its place. This needs no '
+                   'action.')
 FINAL_MATERIAL_FIELDS = ('notes', 'entries', 'gaps', 'material', 'sources', 'fill')
 TARGET_PAGE_SENTENCE = (
     ' The list of formulations, the statement record and the other fields of the native packet each '
@@ -149,21 +154,31 @@ FINAL_PAGES_STATEMENT = (
     'A chain of exactory-openness-reading-v7 takes its final in one request, and the task of a reading turn is not '
     'sized below the lowest material level of the stored plan. This release holds no smaller task than these: a '
     'final in several pages is not part of it.')
-FINAL_PAGE_FLOOR_STATEMENT = 'The smallest v7 final page needs its frame, notice reserve, minimum notes and one target at its minimum.'
+MATH_ONE_REQUEST_STATEMENT = (
+    'A chain of exactory-openness-reading-math-v2 takes its final in one request. A reading turn is not sized '
+    'below the lowest material level of the stored plan. This release holds no smaller task than these.')
+# The floor for a chain whose protocol offers pages or whose assignment has a stored page plan.
+FINAL_PAGE_FLOOR_STATEMENT = (
+    'These are the smallest tasks of a reading chain with a stored capacity plan. A reading turn is not sized below '
+    'the lowest material level of the plan. A final is taken in one request or in pages. A page of several targets '
+    'is divided down to one target, and a page of one target is not reduced when its entries are within the lowest '
+    'level of the final. A closing turn and a condensing turn are divided only into two blocks of at least 1,024 '
+    'characters of entries each, so no condensing turn has a smaller block, and a closing turn over one row is not '
+    'divided.')
 INVALID_READING_MESSAGE = (
-    'This answer is not the reading response of exactory-openness-reading-v7. Return exactly '
+    'This answer is not a reading response that this chain accepts. Return exactly '
     '{schema_version:2,stage:"reading",subject_digest,claim_digest,reviewer,notes,excerpts,gaps,passage_requests}, '
     'with the three bindings of the packet. notes is a nonblank string within allowances.notes, also as the request '
     'carries it. An excerpt is {unit,text,purpose,targets}, with text copied exactly from the content that this turn '
     'delivers for that unit, or {keep,targets} for a carried entry whose unit was delivered whole. A gap is '
     '{formulation,text}, with a target handle and 1 to 600 characters. passage_requests holds at most ten requests, '
     'each {id,unit,anchor,characters} or {id,kind:"list_page",list,after} with an id of 1 to 120 characters, within '
-    'the passage allowance and with the cursor of its list; in a final turn it holds at least one. path names the '
-    'member of the answer that failed, and details gives the values that the rule compared. For the notes, characters '
-    'is their length, notes_cost the characters that they take in the next request, and bound allowances.notes. For '
-    'a list page, rows 0 marks a list that holds no row, ended a list that has ended, and expected_after the cursor '
-    'that the list expects. For a passage, requested and remaining are the characters that the request takes and '
-    'that the passage allowance has left.')
+    'the passage allowance and with the cursor of its list; in a turn of a final it holds at least one. path names '
+    'the member of the answer that failed, and details gives the values that the rule compared. For the notes, '
+    'characters is their length, notes_cost the characters that they take in the next request, and bound '
+    'allowances.notes. For a list page, rows 0 marks a list that holds no row, ended a list that has ended, and '
+    'expected_after the cursor that the list expects. For a passage, requested and remaining are the characters '
+    'that the request takes and that the passage allowance has left.')
 NOTES_COST_TEXT = (
     ' The same bound holds for the size that the notes add to the next request, where escaping makes a quote, a '
     'backslash or a line break cost several characters.')
@@ -182,35 +197,138 @@ ADMISSION_STOP_MESSAGE = (
 ADMISSION_SMALLER_ANSWER = 'Record a statement with fewer neighbours'
 ADMISSION_ROUTE_ANSWER = 'Run the review on another route'
 ADMISSION_QUESTION = 'Whether this review runs over a statement with fewer neighbours, or on another route.'
+ADMISSION_ROUTE_QUESTION = 'Whether this review runs on another route.'
+
+
+# The names of the store under a planning view that a plan reads through the view. A plan reaches no other name of
+# that store, so no publication of the store runs from a plan.
+_PLANNING_READ_NAMES = frozenset(('require_external_effect', 'require_local_read', 'read_runtime_fingerprint',
+                                  'problem_objection_offline', '_open_source'))
 
 
 class _PlanningArtifacts:
-    """An invocation-local overlay makes admission pure, including derivative artifacts."""
-    def __init__(self, source):
+    """An invocation-local overlay makes admission pure, including derivative artifacts.
+
+    The view of a public plan (Evaluation.planning_view) stands for the store of the command: before it keeps the
+    bytes of an object, it checks the object that the store already holds at that address, as the writer does. An
+    overlay built inside an admission stands for an overlay of the command, so it keeps its bytes without that check.
+    Overlays under a plan's view count their bytes for that plan and carry its evaluation (planning_owner)."""
+    def __init__(self, source, *, accounting=None, checks_destinations=False):
+        from .evaluation import Evaluation
         self.source = source
         self.root = getattr(source, 'root', None)
         self.bodies = {}
+        self._planning_bytes = 0
+        self._checks_destinations = checks_destinations
+        parent = source.store if isinstance(source, Evaluation) else source
+        if accounting is None and isinstance(parent, _PlanningArtifacts):
+            accounting = parent._planning_accounting
+        self._planning_accounting = accounting
+        self.planning_owner = None
+        if accounting is not None:
+            accounting['overlays'].add(self)
+            self.planning_owner = source if isinstance(source, Evaluation) else parent.planning_owner
 
-    def read(self, reference):
+    def __getattr__(self, name):
+        if name not in _PLANNING_READ_NAMES:
+            raise AttributeError(name)
+        return getattr(self._find_backing_store(), name)
+
+    def _find_backing_store(self):
+        from .evaluation import Evaluation
+        source = object.__getattribute__(self, 'source')
+        return source.store if isinstance(source, Evaluation) else source
+
+    def read(self, ref):
+        validate_reference(ref)
+        content = self.bodies.get(ref['sha256'])
+        return self.source.read(ref) if content is None else _verify_content(content, ref)
+
+    def _verify_backing(self, reference, method='verify'):
+        source = self._find_backing_store()
+        verify = getattr(source, method, None)
+        if verify is not None:
+            return verify(reference)
+        if source is not None:
+            try:
+                return _verify_content(source.read(reference), reference)
+            except KeyError as error:
+                if error.args != (reference['sha256'],):
+                    raise
+        raise ResearchError('artifact_missing', 'Artifact has not been stored', dict(path=reference['path']))
+
+    def verify(self, reference):
+        validate_reference(reference)
+        if reference['sha256'] in self.bodies:
+            _verify_content(self.bodies[reference['sha256']], reference)
+        else:
+            self._verify_backing(reference)
+
+    @contextmanager
+    def open_verified(self, reference):
+        from .file_streams import FrozenFile
+        validate_reference(reference)
         content = self.bodies.get(reference['sha256'])
-        return self.source.read(reference) if content is None else content
+        if content is None:
+            with self._find_backing_store().open_verified(reference) as frozen:
+                yield frozen
+        else:
+            _verify_content(content, reference)
+            with io.BytesIO(content) as stream:
+                yield FrozenFile(stream, len(content), reference['sha256'], hashlib.md5(content).hexdigest())
 
-    def require_local_read(self, purpose):
-        from .evaluation import Evaluation
-        source = self.source.store if isinstance(self.source, Evaluation) else self.source
-        source.require_local_read(purpose)
+    def materialize_verified(self, reference, directory):
+        validate_reference(reference)
+        if reference['sha256'] in self.bodies:
+            return ArtifactStore.materialize_verified(self, reference, directory)
+        return self._find_backing_store().materialize_verified(reference, directory)
 
-    def read_runtime_fingerprint(self, route):
-        """The installed runtime of a route, as the artifacts under this overlay read it: a check of the
-        standing of a route record inside a planned admission reads it here (review_protocol.is_route_stale)."""
-        from .evaluation import Evaluation
-        source = self.source.store if isinstance(self.source, Evaluation) else self.source
-        return source.read_runtime_fingerprint(route)
+    def put(self, data, media_type):
+        reference = describe_artifact(data, media_type)
+        return self._put_prospective(data, reference, reference['sha256'])
 
-    def put(self, content, media_type):
-        reference = describe_artifact(content, media_type)
-        self.bodies[reference['sha256']] = content
+    def put_sealed(self, data, media_type):
+        reference = describe_artifact(data, media_type)
+        reference['path'] = _SEALED_DIRECTORY + '/' + reference['sha256']
+        return self._put_prospective(data, reference, reference['path'], verify='verify_sealed')
+
+    def verify_sealed(self, ref):
+        validate_reference(ref, sealed=True)
+        if ref['path'] in self.bodies:
+            _verify_content(self.bodies[ref['path']], ref)
+        else:
+            self._verify_backing(ref, 'verify_sealed')
+
+    def stage_bodies(self, bodies):
+        """Keep built bodies, each under the SHA-256 of its bytes, counted as a put counts them."""
+        for key, content in bodies.items():
+            self._keep_body(key, content)
+
+    def _put_prospective(self, content, reference, key, *, verify='verify'):
+        if self._checks_destinations:
+            try:
+                self._verify_backing(reference, verify)
+            except ResearchError as error:
+                if error.code != 'artifact_missing':
+                    raise
+            else:
+                return reference
+        self._keep_body(key, content)
         return reference
+
+    def _keep_body(self, key, content):
+        if key in self.bodies:
+            return
+        self.bodies[key] = content
+        self._planning_bytes += len(content)
+        accounting = self._planning_accounting
+        if accounting is not None:
+            live_bytes = sum(view._planning_bytes for view in accounting['overlays'])
+            accounting['peak_bytes'] = max(accounting['peak_bytes'], live_bytes)
+
+    def clear(self):
+        self._planning_bytes = 0
+        self.bodies.clear()
 
 
 def derive_inherited_ratio(records, artifacts, native, route):
@@ -338,17 +456,25 @@ def build_unread_set(records, artifacts, assignment, inventory, state, *, positi
         for index, attempt in enumerate(attempts)])
 
 
+def read_unread_value(artifacts, state):
+    if 'unread' in state:
+        return json.loads(artifacts.read(state['unread']['artifact']))
+    return None
+
+
 def _supply_unread_rows(plan, state, artifacts):
-    return json.loads(artifacts.read(state['unread']['artifact']))['rows'] if 'unread' in state else []
+    value = read_unread_value(artifacts, state)
+    return value['rows'] if value is not None else []
 
 
 def _supply_unread_attempts(plan, state, artifacts):
-    return json.loads(artifacts.read(state['unread']['artifact']))['attempts'] if 'unread' in state else []
+    value = read_unread_value(artifacts, state)
+    return value['attempts'] if value is not None else []
 
 
-def describe_unread_packet(artifacts, state, *, route=None, allowance=None):
+def describe_unread_packet(artifacts, state, *, route=None, allowance=None, unread_value=None):
     """Keep the complete member, including its prefix and counters, within 30,000 characters."""
-    value = json.loads(artifacts.read(state['unread']['artifact']))
+    value = unread_value if unread_value is not None else read_unread_value(artifacts, state)
     result = dict(handle='x1', artifact=state['unread']['artifact'], digest=state['unread']['digest'],
         causes={cause: dict(rows=sum(row['cause'] == cause for row in value['rows']),
             characters=sum(row['characters'] for row in value['rows'] if row['cause'] == cause))
@@ -404,7 +530,9 @@ def prepare_unread_assignment(records, artifacts, value, route, logical):
     prior = records.get('review_assignment', {}).get(identifier)
     if prior is None or find_replacement(records, prior) is not None:
         raise ResearchError('invalid_review_context', UNREAD_FINAL_MESSAGE)
-    require_verified_context(records, artifacts, prior)
+    require_current_units(records, artifacts, prior)
+    require_verified_carried_turns(records, artifacts, prior)
+    require_verified_context(records, artifacts, prior, route_id=route['id'], replacing=True)
     action = plan_after_failure(records, artifacts, identifier)
     expected = action.get('payload', {})
     if (action['state'] != 'replace' or action.get('details', {}).get('reason') != 'unread'
@@ -447,6 +575,11 @@ def list_required_affected_notes(plan, selection):
     the current level never change it. Even an oversized first note is required.
     """
     rows = selection.get('affected_notes', [])
+    count = _count_required_affected_notes(plan, rows)
+    return dict(required=copy.deepcopy(rows[:count]), on_request=copy.deepcopy(rows[count:]))
+
+
+def _count_required_affected_notes(plan, rows):
     allowance = plan['task']['reading']['material_allowance']
     used, count = 0, 0
     for row in rows:
@@ -456,17 +589,19 @@ def list_required_affected_notes(plan, selection):
         count += 1
         if used > allowance:
             break
-    return dict(required=copy.deepcopy(rows[:count]), on_request=copy.deepcopy(rows[count:]))
+    return count
 
 
-def _supply_affected_note_rows(plan, state, artifacts):
-    rows = list_required_affected_notes(plan, state)['on_request']
+def _supply_affected_note_rows(plan, state, artifacts, *, required_count=None):
+    rows = state.get('affected_notes', [])
+    if required_count is None:
+        required_count = _count_required_affected_notes(plan, rows)
     return [dict(id=row['handle'], handle=row['handle'], chain=row['origin']['chain'],
-                 characters=row['characters']) for row in rows]
+                 characters=row['characters']) for row in rows[required_count:]]
 
 
-def _describe_affected_note_index(plan, state):
-    rows = _supply_affected_note_rows(plan, state, None)
+def _describe_affected_note_index(plan, state, *, required_count=None):
+    rows = _supply_affected_note_rows(plan, state, None, required_count=required_count)
     result = dict(rows=[], omitted=len(rows))
     for row in rows:
         candidate = dict(rows=result['rows'] + [{key: row[key] for key in
@@ -500,6 +635,50 @@ LIST_PAGE_SUPPLIERS = {
     'allowances': dict(supply=_supply_allowance_rows, row_characters=512, fixed_at='first_assignment'),
     'affected_notes': dict(supply=_supply_affected_note_rows, row_characters=512, fixed_at='first_assignment'),
 }
+UNREAD_LIST_FIELDS = MappingProxyType(dict(unread='rows', unread_attempts='attempts'))
+
+
+def _build_notes_measurement_route(plan):
+    """Reconstruct the route used to price notes from the chain's pinned route class."""
+    route_class = plan['route_class']
+    return dict(adapter=route_class['adapter'], model=route_class['model'], endpoint='',
+        configuration=dict(max_output_tokens=plan['limits']['output_tokens']['value'], effort=route_class['effort']))
+
+
+def _measure_notes_cost(route, notes):
+    if notes is None:
+        return 0
+    return capacity.measure_capacity_value(route, notes) - capacity.measure_capacity_value(route, '')
+
+
+def _advance_list_cursors(cursors, deliveries):
+    for delivery in deliveries:
+        if delivery['kind'] == 'list_page':
+            page = delivery['page']
+            cursors[page['list']] = dict(next=page['next'], ended=page['next'] is None)
+
+
+def append_turn_members(binding, plan, kind, state, artifacts, *, unread_value=None, required_count=None):
+    """Describe the notes and fixed lists of a finished binding when the chain reserved room for them."""
+    fields = plan['frame'][kind]['fields']
+    if 'notes_cost' in fields:
+        route = _build_notes_measurement_route(plan)
+        binding['notes_cost'] = dict(used=_measure_notes_cost(route, binding.get('notes')),
+            quote=_measure_notes_cost(route, '"'), backslash=_measure_notes_cost(route, '\\'),
+            line_break=_measure_notes_cost(route, '\n'))
+    if 'lists' in fields:
+        cursors = dict(state.get('list_pages', {}))
+        _advance_list_cursors(cursors, binding.get('plan', {}).get('now', []))
+        if unread_value is None and any(not cursors.get(name, {}).get('ended') for name in UNREAD_LIST_FIELDS):
+            unread_value = read_unread_value(artifacts, state)
+        affected = state.get('affected_notes', [])
+        if required_count is None:
+            required_count = _count_required_affected_notes(plan, affected)
+        counts = {name: len(unread_value[field]) if unread_value is not None else 0
+                  for name, field in UNREAD_LIST_FIELDS.items()}
+        counts.update(allowances=len(plan['targets']['handles']), affected_notes=len(affected) - required_count)
+        binding['lists'] = [dict(list=name, rows=counts[name], after=cursors.get(name, {}).get('next'))
+                            for name in LIST_PAGE_SUPPLIERS if counts[name] and not cursors.get(name, {}).get('ended')]
 
 
 def _require_reading(condition, **details):
@@ -540,9 +719,10 @@ def _require_targets(value, targets, path):
         named.add(target)
 
 
-def build_list_page(name, after, plan, state, route, material_allowance, *, artifacts=None):
+def build_list_page(name, after, plan, state, route, material_allowance, *, artifacts=None, measure_page=None,
+                    unread_value=None):
     """Page the whole fixed list, independently of the packet's usage-sorted view."""
-    rows = _validate_list_cursor(name, after, plan, state, artifacts=artifacts)
+    rows = _validate_list_cursor(name, after, plan, state, artifacts=artifacts, unread_value=unread_value)
     supplier = find_list_supplier(name, state)
     declared = supplier.get('row_characters')
     if (type(declared) is not int or not 0 < declared <= LIST_ROW_CHARACTERS
@@ -555,6 +735,38 @@ def build_list_page(name, after, plan, state, route, material_allowance, *, arti
     _require_reading(after is None or after in ids, list=name, after=after)
     start = 0 if after is None else ids.index(after) + 1
     _require_reading(start < len(rows), list=name, after=after)
+    if measure_page is not None:
+        # A number has neither the quotes of a cursor nor the four
+        # characters of null. This lower bound grows with the rows even at
+        # the terminal prefix, where the actual cursor can get cheaper.
+        def fits_lower_bound(length):
+            minimum = dict(list=name, after=after, rows=rows[start:start + length], next=0, remaining=0)
+            return measure_page(minimum) <= material_allowance
+
+        available = len(rows) - start
+        low, high = 0, 1
+        while high < available and fits_lower_bound(high):
+            low, high = high, min(2 * high, available)
+        while low < high:
+            length = (low + high + 1) // 2
+            if fits_lower_bound(length):
+                low = length
+            else:
+                high = length - 1
+        selected = None
+        for count in range(start + low, start, -1):
+            page = dict(list=name, after=after, rows=rows[start:count],
+                        next=ids[count - 1] if count < len(rows) else None, remaining=len(rows) - count)
+            if measure_page(page) <= material_allowance:
+                selected = page
+                break
+        reached = len(selected['rows']) + 1 if selected is not None else 1
+        for row in rows[start:start + reached]:
+            size = len(serialize_record(row).decode('utf-8'))
+            if size > declared:
+                raise ResearchError('review_route_capacity_plan_violated', capacity.PLAN_VIOLATED_MESSAGE,
+                                    dict(list=name, row=row['id'], characters=size, bound=declared))
+        return selected
     selected = []
     for row in rows[start:]:
         size = len(serialize_record(row).decode('utf-8'))
@@ -575,7 +787,7 @@ def build_list_page(name, after, plan, state, route, material_allowance, *, arti
                 next=selected[-1]['id'] if count < len(rows) else None, remaining=len(rows) - count)
 
 
-def _validate_list_cursor(name, after, plan, state, *, artifacts=None, path=None):
+def _validate_list_cursor(name, after, plan, state, *, artifacts=None, path=None, unread_value=None):
     """Check the cursor of a list. path is the JSON Pointer of the request when an answer is checked."""
     def locate(member):
         return {} if path is None else dict(path=path + member)
@@ -587,7 +799,8 @@ def _validate_list_cursor(name, after, plan, state, *, artifacts=None, path=None
     _require_reading((previous is None and after is None) or
                      previous is not None and not previous['ended'] and after == previous['next'],
                      list=name, after=after, **expected, **locate('/after'))
-    rows = supplier['supply'](plan, state, artifacts)
+    rows = (unread_value[UNREAD_LIST_FIELDS[name]] if unread_value is not None and name in UNREAD_LIST_FIELDS
+            else supplier['supply'](plan, state, artifacts))
     _require_reading(bool(rows), list=name, after=after, rows=0, **locate('/list'))
     return rows
 
@@ -644,11 +857,20 @@ def measure_finding_index_frame(route, finding_index, inventory, stated_characte
     return measure_finding_descriptor(route)
 
 
+def measure_evidence_units_frame(route, inventory, native):
+    """Reserve one row per distinct native digest, with the widest omission counter."""
+    units = list_math_citation_units(inventory['units'], native)
+    rows = [describe_citation_row(unit, False) for unit in units]
+    return min(EVIDENCE_UNITS_CHARACTERS, capacity.measure_capacity_value(
+        route, dict(count=len(rows), omitted=len(rows), rows=rows)))
+
+
 def measure_turn_frames(route, native, *, fixed_bounds=None, finding_index=None, inventory=None):
     """Measure each fixed field independently; growing bodies are inventory units.
 
     A finding index needs fixed_bounds['finding_index'] and the inventory whose bodies its references name.
     """
+    from .review_prompt_paragraphs import LIST_ROWS_PROMPT, NOTES_COST_PROMPT
     from .review_protocol import canonical_prompt
     labels = list_target_labels(native)
     fixed_bounds = fixed_bounds or dict(statement=100000, formulations=TARGET_LABELS_CHARACTERS, native_frame=100000,
@@ -666,6 +888,12 @@ def measure_turn_frames(route, native, *, fixed_bounds=None, finding_index=None,
         formulations=labels if capacity.measure_capacity_value(route, labels) <= fixed_bounds['formulations']
         else dict(first='t1', last='t%d' % len(labels), count=len(labels)),
         minimum=minimum)
+    turn_member_fields = dict(
+        notes_cost=capacity.measure_capacity_value(route, dict(used=999999999, quote=9, backslash=9, line_break=9))
+        + len(NOTES_COST_PROMPT),
+        lists=capacity.measure_capacity_value(route, [dict(list=name, rows=999999999,
+            after='x' * reading.RESERVED_IDENTIFIER_CHARACTERS) for name in LIST_PAGE_SUPPLIERS])
+        + len(LIST_ROWS_PROMPT))
     result = {}
     for kind in ('reading', 'final'):
         fields = {key: capacity.measure_capacity_value(route, value) for key, value in fixed.items()}
@@ -684,6 +912,8 @@ def measure_turn_frames(route, native, *, fixed_bounds=None, finding_index=None,
                 else dict(count=len(native['scientific_context'].get('decisive_work_ids', [])), unit='u999999999'))
             for key, value in description['final_minimum_bounds'].items():
                 fields['minimum.' + key] = capacity.measure_capacity_value(route, {key: value})
+            if description['id'] == reading.MATH_PROTOCOL_V2 and inventory is not None:
+                fields['evidence_units'] = measure_evidence_units_frame(route, inventory, native)
             if finding_index is not None:
                 fields['finding_index'] = measure_finding_index_frame(route, finding_index, inventory,
                     fixed_bounds['finding_index'], 'pages' in description['list_final_forms']())
@@ -699,7 +929,7 @@ def measure_turn_frames(route, native, *, fixed_bounds=None, finding_index=None,
                 fields['finding_units'] = FINDING_UNITS_CHARACTERS
         # Bound envelope keys, capacity/allowance scalars, handles and counters;
         # evidence rows and plan.now are charged as material with their text.
-        fields.update(envelope=3000, instructions=len(canonical_prompt(
+        fields.update(turn_member_fields, envelope=3000, instructions=len(canonical_prompt(
             'native_math', reading_stage=kind, reading_protocol=description['id'],
             finding_version=2 if finding_index is not None else 1)['text']))
         result[kind] = fields
@@ -801,7 +1031,7 @@ def _check_v7_admission(records, artifacts, route, native, *, include_largest, f
     try:
         while True:
             built = prepare_inventory(original, native, route, fixed_bounds=fixed_bounds, finding_index=finding_index)
-            overlay.bodies.update(built['bodies'])
+            overlay.stage_bodies(built['bodies'])
             inventory = built['inventory']
             # No source row is retained before an own excerpt exists. Each
             # excerpt's cost includes its bounded source row when it is kept.
@@ -854,6 +1084,11 @@ def _check_v7_admission(records, artifacts, route, native, *, include_largest, f
         return dict(state='stop', protocol=chain_protocol, reason='below_floor', code=error.code,
                     details=error.details, measure=measure, targets=len(targets), largest_one_request_targets=largest)
     final = plan['task']['final']
+    if chain_protocol == reading.MATH_PROTOCOL_V2 and 'pages' not in final_forms:
+        shortage = describe_math_citation_shortage(route, inventory, native, plan)
+        if shortage is not None:
+            return dict(state='stop', protocol=chain_protocol, reason='required_citations_over_bound',
+                        largest_one_request_targets=0, details=shortage)
     room = min(plan['allocation']['page_room'], final['material_allowance'])
     pages = capacity.count_capacity_final_turns(room, [dict(handle=row['handle'], allowance=row['allowance'])
         for row in plan['allocation']['targets']], plan['allocation']['notes'], final['target_allowance'])['pages']
@@ -958,14 +1193,15 @@ def has_binary_native_evidence(records, artifacts, native):
     return False
 
 
-def build_inventory(records, artifacts, native, *, review=None):
+def build_inventory(records, artifacts, native, *, review=None, rows=None):
     """Read v6 logical units with the common capture derivation, plus the v7 minimum/gap/notice units (D3 I2).
 
     Pass review for an earlier unbound packet: list_reading_rows delegates to bind_packet_selections with its
     authenticated stored plans. No second capture-selection algorithm lives here.
     """
     description = describe_protocol(native=native)
-    rows = reading.list_reading_rows(records, artifacts, native, review=review)
+    if rows is None:
+        rows = reading.list_reading_rows(records, artifacts, native, review=review)
     context = native['scientific_context']
     included = {row['artifact']['sha256'] for row in rows}
     for row in description['list_evidence'](records, native):
@@ -1433,12 +1669,17 @@ def resolve_request_part(inventory, artifacts, request, state=None):
     return None
 
 
-def _pack_deliveries(artifacts, route, inventory, state, allowance, requests, *, include_remaining=True):
+def _pack_deliveries(artifacts, route, inventory, state, allowance, requests, *, include_remaining=True,
+                     unread_value=None, required_count=None):
     now, evidence, pages = [], [], []
     remaining = _find_remaining_ranges(inventory, state) if include_remaining else []
-    required = {row['handle'] for row in list_required_affected_notes(state['_plan'], state)['required']}
-    if any(body['handle'] in required for body, _, _ in remaining):
-        requests = ()
+    if remaining and requests:
+        affected = state.get('affected_notes', [])
+        if required_count is None:
+            required_count = _count_required_affected_notes(state['_plan'], affected)
+        required = {row['handle'] for row in affected[:required_count]}
+        if any(body['handle'] in required for body, _, _ in remaining):
+            requests = ()
     requested_ranges = []
     passage_room = max(0, state['allowances']['passages']['characters'] - state['allowances']['passages']['used'])
     for request in requests:
@@ -1448,7 +1689,8 @@ def _pack_deliveries(artifacts, route, inventory, state, allowance, requests, *,
             # A row can double when escaped into the page's JSON-string body.
             if room < 4000 + 2 * find_list_supplier(request['list'], state)['row_characters']:
                 break
-            page = build_list_page(request['list'], request['after'], plan, state, route, room - 2000, artifacts=artifacts)
+            page = build_list_page(request['list'], request['after'], plan, state, route, room - 2000,
+                                   artifacts=artifacts, unread_value=unread_value)
             content = serialize_record(page).decode('utf-8')
             body = dict(handle='list:' + request['list'], kind='list_page', label=request['list'],
                         artifact=describe_artifact(content.encode('utf-8'), 'application/json'))
@@ -1501,7 +1743,7 @@ def _pack_deliveries(artifacts, route, inventory, state, allowance, requests, *,
 
 
 def build_turn_packet(artifacts, route, logical, chain, number, inventory, state, plan, limits, kind,
-                      *, requests=(), notice=None, finding_version=None):
+                      *, requests=(), notice=None, finding_version=None, include_turn_members=True):
     """Render a bounded v7 turn from its pinned artifacts and current allowance.
 
     A final holds the finding index exactly when the plan of its chain froze one (G8.8), in the form that the stated
@@ -1519,12 +1761,15 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
                    capacity=bounds)
     binding['notes_handle'] = next(('n%d' % row['turn'] for row in reversed(state['notes'])
                                   if row['classification'] == 'current'), None)
+    unread_value = required_count = None
     if kind == 'reading':
-        optional_notes = list_required_affected_notes(plan, state)['on_request']
+        affected = state.get('affected_notes', [])
+        required_count = _count_required_affected_notes(plan, affected)
+        optional_notes = affected[required_count:]
         binding['affected_notes'] = dict(notes=len(optional_notes),
             characters=sum(row['characters'] for row in optional_notes))
         if number == 1:
-            binding['affected_notes']['index'] = _describe_affected_note_index(plan, state)
+            binding['affected_notes']['index'] = _describe_affected_note_index(plan, state, required_count=required_count)
         if 'finding_units' in inventory:
             binding['finding_units'] = len(inventory['finding_units'])
         labels = list_target_labels(native)
@@ -1534,7 +1779,7 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
         binding['statement'] = (native.get('subject', {}) if
             capacity.measure_capacity_value(route, native.get('subject', {})) <= fixed_bounds['statement'] else dict(unit='statement'))
         now, evidence, _ = _pack_deliveries(artifacts, route, inventory, dict(state, _plan=plan),
-                                          limits['material_allowance'], requests)
+                                          limits['material_allowance'], requests, required_count=required_count)
         remaining = _find_remaining_ranges(inventory, state)
         binding['plan'] = dict(now=now, delivered=dict(units=len(state['deliveries']),
             characters=sum(row['end'] - row['start'] for row in state['deliveries'])),
@@ -1558,6 +1803,14 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
         rendered = describe_protocol(native=native)['render_final_context'](route, native, inventory)
         frame.update(rendered['frame'])
         binding['minimum'].update(rendered['minimum'])
+        final_fields = plan['frame']['final']['fields']
+        if 'evidence_units' in final_fields:
+            minimum = context['openness_minimum']
+            binding['minimum'].update(unit=next(row['handle'] for row in inventory['units']
+                if row['identity'].get('record_kind') == 'openness_minimum'),
+                searched_through=find_math_searched_through(artifacts, minimum, inventory))
+            binding['evidence_units'] = describe_evidence_units(route, inventory, state, native,
+                                                                final_fields['evidence_units'])
         for key in ('evidence', 'execution_provenance', 'unmaterialized_digests'):
             if key in native:
                 frame[key] = dict(count=len(native[key]))
@@ -1584,14 +1837,15 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
             for handle in dict.fromkeys(row['unit'] for row in binding['entries'])]
         material = {key: binding[key] for key in FINAL_MATERIAL_FIELDS}
         unread_cost, extra_room = 0, 0
-        if 'unread' in state:
+        if 'unread' in state and include_turn_members:
             # The required unread metadata is in the frame. Its rows and pages
             # share the remaining material room and the unused notice reserve.
             notice_cost = capacity.measure_capacity_value(route, notice) if notice else 0
             extra_room = plan['task']['final']['notice_characters'] - notice_cost
             room = limits['material_allowance'] + extra_room - _measure_final_material(route, material)
+            unread_value = read_unread_value(artifacts, state)
             binding['unread'] = describe_unread_packet(artifacts, state, route=route,
-                allowance=room - (8000 if requests else 0))
+                allowance=room - (FINAL_DELIVERY_ROOM_CHARACTERS if requests else 0), unread_value=unread_value)
             unread_cost = compute_unread_rows_charge(route, binding['unread'])
         used = _measure_final_material(route, material) + unread_cost
         for note in (reversed(state['notes'][:-1]) if not requests else ()):
@@ -1609,11 +1863,15 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
         if requests:
             now, evidence, _ = _pack_deliveries(artifacts, route, inventory, dict(state, _plan=plan),
                 max(0, limits['material_allowance'] + extra_room - unread_cost - _measure_final_material(route,
-                    {key: binding[key] for key in FINAL_MATERIAL_FIELDS})), requests, include_remaining=False)
+                    {key: binding[key] for key in FINAL_MATERIAL_FIELDS})), requests, include_remaining=False,
+                unread_value=unread_value)
             binding['plan'] = dict(now=now)
         packet.update(native=frame, reading_final=binding, evidence=evidence)
         if finding_index is not None:
             packet['finding_index'] = fit_packet_finding_index(route, inventory, finding_index)
+    if include_turn_members:
+        append_turn_members(binding, plan, kind, state, artifacts, unread_value=unread_value,
+                            required_count=required_count)
     packet['digest'] = digest(packet)
     return packet
 
@@ -1635,7 +1893,7 @@ def _measure_final_material(route, material):
 
 def _reserve_initial_notes(route, plan, text):
     """Reserve legacy current notes at their actual serialized cost before sizing own turns."""
-    cost = capacity.measure_capacity_value(route, text) - capacity.measure_capacity_value(route, '')
+    cost = _measure_notes_cost(route, text)
     extra = max(0, cost - plan['allocation']['notes'])
     if not extra:
         return
@@ -1719,9 +1977,12 @@ def _describe_carried_identity(records, value, route, native):
     minimum = native['scientific_context']['openness_minimum']
     revision = value.get('recorded_revision')
     if revision is None:
-        # One pass over every record, made only for a value that holds no stamp.
-        revision = 1 + max((row.get('recorded_revision', 0) for group in records.values() for row in group.values()),
-                           default=0)
+        read_revision = getattr(records, 'read_revision', None)
+        if read_revision is not None:
+            revision = read_revision() + 1
+        else:
+            revision = 1 + max((row.get('recorded_revision', 0) for group in records.values() for row in group.values()),
+                               default=0)
     return dict(**describe_protocol(native=native)['carried_identity'],
         reviewer_id=value['reviewer_id'], author_id=value['author_id'], route=route,
         subject_digest=native['subject_digest'], claim_digest=native['claim_digest'],
@@ -1783,7 +2044,7 @@ def read_carried_inventory(artifacts, first):
     return inventory
 
 
-def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
+def validate_turn_output(packet, output, *, artifacts=None, assignment=None, expanded=False, records=None):
     """Validate the response once; retention charges are applied by projection."""
     binding = packet.get('reading_turn', packet.get('reading_final', packet.get('reading_combine')))
     _require_type(output, dict, '')
@@ -1809,13 +2070,17 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
         from . import review_composition
         from .native_review import find_finding_version
         from .openness_final_pages import build_validation_envelope
+        expanded_output = output
+        if not expanded:
+            from .review_handles import expand_handles
+            expanded_output = expand_handles(packet, output, artifacts=artifacts, assignment=assignment, raw=True)
         envelope = build_validation_envelope(artifacts, assignment, packet)
         rule = review_composition.find_rule('native_math', envelope)
         if 'closing' in binding:
-            review_composition.validate_closing_output(rule, envelope, binding['closing']['rows'], output,
+            review_composition.validate_closing_output(rule, envelope, binding['closing']['rows'], expanded_output,
                 finding_version=find_finding_version(assignment))
         else:
-            review_composition.validate_page_output(rule, envelope, binding['page']['targets'], output,
+            review_composition.validate_page_output(rule, envelope, binding['page']['targets'], expanded_output,
                 finding_version=find_finding_version(assignment))
         return
     if output.get('stage') != 'reading' and 'reading_final' in packet:
@@ -1823,7 +2088,10 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
         packet = dict(packet, native=json.loads(artifacts.read(assignment['context']['native_packet'])))
         if 'finding_index' in packet:
             packet['finding_index'] = capacity.read_chain_capacity_plan(artifacts, assignment)['finding_index']
-        describe_protocol(packet=packet)['validate_final'](packet, output, artifacts=artifacts, assignment=assignment)
+        if binding['protocol'] == reading.MATH_PROTOCOL_V2:
+            _validate_math_final(packet, output, artifacts=artifacts, assignment=assignment, records=records)
+        else:
+            describe_protocol(packet=packet)['validate_final'](packet, output, artifacts=artifacts, assignment=assignment)
         return
     required = {'schema_version', 'stage', 'subject_digest', 'claim_digest', 'reviewer',
                 'notes', 'excerpts', 'gaps', 'passage_requests'}
@@ -1842,10 +2110,7 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
     measured = dict(characters=len(notes), bound=bound)
     if artifacts is not None:
         plan = capacity.read_chain_capacity_plan(artifacts, assignment)
-        # This route is used only to price serialized notes, never to admit or send a request.
-        route = dict(adapter=plan['route_class']['adapter'], model=plan['route_class']['model'], endpoint='',
-            configuration=dict(max_output_tokens=plan['limits']['output_tokens']['value'], effort=plan['route_class']['effort']))
-        measured['notes_cost'] = capacity.measure_capacity_value(route, notes) - capacity.measure_capacity_value(route, '')
+        measured['notes_cost'] = _measure_notes_cost(_build_notes_measurement_route(plan), notes)
     _require_reading(max(measured['characters'], measured.get('notes_cost', 0)) <= bound, path='/notes', **measured)
     _require_type(output['excerpts'], list, '/excerpts')
     _require_type(output['gaps'], list, '/gaps')
@@ -1897,13 +2162,9 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
     bound_state = None
     if requests and artifacts is not None:
         plan, inventory, bound_state = read_bound_state(artifacts, assignment, packet)
-        bound_state = copy.deepcopy(bound_state)
+        bound_state = dict(bound_state, list_pages=dict(bound_state.get('list_pages', {})))
         current = binding.get('plan', {}).get('now', [])
-        for delivery in current:
-            if delivery['kind'] == 'list_page':
-                page = delivery['page']
-                bound_state.setdefault('list_pages', {})[page['list']] = dict(
-                    next=page['next'], ended=page['next'] is None)
+        _advance_list_cursors(bound_state['list_pages'], current)
         passage_left = (bound_state['allowances']['passages']['characters'] - bound_state['allowances']['passages']['used']
                         - sum(row['characters'] for row in current if row.get('request') and row['kind'] != 'list_page'))
         pending = {row['id']: max(0, row.get('characters', 0) - row.get('offset', 0))
@@ -2156,29 +2417,115 @@ def build_handle_packet(packet, artifacts, assignment):
     resolved = dict(packet, handle_table=table, capacity=binding['capacity'],
                     material_state=copy.deepcopy(dict(state.get('material_state', dict(arguments={}, pending=None)),
                         pending=None) if 'reading_combine' in packet else state.get('material_state', dict(arguments={}, pending=None))))
-    if describe_protocol(packet=packet)['final_rule'] == 'native_review' and reading.find_stage(packet) in ('final', 'closing'):
+    stage = reading.find_stage(packet)
+    if describe_protocol(packet=packet)['final_rule'] == 'native_review' and stage in ('final', 'closing'):
         # openness.evidence cites a delivered evidence unit by its handle, or by the handle of a body that belongs
         # to that unit alone, such as the residual of a bound search, and records the digest of the unit.
         from .review_handles import SUPPLIED_MINIMUM
-        bodies = {row['handle']: row for row in inventory['material']}
-        cited = {unit['handle']: dict(reference=unit['sha256']) for unit in inventory['units']
-                 if _is_native_evidence_unit(unit) and all(_has_complete_body(inventory, state, bodies[handle])
-                                                           for handle in unit['bodies'])}
-        cited.update((body['handle'], cited[body['units'][0]]) for body in inventory['material']
-                     if len(body['units']) == 1 and body['units'][0] in cited)
+        cited = {unit['handle']: dict(reference=unit['sha256']) for unit in list_citable_units(inventory, state)}
+        if stage == 'final' and 'evidence_units' in binding:
+            cited = {row['handle']: cited[row['handle']] for row in binding['evidence_units']['rows']}
+        else:
+            cited.update((body['handle'], cited[body['units'][0]]) for body in inventory['material']
+                         if len(body['units']) == 1 and body['units'][0] in cited)
         table.update(cited)
-        if reading.find_stage(packet) == 'final':
+        if stage == 'final':
             # An approval in one request receives the minimum that the packet binds (decision 25).
             minimum = next(row for row in inventory['units'] if row['identity'].get('record_kind') == 'openness_minimum')
             resolved[SUPPLIED_MINIMUM] = json.loads(artifacts.read(minimum['artifact']))
+    if reading.find_stage(packet) == 'page' and describe_protocol(packet=packet)['final_rule'] == 'finding':
+        from .review_handles import PAGE_FORMULATIONS
+        native = json.loads(artifacts.read(assignment['context']['native_packet']))
+        resolved[PAGE_FORMULATIONS] = {row['handle']: row['formulation'] for row in list_target_labels(native)}
     return resolved
+
+
+def list_citable_units(inventory, state):
+    """Select evidence units whose physical bodies were all delivered, including carried credit."""
+    incomplete = {body['handle'] for body, _, _ in _find_remaining_ranges(inventory, state)}
+    return [unit for unit in inventory['units'] if _is_native_evidence_unit(unit)
+            and incomplete.isdisjoint(unit['bodies'])]
 
 
 def _is_native_evidence_unit(row):
     """Whether an inventory unit is evidence that the native packet lists: a reading row or a native evidence row.
     The SHA-256 of such a unit is the digest under which the packet lists it."""
     return row['kind'] in ('search_response', 'fulltext') or row['identity'].get('record_kind') in (
-        'literature_search', 'reading', 'native_evidence')
+        'literature_search', 'reading', 'accepted_result', 'native_evidence')
+
+
+def list_required_math_digests(minimum):
+    return ({row['search_digest'] for row in minimum['searches']} | set(minimum['reading_digests'])
+            | {row['result_digest'] for row in minimum.get('results', [])})
+
+
+def list_math_citation_units(units, native):
+    """Keep the first eligible identity of each digest in the native evidence."""
+    allowed = {row['digest'] for row in native['evidence']}
+    selected = {}
+    for unit in units:
+        if unit['sha256'] in allowed and _is_native_evidence_unit(unit):
+            selected.setdefault(unit['sha256'], unit)
+    return list(selected.values())
+
+
+def describe_citation_row(unit, required):
+    return dict(handle=unit['handle'], kind=unit['kind'], label=unit['label'], required=required)
+
+
+def describe_math_citation_shortage(route, inventory, native, plan):
+    """Price the required row prefix and a minimal resolved approval using its handles."""
+    from .native_review import RESULT_FINDINGS
+
+    units = list_math_citation_units(inventory['units'], native)
+    required = list_required_math_digests(native['scientific_context']['openness_minimum'])
+    rows = [describe_citation_row(unit, True) for unit in units if unit['sha256'] in required]
+    request_size = capacity.measure_capacity_value(route,
+        dict(count=len(units), omitted=len(units) - len(rows), rows=rows))
+    request_bound = plan['frame']['final']['fields']['evidence_units']
+    answer = dict(schema_version=2, decision='approve',
+                  **{key: native[key] for key in ('subject_digest', 'claim_digest', 'reviewer')})
+    # Sample only the smallest legal nonblank text. Longer scientific prose spends the remaining answer room.
+    answer['findings'] = dict.fromkeys(RESULT_FINDINGS, 'x')
+    answer['findings']['openness'] = dict(outcome='supported_open', statement_digest=native['claim_digest'],
+        evidence=[dict(ref=row['handle']) for row in rows], searched_at='9999-12-31', coverage='x', reason='x')
+    answer_size = len(serialize_record(answer).decode('utf-8'))
+    answer_bound = min(plan['task']['final']['answer_bound'], plan['task']['final']['smallest_answer_bound'])
+    if len(rows) != len(required) or request_size > request_bound or answer_size > answer_bound:
+        return dict(required=len(required), citable=len(rows), request_characters=request_size,
+                    request_bound=request_bound, answer_characters=answer_size, answer_bound=answer_bound)
+    return None
+
+
+def describe_evidence_units(route, inventory, state, native, bound):
+    """Show required citations first and fit the longest prefix in the stored frame."""
+    required = list_required_math_digests(native['scientific_context']['openness_minimum'])
+    units = list_math_citation_units(list_citable_units(inventory, state), native)
+    rows = [describe_citation_row(unit, unit['sha256'] in required)
+            for unit in sorted(units, key=lambda row: row['sha256'] not in required)]
+    count = len(rows)
+    lower, upper = 0, min(count, bound)
+    while lower < upper:
+        middle = (lower + upper + 1) // 2
+        candidate = dict(count=count, omitted=count - middle, rows=rows[:middle])
+        if capacity.measure_capacity_value(route, candidate) <= bound:
+            lower = middle
+        else:
+            upper = middle - 1
+    return dict(count=count, omitted=count - lower, rows=rows[:lower])
+
+
+def find_math_searched_through(artifacts, minimum, inventory):
+    """Find the date that meets the audit's capture-date check for every bound search."""
+    from .openness_minimum import find_capture_date
+    from .operations import timestamp
+    from .review_protocol import _read_json
+
+    searches = {row['sha256']: row['artifact'] for row in inventory['units']
+                if row['identity'].get('record_kind') == 'literature_search'}
+    bound = {row['search_digest'] for row in minimum['searches']}
+    return max((find_capture_date(minimum, timestamp(_read_json(artifacts, searches[identity])['captured_at']))
+                for identity in bound), default=None)
 
 
 def _project_observed_turn(records, artifacts, member, frozen, output, attempt_id, inventory, route, before):
@@ -2230,8 +2577,9 @@ def _rebuild_own_state(records, artifacts, prior, inventory, plan, route):
                 and not ('page_plan_digest' in frozen.get('reading_final', {})
                          and 'closing' not in frozen['reading_final'])):
             raise ResearchError('review_resampling_forbidden',
-                'A final turn of this chain returned its finding, which ends the chain. Record the finding with '
-                'problem-openness, or export a new packet for a new chain.')
+                'The final of this chain returned its answer, in a final turn or in the closing turn of a final in '
+                'pages, so the chain takes no further turn. Run review-series on the chain and take the step that it '
+                'plans.')
         _, _, before = read_bound_state(artifacts, member, frozen)
         projection = _project_observed_turn(records, artifacts, member, frozen, output,
                                             observed['attempt_id'], inventory, route, before)
@@ -2275,7 +2623,11 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
         raise ResearchError('review_source_continuation_fork',
             'Another turn already continues the named turn, and a reading chain has one line of turns. Continue '
             'from the latest turn of the chain, which review-series resolves from any of its assignments.')
-    require_verified_context(records, artifacts, prior)
+    require_current_units(records, artifacts, prior)
+    require_verified_carried_turns(records, artifacts, prior)
+    # The planner reads the prospective context once it has selected the simulated replacement.
+    if prove_replacement:
+        require_verified_context(records, artifacts, prior, route_id=route['id'], replacing=bool(replacement))
     if replacement and prove_replacement:
         from .review_failure_class import plan_after_failure
         recovery = plan_after_failure(records, artifacts, prior_id)
@@ -2304,8 +2656,7 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
         rebuilt = _rebuild_own_state(records, artifacts, prior, inventory, plan, route)
         state = rebuilt['state']
         requests = state.get('pending_requests', [])
-        notes_cost = (capacity.measure_capacity_value(route, state['latest_notes'])
-                      - capacity.measure_capacity_value(route, '')) if state['latest_notes'] is not None else 0
+        notes_cost = _measure_notes_cost(_build_notes_measurement_route(plan), state['latest_notes'])
         kind = ('final' if 'unread' in state or prior['reading_chain'].get('final_page_plan') else 'reading' if (_find_remaining_ranges(inventory, state) or requests
                              or notes_cost > state['allowances']['notes']) else 'final')
         number = prior['reading_chain']['turn'] + 1
@@ -2359,13 +2710,17 @@ def _publish_deliveries(artifacts, packet):
         artifacts.put(row['content'].encode('utf-8'), row['artifact']['media_type'])
 
 
-def prepare_refusal_assignment(records, artifacts, value, revision, prior, frozen, attempt_ids, diagnoses):
+def prepare_refusal_assignment(records, artifacts, value, revision, prior, frozen, attempt_ids, diagnoses,
+                               *, check_context=True):
     """Replace a refused position from its unchanged before-state and notice-adjusted grant."""
     from . import review_protocol as protocol, review_prompt_paragraphs as paragraphs
     from . import review_refusal_notice as notices
     from .operations import immutable_record
     reading.require_reserved_identifier(value['id'], reading.find_protocol(frozen))
-    protocol.require_verified_context(records, artifacts, prior)
+    require_current_units(records, artifacts, prior)
+    require_verified_carried_turns(records, artifacts, prior)
+    if check_context:
+        protocol.require_verified_context(records, artifacts, prior, route_id=value['route_id'], replacing=True)
     plan, inventory, state = read_bound_state(artifacts, prior, frozen)
     route = records['review_route'][prior['route_id']]
     stage = reading.find_stage(frozen)
@@ -2403,9 +2758,18 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
         prompt['parameters']['capacity'] = packet.get('reading_turn', packet.get('reading_final', packet.get('reading_combine')))['capacity']
         return packet, prompt
     limit = capacity.derive_turn_task_limits(records, artifacts, prior, kind=kind)['request_bound']['text_characters']
+    forms = ('whole', 'bounded')
+    if kind == 'final' and ('pages' in describe_protocol(packet=frozen)['list_final_forms']()
+                            or plan['allocation'].get('final_form') == 'pages' or chain.get('final_page_plan')):
+        # A final that can split after a capacity failure freezes a notice that each smaller turn holds within the
+        # notice reserve of the plan.
+        whole = notices.build_refusal_notice(records, artifacts, attempt_ids, form='whole', diagnoses=diagnoses,
+            measure=lambda value: capacity.measure_capacity_value(route, value), enforce_bounded_limit=True)
+        if capacity.measure_capacity_value(route, whole) > plan['task']['final']['notice_characters']:
+            forms = ('bounded',)
     selected = notices.select_refusal_notice(records, artifacts, attempt_ids, route=route, role=prior['role'],
         prompt=None, packet=None, prepare_turn=prepare_turn, task_characters=None,
-        task_limit_characters=limit, diagnoses=diagnoses, capacity_plan=plan, turn_kind=kind)
+        task_limit_characters=limit, diagnoses=diagnoses, capacity_plan=plan, turn_kind=kind, forms=forms)
     if selected['notice'] is None:
         raise ResearchError('review_input_too_large', notices.NOTICE_DELIVERY_MSG, dict(trials=selected['trials']))
     packet = review_excerpts.read_sent_packet(selected['request'])
@@ -2420,9 +2784,20 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
     return [immutable_record(records, 'review_assignment', value['id'], record)], record
 
 
+def _build_notice_capacity_prompt(prior, packet):
+    """Render a notice-bearing replacement using its stage and the applicable recorded paragraph versions."""
+    from . import review_protocol as protocol, review_prompt_paragraphs as paragraphs
+    from .openness_final_pages import read_binding
+    role, previous = prior['role'], prior['prompt']
+    return protocol.canonical_prompt(role, reading_stage=reading.find_stage(packet),
+        reading_protocol=reading.find_protocol(packet), capacity=read_binding(packet)['capacity'],
+        common_version=protocol.find_common_prompt_version(previous), finding_version=2 if 'finding_index' in packet else 1,
+        **paragraphs.select_prompt_parameters(role, packet, prior_prompt=previous))
+
+
 def prepare_notice_capacity_assignment(records, artifacts, value, revision, prior):
     """Keep a frozen notice when capacity recovery reduces its pending turn."""
-    from . import review_protocol as protocol, review_prompt_paragraphs as paragraphs
+    from . import review_protocol as protocol
     from .native_review import load_packet
     from .operations import immutable_record
     route = records['review_route'][prior['route_id']]
@@ -2430,13 +2805,7 @@ def prepare_notice_capacity_assignment(records, artifacts, value, revision, prio
     logical = dict(protocol=protocol.PROTOCOL, role=prior['role'], dossier_id=prior['dossier_id'],
                    reviewer_id=prior['reviewer_id'], native=native)
     packet, chain = prepare_next_assignment(records, artifacts, value, route, logical)
-    stage = reading.find_stage(packet)
-    base = protocol.canonical_prompt(prior['role'], reading_stage=stage, reading_protocol=reading.find_protocol(packet),
-        common_version=protocol.find_common_prompt_version(prior['prompt']),
-        finding_version=2 if 'finding_index' in packet else 1)
-    versions = paragraphs.read_paragraph_parameters(prior['prompt']).get(paragraphs.PARAMETER, [])
-    prompt = paragraphs.append_prompt_paragraphs(base, prior['role'], versions=versions)
-    prompt['parameters']['capacity'] = packet.get('reading_turn', packet.get('reading_final', packet.get('reading_combine')))['capacity']
+    prompt = _build_notice_capacity_prompt(prior, packet)
     record = copy.deepcopy(prior)
     for key in ('history', 'history_ref', 'history_assignment_id'):
         record.pop(key, None)
@@ -2448,13 +2817,258 @@ def prepare_notice_capacity_assignment(records, artifacts, value, revision, prio
     return [immutable_record(records, 'review_assignment', value['id'], record)], record
 
 
+# The stop of rules C25 to C27, for the handoff, the two refusals and the refusal of the verification.
+UNITS_CHANGED_MESSAGE = (
+    'The reading units that the records give now differ from the units of this chain: a content record changed '
+    'after the first assignment of the chain. For example, a source bundle now names the capture of a unit as a '
+    'supplement, or a fetched copy of an original took the place of a supplied text. The harness sends no further '
+    'request of this chain, and the chain gives no finding. details.units lists the units that differ. An item with '
+    'the state left is a unit of the chain that the records no longer give; for a full text, its member '
+    'main_captures lists the captures that the records give now for that version. An item with the state added is '
+    'a unit that the records give and the chain does not hold. An item with the state changed is a unit whose '
+    'position or delivery differs, and its members stored and current give the position, the handle and the bodies '
+    'of both. Where details.bindings is present, it lists the readings and the search responses that the packet of '
+    'a math chain binds and the records no longer give. Where details.inventory_fields is present, no unit differs, '
+    'and it names the members of the inventory that do. When details.step is present, take it, and then the steps '
+    'of its then in their order. Where details.renewal is present, the route record of this chain pins another '
+    'reviewer runtime than the installed one, and these steps record and probe a route record of the same identity '
+    'that pins the installed runtime. Where details.destination_probe is present, the route record that it names '
+    'lacks a probe that verifies it, and the step is that probe. In both cases the last step is review-series on '
+    'this chain, which names the step that follows. In every other case the step makes a new packet and assigns it '
+    'with the same reviewer_id, first in check mode. Where that assignment leaves route_id open, the route record '
+    'of this chain is retired: give route_id a route record that is verified, is not retired and pins the '
+    'installed runtime. For a math chain the step leaves the openness minimum to you, and its first prerequisite '
+    'states what the minimum binds. The new chain carries the verified reading turns of this chain and reads the '
+    'units that they do not cover. When details.step is absent, run review-series on the chain and take the step '
+    'that it plans.')
+MATH_UNITS_PREREQUISITE = (
+    'Choose the openness minimum of the new packet yourself: this step does not carry the minimum of the stopped '
+    'chain. For each version that the new minimum keeps, bind a full reading of the capture that is the main '
+    'capture of that version now. Where this row holds further members, they name what the minimum of the stopped '
+    'chain lacks against the records of today, for example search_ids for the searches that it does not bind.')
+RECORDED_UNITS_CHANGED_MESSAGE = (
+    'The finding that details.reassessment.openness_id names is recorded, and the reading units that the records '
+    'give now differ from the units of its chain, so the finding no longer verifies. details.units lists the units '
+    'that differ and, where present, details.bindings the readings and search responses that the records no longer '
+    'give. The chain is complete and takes no further turn. The finding is the latest of the record, so status '
+    'lists the obligation problem_openness_stale for it. Export a new problem-openness packet with export and '
+    'assign it as a new chain; the finding of that chain takes the place of this one.')
+SUPERSEDED_RECORDED_UNITS_CHANGED_MESSAGE = (
+    'The finding that details.openness_id names is recorded, and the reading units that the records give now '
+    'differ from the units of its chain, so the finding no longer verifies. details.units lists the units that '
+    'differ. A later finding, which details.latest_openness_id names, is the one that the record assesses for its '
+    'openness, so this finding needs no reassessment.')
+
+
+def _describe_unit_difference(row, state):
+    return dict(state=state, unit=copy.deepcopy(row['identity']), label=row['label'], characters=row['characters'])
+
+
+def _list_inventory_changes(base, present):
+    """Give membership changes, or the differing positions and bindings of the same members."""
+    stored = {digest([row['identity'], row['sha256']]): (number, row)
+              for number, row in enumerate(base['units'], 1)}
+    current = {digest([row['identity'], row['sha256']]): (number, row)
+               for number, row in enumerate(present['units'], 1)}
+    units = ([_describe_unit_difference(row, 'left') for key, (_, row) in stored.items() if key not in current]
+             + [_describe_unit_difference(row, 'added') for key, (_, row) in current.items() if key not in stored])
+    if units:
+        return units
+    old_material = {row['handle']: (number, row) for number, row in enumerate(base['material'], 1)}
+    new_material = {row['handle']: (number, row) for number, row in enumerate(present['material'], 1)}
+    for key, (position, row) in stored.items():
+        new_position, rebuilt = current[key]
+        if (position, row) != (new_position, rebuilt) or any(
+                old_material.get(handle) != new_material.get(handle) for handle in row['bodies']):
+            units.append(dict(_describe_unit_difference(row, 'changed'),
+                              stored=dict(position=position, handle=row['handle'], bodies=row['bodies']),
+                              current=dict(position=new_position, handle=rebuilt['handle'], bodies=rebuilt['bodies'])))
+    return units
+
+
+def compare_units(records, artifacts, first, native, route, plan):
+    """Rule C23: compare the stored inventory of a chain, before its carried readings, with the inventory that the
+    records of the present give for its native packet, rebuilt with the fixed bounds of the stored inventory and the
+    finding index of its capacity plan. Return the two inventories and the differences. Lost math bindings keep
+    the comparison from building an inventory; only units absent from the remaining derivable rows are lost.
+    Every unrelated derivation refusal passes through."""
+    base = read_carried_inventory(artifacts, first)
+    unavailable = []
+    rows = (reading.list_reading_rows(records, artifacts, native, review=first, unavailable=unavailable)
+            if reading.is_math_openness_packet(native) else None)
+    fields = []
+    matches = False
+    if unavailable:
+        kinds = ('fulltext', 'search_response')
+        present = {digest([_describe_identity(row), row['artifact']['sha256']]) for row in rows if row['kind'] in kinds}
+        units = [_describe_unit_difference(row, 'left') for row in base['units'] if row['kind'] in kinds
+                 and digest([row['identity'], row['sha256']]) not in present]
+        built = None
+    else:
+        row_inputs = {} if rows is None else dict(rows=rows)
+        built = prepare_inventory(build_inventory(records, artifacts, native, review=first, **row_inputs), native, route,
+                                  fixed_bounds=base['fixed_bounds'], finding_index=plan.get('finding_index'))
+        current = built['inventory']
+        units = []
+        matches = current == base
+        if not matches:
+            units = _list_inventory_changes(base, current)
+            if not units:
+                fields = sorted(key for key in base.keys() | current.keys()
+                                if key not in base or key not in current or base[key] != current[key])
+    texts = [row for row in units if row['state'] == 'left' and row['unit']['kind'] == 'fulltext']
+    if texts:
+        from .capture_selection import bind_packet_selections
+        from .graph import main_captures
+        bound = bind_packet_selections(records, native['scientific_context'], artifacts=artifacts, review=first)
+        captures = {}
+        for version_id in dict.fromkeys(row['unit']['version_id'] for row in texts):
+            work = bound.get('work', {}).get(version_id)
+            captures[version_id] = [] if work is None else [
+                dict(source_id=capture['source_id'], text_sha256=(capture.get('text') or {}).get('sha256'),
+                     supplied='supplied' in bound['source'][capture['source_id']])
+                for capture in main_captures(bound, work)]
+        for row in texts:
+            row['main_captures'] = captures[row['unit']['version_id']]
+    differences = dict(units=units)
+    if unavailable:
+        differences['bindings'] = unavailable
+    if fields:
+        differences['inventory_fields'] = fields
+    return dict(stored=base, built=built, matches=matches, **differences)
+
+
+def describe_content_handoff(records, artifacts, assignment):
+    """Rule C26: the handoff of a chain whose units the records no longer give, or None for an assignment of another
+    protocol and for units that are current. Its step is the step of a new packet under the reviewer of the chain
+    (openness_successor.describe_new_packet_step); for a math chain that step leaves the openness minimum open."""
+    if not assignment.get('capacity_plan') or not assignment.get('reading_chain'):
+        return None
+    frozen = json.loads(artifacts.read(assignment['packet']))
+    if reading.find_protocol(frozen) not in PROTOCOL_DESCRIPTIONS:
+        return None
+    from .native_review import load_packet
+    first = records['review_assignment'][assignment['reading_chain']['first_assignment_id']]
+    native = load_packet(artifacts, first['context']['native_packet'], first['reviewer_id'])
+    compared = compare_units(records, artifacts, first, native, records['review_route'][first['route_id']],
+                             capacity.read_chain_capacity_plan(artifacts, first))
+    if compared['matches']:
+        return None
+    from .openness_successor import describe_new_packet_step
+    step, renewal = describe_new_packet_step(records, artifacts, assignment, open_minimum=True)
+    details = dict(assignment_id=assignment['id'], message=UNITS_CHANGED_MESSAGE, units=compared['units'], step=step)
+    for key in ('bindings', 'inventory_fields'):
+        if key in compared:
+            details[key] = compared[key]
+    if renewal is not None:
+        details['renewal'] = renewal
+    elif step['command'] == 'review-probe':
+        details['destination_probe'] = step['payload']['route_id']
+    return dict(state='handoff', code='openness_packet_outdated', command=step['command'], details=details)
+
+
+def require_current_units(records, artifacts, assignment):
+    """Rule C25: refuse an assignment after the first, or a call, of a chain whose units the records no longer
+    give."""
+    handoff = describe_content_handoff(records, artifacts, assignment)
+    if handoff is not None:
+        raise ResearchError('openness_packet_outdated', UNITS_CHANGED_MESSAGE, handoff['details'])
+
+
+# The stop of rules C30 and C31, for the handoff and the two refusals.
+CARRIED_TURN_MESSAGE = (
+    'This chain carries reading turns of earlier chains, and its finding needs a verified context for each carried '
+    'turn and for each turn before it in its earlier chain. The review records no longer give that context for at '
+    'least one such turn, so the harness sends no request of this chain while this state lasts. details.turns holds '
+    'one item for each earlier chain with such a turn. In an item, chain names the earlier chain by its first '
+    'assignment, count gives the number of its turns without a verified context, assignment_id names the turn that '
+    'decides the recovery, events lists the contamination events that name that turn, route gives its route record '
+    'with the context_status of that record, and recovery says what ends the state for that chain. The recovery '
+    'probe means that the route record lacks a probe that verifies it. A probe that verifies it ends the state for '
+    'the turns on it, and this chain continues from its last turn; after a probe that answers and does not verify '
+    'it, the plan names the probe again. The recovery retire means that the route record pins another reviewer '
+    'runtime than the installed one, so it takes no probe. A retired route record has the state that its latest '
+    'probe with an answer gave, and that probe verified this record, so the step retires it: it records a '
+    'route_retired event on the turn that the item names, with the instruction of the owner as its evidence. The '
+    'recovery export means that neither a probe nor a retirement ends the state: a contamination event names the '
+    'turn, or the route record pins another runtime and is retired already, or its latest probe with an answer did '
+    'not verify it. This chain then gives no finding, and the step makes a new packet and assigns it with the same '
+    'reviewer_id. The new chain carries the turns of earlier chains whose context is verified from their first '
+    'turn on, and it carries no turn of this chain. details.step follows the first item whose recovery is export, '
+    'and otherwise the first item. Take details.step, and then the steps of its then in their order. Where '
+    'details.own_turn is present, a contamination event names a turn of this chain too, and the step is that of '
+    'the new packet whatever the items state. Three members describe a step toward a new packet. Where '
+    'details.renewal is present, the route record of this chain pins another reviewer runtime than the installed '
+    'one, and the steps record and probe a route record of the same identity that pins the installed runtime. '
+    'Where details.destination_probe is present, the route record that it names lacks a probe that verifies it, '
+    'and the step is that probe. In both cases the last step is review-series on this chain, which names the step '
+    'that follows. Where details.stale_minimum is present, the chain is a math chain: the step leaves the openness '
+    'minimum to you, and the new minimum binds the searches that search_ids of that member lists.')
+
+
+def describe_carried_handoff(records, artifacts, assignment):
+    """Rule C31: the handoff of a chain while the review records give no verified context for a turn on which its
+    stored selection rests (openness_carried.list_unverified_carried_turns), or None.
+
+    The step follows the first item: the probe of its route record, or the retirement of that route record when it
+    is stale, each followed by review-series on the head, after which the chain continues. When an item has the
+    recovery export, the step is the step of a new packet under the reviewer of the chain."""
+    if not assignment.get('capacity_plan') or not assignment.get('reading_chain'):
+        return None
+    first = records['review_assignment'][assignment['reading_chain']['first_assignment_id']]
+    if first.get('carried_selection') is None:
+        return None
+    if reading.find_protocol(json.loads(artifacts.read(assignment['packet']))) not in PROTOCOL_DESCRIPTIONS:
+        return None
+    from .openness_carried import list_unverified_carried_turns
+    turns = list_unverified_carried_turns(records, artifacts, first)
+    if not turns:
+        return None
+    details = dict(assignment_id=assignment['id'], message=CARRIED_TURN_MESSAGE, turns=turns)
+    item = next((row for row in turns if row['recovery'] == 'export'), turns[0])
+    from .review_protocol import find_unverified_context
+    own = find_unverified_context(records, artifacts, assignment)
+    if own and own['events']:
+        details['own_turn'] = own
+    if item['recovery'] == 'export' or 'own_turn' in details:
+        from .openness_successor import describe_new_packet_step
+        step, renewal = describe_new_packet_step(records, artifacts, assignment)
+        if renewal is not None:
+            details['renewal'] = renewal
+        elif step['command'] == 'review-probe':
+            details['destination_probe'] = step['payload']['route_id']
+        elif step.get('minimum_refusal', {}).get('cause') == 'openness_search_stale':
+            details['stale_minimum'] = step['minimum_refusal']
+    else:
+        from .review_plan_steps import describe_route_probe_step, describe_step
+        if item['recovery'] == 'probe':
+            step = describe_route_probe_step(records, artifacts, assignment, item['route']['id'])
+        else:
+            from .review_route_plan import RETIREMENT_ORDER_TEXT
+            step = describe_step(records, artifacts, records['review_assignment'][item['assignment_id']], 8)
+            step['prerequisites'].insert(0, dict(condition=RETIREMENT_ORDER_TEXT, route_id=item['route']['id']))
+        step['then'] = [dict(command='review-series', assignment_id=assignment['id'])]
+    details['step'] = step
+    return dict(state='handoff', code='openness_carried_turn_unverified', command=step['command'], details=details)
+
+
+def require_verified_carried_turns(records, artifacts, assignment):
+    """Rule C30: refuse an assignment after the first, or a call, of a chain while a turn on which its stored
+    selection rests has no verified context."""
+    handoff = describe_carried_handoff(records, artifacts, assignment)
+    if handoff is not None:
+        raise ResearchError('openness_carried_turn_unverified', CARRIED_TURN_MESSAGE, handoff['details'])
+
+
 RATIO_EXPORT_MESSAGE = (
     'An attempt of this chain measured fewer characters for each token than its capacity plan assumes, and at the '
-    'measured ratio its final, with the allowances that the chain has granted, no longer fits one request. The '
-    'harness sends no further request of this chain. details.ratio gives the measurement and its attempt, and '
-    'details.required_characters and details.available_characters the size of the final and the room for it. '
-    'details.successor holds the admission of a new chain over a new export: its protocol and, for '
-    'exactory-openness-reading-v7, the ratio of its plan under measure. '
+    'measured ratio the final of the chain no longer fits: a final in one request with the allowances that the '
+    'chain has granted, or, where the final runs in pages, its smallest page. The harness sends no further request '
+    'of this chain. details.ratio gives the measurement and its attempt, details.required_characters and '
+    'details.available_characters the size that must fit and the room for it, and details.granted_characters and '
+    'details.final_material_allowance the allowances that the chain granted and the material room of its final. '
+    'details.successor holds the admission of a new chain over a new export: its protocol and, where that chain '
+    'has a capacity plan, the ratio of the plan under measure. '
     'When details.step is present, take it; details.message states what the new chain does. When it is absent, no '
     'protocol admits a new chain on this route, and details.decision states what the owner decides.')
 
@@ -2568,24 +3182,42 @@ def describe_admission_stop(records, artifacts, assignment, route, packet, selec
     export = describe_step(records, artifacts, assignment, 4)
     step = export['then'][0]
     export['then'] = [dict(step, check=True), step]
-    smaller = copy.deepcopy(export)
-    smaller['prerequisites'].insert(0, dict(condition='Record a statement with fewer neighbours, then bind that record in a new export.'))
     route_step = describe_step(records, artifacts, assignment, 7)
     prompt = canonical_prompt('native_math', version=7, finding_version=2)['text']
     serving = capacity.find_serving_routes(records, 'native_math', packet, artifacts=artifacts,
                                            assignment=assignment, prompt=prompt)
     refusal = selection['admissions'][0]
+    largest = refusal.get('largest_one_request_targets', 0)
+    targets = refusal.get('targets', 1 + len(packet['native']['scientific_context']['openness_minimum']['neighbours']))
+    answers = []
+    question = ADMISSION_ROUTE_QUESTION
+    if largest > 0 and targets > 1:
+        question = ADMISSION_QUESTION
+        smaller = copy.deepcopy(export)
+        smaller['prerequisites'].insert(0, dict(condition='Record a statement with fewer neighbours, then bind that record in a new export.'))
+        answers.append(dict(answer=ADMISSION_SMALLER_ANSWER, steps=[smaller]))
+    answers.append(dict(answer=ADMISSION_ROUTE_ANSWER, steps=[route_step, export]))
     return dict(message=ADMISSION_STOP_MESSAGE, admissions=selection['admissions'],
-        targets=refusal.get('targets', 1 + len(packet['native']['scientific_context']['openness_minimum']['neighbours'])),
-        largest_one_request_targets=refusal.get('largest_one_request_targets', 0), serving_routes=serving,
-        unserved_range=(FINAL_PAGES_STATEMENT if V7_FINAL_FORMS == ('request',) else FINAL_PAGE_FLOOR_STATEMENT) if not serving else None,
-        decision=dict(owner_decides=ADMISSION_QUESTION,
-            then=[dict(answer=ADMISSION_SMALLER_ANSWER, steps=[smaller]),
-                  dict(answer=ADMISSION_ROUTE_ANSWER, steps=[route_step, export])]))
+        targets=targets, largest_one_request_targets=largest, serving_routes=serving,
+        unserved_range=describe_unserved_range(packet, assignment) if not serving else None,
+        decision=dict(owner_decides=question, then=answers))
+
+
+def describe_unserved_range(packet, assignment):
+    """Describe the floor of the protocol and form recorded by the chain, or of a new chain over the native packet
+    of a packet that no turn binds yet."""
+    description = (describe_protocol(native=packet['native']) if reading.find_protocol(packet) is None
+                   else describe_protocol(packet=packet))
+    if 'pages' in description['list_final_forms']() or assignment.get('reading_chain', {}).get('final_page_plan'):
+        return FINAL_PAGE_FLOOR_STATEMENT
+    return description['one_request_statement']
 
 
 def plan_turn_recovery(records, artifacts, assignment, outcome):
-    """Prove the next pinned reading level or smaller pending material answer."""
+    """Prove the next pinned reading level or smaller pending material answer.
+
+    A frozen notice that the smaller turn cannot hold gives {kind: decision} with the compared sizes.
+    """
     from . import review_preflight, review_protocol
     frozen = json.loads(artifacts.read(assignment['packet']))
     route = records['review_route'][assignment['route_id']]
@@ -2620,30 +3252,38 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
         raise
     from . import review_prompt_paragraphs as paragraphs
     from .openness_final_pages import read_binding
-    # A replacement keeps the paragraphs of a refused prompt; otherwise its packet selects them, as at assignment.
-    versions = (paragraphs.read_paragraph_parameters(assignment['prompt']).get(paragraphs.PARAMETER, [])
-                if packet.get('output_refusal') else
-                paragraphs.select_prompt_parameters('native_math', packet).get(paragraphs.PARAMETER, []))
-    prompt = review_protocol.canonical_prompt('native_math', reading_stage=reading.find_stage(packet), reading_protocol=reading.find_protocol(packet),
-        capacity=read_binding(packet)['capacity'], problem_paragraphs=versions or None,
-        finding_version=2 if 'finding_index' in packet else 1)
+    if 'output_refusal' in packet:
+        prompt = _build_notice_capacity_prompt(assignment, packet)
+    else:
+        prompt = review_protocol.canonical_prompt('native_math', reading_stage=reading.find_stage(packet),
+            reading_protocol=reading.find_protocol(packet), capacity=read_binding(packet)['capacity'],
+            finding_version=2 if 'finding_index' in packet else 1,
+            **paragraphs.select_prompt_parameters('native_math', packet))
     candidate = dict(value, prompt=prompt, packet=overlay.put(serialize_record(packet), 'application/json'),
                      reading_chain=chain, capacity_plan=assignment['capacity_plan'], capacity_plan_kind=kind)
     request = review_protocol.transport.request_body(route, prompt['text'], packet)
-    preflight = review_preflight.check_request(review_preflight.build_assignment_report(
-        records, overlay, candidate, request), request, packet=packet, artifacts=overlay)
+    try:
+        preflight = review_preflight.check_request(review_preflight.build_assignment_report(
+            records, overlay, candidate, request), request, packet=packet, artifacts=overlay)
+    except ResearchError as error:
+        if error.code != 'review_route_capacity_plan_violated' or 'output_refusal' not in packet:
+            raise
+        # The frozen notice of an earlier turn exceeds the smaller turn; the owner decides the route.
+        return dict(kind='decision', details=dict(plan_comparison=error.details['preflight']['plan_comparison']))
     bounds = read_binding(packet)['capacity']
     return dict(kind='replace', reason='capacity', payload=value, preflight=preflight,
                 details=dict(material_allowance=bounds['material_allowance'], answer_bound=bounds['answer_bound']))
 
 
-# The verification of a v7 chain has seven conditions, and a chain that fails one gives no finding. Each condition has
-# its own refusal message; condition 6 refuses with the messages of review_refusal_replacement. Condition 1 also
-# refuses with SELECTION_MISMATCH_MESSAGE, with a refusal of the artifact store, and with claim_reassessment_required
-# for records without a history. Every other refusal of an earlier chain passes through unchanged. In the second part
-# of condition 1, a refusal of the artifact store and a refusal in openness_carried.PREFIX_STATE_CODES give
-# SELECTION_MISMATCH_MESSAGE. Condition 7: the answer of every own turn passes the output check that its run applies
-# (review_refusal.classify_observed_output), also when the store holds no refusal record for it.
+# The verification of a v7 chain has seven conditions, and a chain that fails one gives no finding. Before them, the
+# units of the chain are the units that the records give (compare_units, rule C27): a difference refuses with
+# UNITS_CHANGED_MESSAGE and details.units. Each condition has its own refusal message; condition 6 refuses with the
+# messages of review_refusal_replacement. Condition 1 also refuses with SELECTION_MISMATCH_MESSAGE, with a refusal of
+# the artifact store, and with claim_reassessment_required for records without a history. Every other refusal of an
+# earlier chain passes through unchanged. In the second part of condition 1, a refusal of the artifact store and a
+# refusal in openness_carried.PREFIX_STATE_CODES give SELECTION_MISMATCH_MESSAGE. Condition 7: the answer of every own
+# turn passes the output check that its run applies (review_refusal.classify_observed_output), also when the store
+# holds no refusal record for it.
 ORIGIN_VERIFICATION_MESSAGE = (
     'The harness cannot verify the carried selection of this chain from its first assignment. One of two cases is '
     'the cause. First, the reference carried_selection of that assignment names a protocol or a digest other than '
@@ -2692,9 +3332,10 @@ UNCHECKED_EARLIER_MESSAGE = (
     'reading turns of this chain that come before the named turn.')
 FINAL_VERIFICATION_MESSAGE = (
     'The turn that details.assignment_id names has no observed, authenticated output in a verified context, or its '
-    'output stands at the wrong place. A chain of exactory-openness-reading-v7 ends with one final turn that '
-    'returns the finding, and every turn before it returns a reading response or a part of an argument. The chain '
-    'gives no finding. Run review-series on the chain and take the step that it plans.')
+    'output stands at the wrong place. A reading chain ends with one answer of its final, the answer of a final '
+    'turn or of the closing turn of a final in pages, and no turn before it returns such an answer. Where '
+    'details.obligations is present, it lists what the turn lacks. The chain gives no finding and no review. Run '
+    'review-series on the chain and take the step that it plans.')
 
 
 def _require_verification(condition, message, **details):
@@ -2894,12 +3535,27 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
     native = load_packet(overlay, first['context']['native_packet'], first['reviewer_id'])
     plan = capacity.read_chain_capacity_plan(overlay, first)
     inventory = json.loads(overlay.read(first['reading_chain']['inventory']))
-    base = read_carried_inventory(overlay, first)
     # Inventory reconstruction authenticates its native source bindings; no capacity plan is computed.
-    built = prepare_inventory(build_inventory(records, overlay, native, review=first), native, route,
-                              fixed_bounds=base['fixed_bounds'], finding_index=plan.get('finding_index'))
+    compared = compare_units(records, overlay, first, native, route, plan)
+    if compared['units'] or 'bindings' in compared:
+        details = {key: compared[key] for key in ('units', 'bindings') if key in compared}
+        message = UNITS_CHANGED_MESSAGE
+        if final:
+            finding = records.get('problem_openness', {}).get(assignment['id'])
+            if finding is not None:
+                from .problem_claims import find_latest
+                latest = find_latest(records, 'problem_openness')
+                if latest['id'] == finding['id']:
+                    details['reassessment'] = dict(
+                        obligation='problem_openness_stale', openness_id=finding['id'], command='export')
+                    message = RECORDED_UNITS_CHANGED_MESSAGE
+                else:
+                    details.update(openness_id=finding['id'], latest_openness_id=latest['id'])
+                    message = SUPERSEDED_RECORDED_UNITS_CHANGED_MESSAGE
+        _require_verification(False, message, **details)
+    base, built = compared['stored'], compared['built']
+    _require_verification(compared['matches'], STATE_VERIFICATION_MESSAGE)
     _publish_bodies(overlay, built['bodies'])
-    _require_verification(built['inventory'] == base, STATE_VERIFICATION_MESSAGE)
     selection, projections = _verify_carried_origins(records, overlay, first, native, route, plan,
                                                     Evaluation.of(records, artifacts))
     rebuilt = build_chain_state(base, projections, route=route, plan=plan)
@@ -2953,8 +3609,14 @@ def observe_v7_chain(records, artifacts, assignment):
     """Expose only this v7 chain's ready reading turns; carried turns keep their own origin."""
     packet = json.loads(artifacts.read(assignment['packet']))
     from .review_protocol import assignment_state
+    from .review_failure_class import classify_final_capacity_attempt
     terminal = assignment_state(records, artifacts, assignment['id'])
-    final = reading.find_stage(packet) in ('final', 'closing') and terminal['output'] is not None and terminal['output'].get('stage') not in ('reading', 'material')
+    # A final turn whose answer ended at the output limit has no final output: the chain takes a smaller task or the
+    # capacity decision, and a closing turn has no composite for it.
+    final = (reading.find_stage(packet) in ('final', 'closing') and terminal['output'] is not None
+             and terminal['output'].get('stage') not in ('reading', 'material')
+             and classify_final_capacity_attempt(records, artifacts,
+                                                 records['review_attempt'][terminal['attempt_id']]) is None)
     verified = verify_problem_coverage(records, artifacts, assignment, final=final)
     inventory = verified['inventory']
     units = {row['handle']: row for row in inventory['units']}
@@ -3154,9 +3816,59 @@ def _validate_problem_final(packet, output, *, artifacts=None, assignment=None):
     validate_finding(packet, output, finding_version=find_finding_version(assignment), artifacts=artifacts)
 
 
-def _validate_math_final(packet, output, *, artifacts=None, assignment=None):
-    from .native_review import validate_output
-    validate_output(packet['native'], output)
+MATH_NONAPPROVAL_FIELDS = (
+    'An answer that does not approve is exactly {decision,reason,objections}. It can hold subject_digest, '
+    'claim_digest and reviewer as well, all three together and equal to those of reading_final.')
+MATH_NATIVE_BINDING = 'Copy this binding exactly from reading_final: '
+MATH_APPROVAL_VERSION = (
+    'An approval of this chain has schema_version 2 and holds findings.openness, as the instructions of this turn '
+    'state.')
+MATH_CITATION_DELIVERY = (
+    'An entry of openness.evidence names no unit of evidence of the native packet that this chain delivered whole. '
+    'Cite the rows of reading_final.evidence_units.rows by their handles, or a unit that rows omits by its digest.')
+MATH_CLOSURE_RESOLVED = (
+    'The subject is the closure of an objective, and an approval of it needs the outcome supported_open or '
+    'already_solved. An approval with the outcome unresolved is not accepted for this subject.')
+
+
+def _validate_math_final(packet, output, *, artifacts=None, assignment=None, records=None):
+    from . import native_review
+
+    native = packet['native']
+    native_review.validate_output(native, output)
+    if output['decision'] != 'approve':
+        bindings = ('subject_digest', 'claim_digest', 'reviewer')
+        if not any(key in output for key in bindings):
+            bindings = ()
+        native_review._validate_objections(output.get('objections'), path='/objections')
+        native_review._closed(output, ('decision', 'reason', 'objections') + bindings,
+                             MATH_NONAPPROVAL_FIELDS, path='')
+        for key in bindings:
+            native_review._require(output[key] == native[key], MATH_NATIVE_BINDING + key, path='/' + key)
+        return
+    if 'page_plan_digest' in packet['reading_final']:
+        return
+    native_review._require(output.get('schema_version') == 2, MATH_APPROVAL_VERSION, path='/schema_version')
+    finding = output['findings']['openness']
+    path = '/findings/openness'
+    _, inventory, state = read_bound_state(artifacts, assignment, packet)
+    delivered = {unit['sha256'] for unit in list_math_citation_units(list_citable_units(inventory, state), native)}
+    native_review._require(set(finding['evidence']) <= delivered,
+                           MATH_CITATION_DELIVERY, path=path + '/evidence')
+    if finding['outcome'] == 'unresolved':
+        native_review._require('acceptance_ids' not in native['subject'],
+                               MATH_CLOSURE_RESOLVED, path=path + '/outcome')
+        return
+    from .openness_minimum import OpennessError, audit_minimum
+    minimum = native['scientific_context']['openness_minimum']
+    statement = native['subject'].get('claim', {}).get('statement', minimum['statement'])
+    try:
+        audit_minimum(finding, statement, records, artifacts, delivered)
+    except OpennessError as error:
+        field = {'openness_search_date': '/searched_at', 'openness_evidence_mismatch': '/evidence'}.get(
+            error.code, '/outcome')
+        raise ResearchError('invalid_native_review', error.message,
+                            dict(error.details or {}, code=error.code, path=path + field)) from error
 
 
 def describe_protocol(*, native=None, packet=None):
@@ -3180,11 +3892,13 @@ PROTOCOL_DESCRIPTIONS = MappingProxyType({
         list_context_units=_list_problem_context_units, describe_minimum=_describe_problem_minimum,
         describe_fields=_describe_problem_fields, render_final_context=_render_problem_context,
         final_minimum_bounds=dict(gaps_unit='u999999999'), final_rule='finding',
-        list_final_forms=lambda: V7_FINAL_FORMS, validate_final=_validate_problem_final)),
+        one_request_statement=FINAL_PAGES_STATEMENT, list_final_forms=lambda: V7_FINAL_FORMS,
+        validate_final=_validate_problem_final)),
     reading.MATH_PROTOCOL_V2: MappingProxyType(dict(
         id=reading.MATH_PROTOCOL_V2, carried_identity=dict(packet_kind='math'), list_evidence=_list_math_evidence,
         list_context_units=_list_math_context_units, describe_minimum=_describe_math_minimum,
         describe_fields=_describe_math_fields, render_final_context=_render_math_context,
-        final_minimum_bounds={}, final_rule='native_review',
+        final_minimum_bounds=dict(unit='u999999999', searched_through='9999-12-31'), final_rule='native_review',
+        one_request_statement=MATH_ONE_REQUEST_STATEMENT,
         list_final_forms=lambda: MATH_V2_FINAL_FORMS, validate_final=_validate_math_final)),
 })

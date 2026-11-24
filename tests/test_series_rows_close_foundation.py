@@ -329,6 +329,13 @@ class NamedCauseRowTests(unittest.TestCase):
 
 
 class ExcludedCodeRecorderTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_driver_recorder_rejects_a_source_written_code_excluded_by_rule_ten(self):
         from research_harness import cli, review_series
         from test_series_code_reach import record_reachable_errors, FIXTURE
@@ -342,8 +349,8 @@ class ExcludedCodeRecorderTests(unittest.TestCase):
             raise ResearchError('contract_changed', 'The external controller contract changed.')
         import test_review_continuation as continuation_fixtures
         fixture = continuation_fixtures.ContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         store = fixture.case.store
         head = fixture.assignment['id']
         with patch.object(review_continuation, 'plan_next', plan), patch.object(

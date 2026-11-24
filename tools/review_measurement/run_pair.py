@@ -478,7 +478,7 @@ def run_mode(case, root, mode, limit, dry_run, max_turns, checkpoint_path=None):
 
 def run_pair(case, output_dir, *, dry_run, configuration=None, partition_seed=72,
              first_mode='single', extra_single_runs=0, max_turns=60, budget=None):
-    from research_harness import review_transport
+    from research_harness import bar_sources, review_parts, review_protocol, review_transport
     from research_harness.errors import ResearchError
     if not dry_run and budget is None:
         raise ValueError('A paid run requires an explicit PaidBudget.')
@@ -497,7 +497,12 @@ def run_pair(case, output_dir, *, dry_run, configuration=None, partition_seed=72
                       if not dry_run else nullcontext())
     temporary_boundary = (confine_temporary_files(output_dir / 'temporary')
                           if not dry_run else nullcontext())
-    with model_boundary, temporary_boundary, preserve_temporary_workspace(output_dir, result) as root:
+    # The pair compares one ordinary request with a series of parts v2, the forms of release 0.92.1. Each bar of the
+    # seed is one review-run under the session rules v3.
+    session_rules = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+    series_protocols = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
+    with session_rules, series_protocols, model_boundary, temporary_boundary, \
+            preserve_temporary_workspace(output_dir, result) as root:
         try:
             if budget is not None:
                 budget.require_available()

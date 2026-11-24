@@ -37,6 +37,10 @@ class SeriesListingCosts(unittest.TestCase):
 
 class SeriesVerificationCosts(views.PartsViewCase):
     def setUp(self):
+        from research_harness import review_parts
+        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         for selection in (patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,)),
                           patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))):
             selection.start()

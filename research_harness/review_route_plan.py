@@ -22,6 +22,9 @@ REPLACED_PLAN_MEMBERS = ('command', 'payload', 'not_before', 'request_id', 'code
 RETIREMENT_ORDER_TEXT = (
     'Before the retirement, run review-series on every other head of this route record that holds a refused answer. '
     'That head then takes its replacement first.')
+# The last sentence of both texts of the stale-route procedure: plan_stale_route keeps the refusal in details.refusal.
+STALE_ROUTE_REFUSAL_TEXT = (
+    'details.refusal holds the code and the message of the command that this route record refused.')
 STALE_ROUTE_PLAN_MSG = (
     'This handoff has one of two causes. Cause 1: the route record of this head pins another reviewer runtime than '
     'the installed one. Cause 2: the last call of this head ended because the reviewer runtime changed during the '
@@ -33,29 +36,31 @@ STALE_ROUTE_PLAN_MSG = (
     'When details.renewal.lacks is probe, the step with the command review-probe probes the record that '
     'details.renewal.route_id names. When details.renewal.lacks is null, that record is verified. The assignment of '
     'the last step can name the record as route_id. '
-    + RETIREMENT_ORDER_TEXT)
+    + RETIREMENT_ORDER_TEXT + ' ' + STALE_ROUTE_REFUSAL_TEXT)
 STALE_ROUTE_ANSWER_MSG = (
     'This head holds an observed answer, and its context is not verified now. The route record that '
     'details.route_id names pins another reviewer runtime than the installed one. Such a route record takes no '
     'probe, so no probe can verify that context again. Take the steps of details.steps in their order. First retire '
     'the route record. Then run review-series on this head again. It names the step that follows the retirement. '
-    + RETIREMENT_ORDER_TEXT)
+    + RETIREMENT_ORDER_TEXT + ' ' + STALE_ROUTE_REFUSAL_TEXT)
 CORRECTION_ROUTE_MSG = (
     'The output correction of this head needs a route record that pins the installed runtime, and the route record '
     'of the head pins another one. details.renewal.lacks names what the store lacks for the correction. The value '
     'record means a route record with the same adapter, model, endpoint and configuration that pins the installed '
     'runtime. The value probe means a probe that verifies the route record that details.renewal.route_id names. '
-    'Take details.step. Then run review-series on this head again. It then names the output correction with the id '
-    'of that route record. Nothing was recorded, and the correction stays available.')
+    'Take details.step, and then the steps of its then in their order. The last of them is review-series on this '
+    'head, which then names the output correction with the id of that route record. Nothing was recorded, and the '
+    'correction stays available.')
 SUCCESSOR_ROUTE_MSG = (
     'The new chain needs a route record that pins the installed runtime, and the route record of the stopped chain '
     'pins another one. details.renewal.lacks names what the store lacks. The value record means a route record with '
     'the same adapter, model, endpoint and configuration that pins the installed runtime. The value probe means a '
-    'probe that verifies the route record that details.renewal.route_id names. Take details.step. Then run '
-    'review-series on this head again. It then states the admission of the new chain on that route record. When '
-    'that record admits the new chain, the plan names the export and the assignment there. Otherwise the plan is '
-    'the stop of that admission. Until then, details.successor states the admission on the route record of the '
-    'stopped chain. Export nothing before the step.')
+    'probe that verifies the route record that details.renewal.route_id names. Take details.step, and then the '
+    'steps of its then in their order. The last of them is review-series on this head, which then states the '
+    'admission of the new chain on that route record. When that record admits the new chain, the plan names the '
+    'export and the assignment there. Otherwise the plan is the stop of that admission. Until then, '
+    'details.successor states the admission on the route record of the stopped chain. Export nothing before these '
+    'steps.')
 UNVERIFIED_RECORD_MSG = (
     'The context of this head is not verified now, because the latest probe of the route record that '
     'details.route_id names did not verify that record. An output correction of this head ran on it. That route '
@@ -175,9 +180,11 @@ def find_refused_use(records, artifacts, assignment, plan):
 
 def plan_stale_route(assignment, renewal=None):
     """The handoff of a head whose route record is stale. Without a renewal the next step cannot move to another
-    route record, and complete_plan lists the steps of the stale-route procedure."""
+    route record, and complete_plan lists the steps of the stale-route procedure. details.refusal holds what the
+    command of the stale route record gives: every command refuses it with ROUTE_RUNTIME_STALE_MSG."""
     return dict(state='handoff', command='review-route', code='review_route_runtime_stale',
                 details=dict(assignment_id=assignment['id'], route_id=assignment['route_id'],
+                             refusal=dict(code='review_route_runtime_stale', message=protocol.ROUTE_RUNTIME_STALE_MSG),
                              renewal=renewal or dict(admitted=False, route_id=None, lacks=None)))
 
 
@@ -214,5 +221,8 @@ def apply_route_rule(records, artifacts, assignment, plan):
         replacement = plan_retired_route(assignment)
     else:
         replacement = plan_stale_route(assignment)
+    # A retired head keeps the message of the refusal that its plan carried; a stale head holds it in details.refusal.
+    if plan.get('code') == replacement['code'] == 'review_route_retired' and 'message' in details:
+        replacement['details']['message'] = details['message']
     kept = {key: value for key, value in plan.items() if key not in REPLACED_PLAN_MEMBERS}
     return complete_plan(records, artifacts, assignment, dict(kept, **replacement))

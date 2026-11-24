@@ -8,7 +8,9 @@ its purpose here, and never read the installed runtime to authenticate a stored 
 
 import ast
 from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 
 SOURCES_PATH = Path(__file__).resolve().parents[1] / 'research_harness'
 # The functions that read the installed runtime, and the functions that only pass such a reading on.
@@ -29,7 +31,7 @@ DECLARED_SITES = {
     'review_protocol.require_installed_runtime': 'reader',
     'artifacts.ArtifactStore.read_runtime_fingerprint': 'reader',
     'record_check.OfflineArtifacts.read_runtime_fingerprint': 'reader',
-    'openness_reading_v7._PlanningArtifacts.read_runtime_fingerprint': 'reader',
+    'review_session_v4._InventoryArtifacts.read_runtime_fingerprint': 'reader',
     'review_state_evaluation._runtime_fingerprint': 'reader',
     'review_route_capacity.read_installed_cli_version': 'reader',
     'review_protocol.record_route': 'new_record',
@@ -40,8 +42,8 @@ DECLARED_SITES = {
     'review_claude_transport.send_request': 'new_call',
     'review_protocol._observed': 'new_call',
     'review_protocol.probe_route': 'new_call',
-    'review_protocol.invoke_assignment': 'new_call',
-    'review_protocol.record_assignment': 'new_call',
+    'review_protocol.prepare_assignment_call': 'new_call',
+    'review_protocol._prepare_assignment': 'new_call',
     'review_staged_protocol.invoke_task': 'new_call',
     'review_staged_protocol.plan_frontier': 'new_call',
     'review_refusal_replacement.prepare_replacement': 'new_call',
@@ -50,7 +52,6 @@ DECLARED_SITES = {
     'review_failure_class.plan_refusal_recovery': 'plan',
     'review_route_plan.read_route_standing': 'plan',
     'review_route_plan.list_current_routes': 'plan',
-    'review_session_v4.list_session_serving_routes': 'plan',
     'review_state_evaluation.runtime_scope': 'memo_key',
     'review_state_evaluation.evaluate_state': 'memo_key',
     'review_route_capacity.describe_open_route_reports': 'report',
@@ -114,6 +115,40 @@ class InstalledRuntimeReaderTests(unittest.TestCase):
     def test_every_declared_site_still_reads_the_installed_runtime(self):
         self.assertEqual(sorted(set(DECLARED_SITES) - _find_sites()), [],
                          'These declared functions no longer read the installed runtime; remove their rows.')
+
+
+class RuntimeOverlayTests(unittest.TestCase):
+    def test_route_standing_passes_through_the_inventory_overlay(self):
+        """The inventory overlay raises AttributeError on the base when route standing reads the runtime."""
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.evaluation import Evaluation
+        from research_harness.review_route_plan import read_route_standing
+        from research_harness.review_session_v4 import _InventoryArtifacts
+
+        route = dict(id='fixture', adapter='codex_cli', runtime=dict(version='recorded'))
+        records = dict(review_route={'fixture': route})
+        with tempfile.TemporaryDirectory() as root:
+            store = ArtifactStore(Path(root))
+            for runtime in (route['runtime'], dict(version='changed')):
+                with patch.object(store, 'read_runtime_fingerprint', return_value=runtime):
+                    expected = read_route_standing(records, store, route['id'])
+                    self.assertEqual(expected['stale'], runtime != route['runtime'])
+                    for source in (store, Evaluation(records, store)):
+                        with self.subTest(source=type(source).__name__, runtime=runtime):
+                            self.assertEqual(read_route_standing(
+                                records, _InventoryArtifacts(source), route['id']), expected)
+
+    def test_session_inventory_does_not_read_the_installed_runtime(self):
+        """Contract on the base and with runtime forwarding. Inventory alone reads no reviewer state."""
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.review_session_v4 import build_session_inventory
+
+        with tempfile.TemporaryDirectory() as root:
+            store = ArtifactStore(Path(root))
+            with patch.object(store, 'read_runtime_fingerprint') as read_runtime:
+                inventory = build_session_inventory({}, store, {})
+            self.assertEqual(inventory['inventory']['units'], [])
+            self.assertEqual(read_runtime.call_count, 0)
 
 
 if __name__ == '__main__':

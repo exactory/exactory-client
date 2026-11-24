@@ -278,8 +278,8 @@ class StoredSessionVerificationTests(unittest.TestCase):
 
     def setUp(self):
         self.case = problem_fixtures.ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
         self.sizes = []
         self.sequence = 0

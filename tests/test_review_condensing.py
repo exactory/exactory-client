@@ -31,6 +31,23 @@ def build_combination(block, answer_bound=None):
 
 
 class CondensingTests(unittest.TestCase):
+    def test_forced_block_minimum_matches_the_planned_block_minimum(self):
+        plan = condensing.plan_condensing(build_entries(2, 360), 60000)
+        self.assertEqual(plan['minimum_block_characters'], 1024)
+
+    def test_minimum_block_can_cite_another_block_on_each_adapter(self):
+        from research_harness import review_route_capacity as capacity
+        from test_review_route_capacity import build_route
+        block = condensing.cut_condensing_blocks([dict(handle='b' + 'c' * 64, characters=1024)], 1024)[0]
+        output = dict(block=block['handle'], summary='', refs=block['entries'][:1])
+        for adapter in capacity.CAPACITY_ADAPTERS:
+            with self.subTest(adapter=adapter):
+                route = build_route(adapter=adapter)
+                def measure_output(value):
+                    return capacity.measure_capacity_value(route, value)
+                self.assertLessEqual(measure_output(output), 256)
+                self.assertEqual(condensing.validate_combination(block, output, measure_output, 256), output)
+
     def test_ten_thousand_entries_fit_ordered_blocks_and_finish(self):
         entries = build_entries(10000)
         before = copy.deepcopy(entries)
@@ -168,6 +185,14 @@ class CombinationTests(unittest.TestCase):
                     condensing.validate_combination(self.block, value, measure, 1000)
                 self.assertEqual(caught.exception.code, 'invalid_value_review')
                 self.assertEqual(caught.exception.contract_check, 'review.shape')
+
+    def test_a_defect_of_the_frozen_block_is_no_refusal_of_the_answer(self):
+        """Repairs ST-F3 of the review of the merged tree. A block that the harness built without a member raises its
+        own error before the answer is checked, so a valid answer is not refused for it."""
+        output = {'block': 'b1', 'summary': 's', 'refs': ['e1']}
+        for block in ({'handle': 'b1', 'entries': ['e1', 'e2']}, {'handle': 'b1', 'characters': 4000}):
+            with self.subTest(members=sorted(block)), self.assertRaises(KeyError):
+                condensing.validate_combination(block, output, len, 100)
 
     def test_replacement_refuses_a_block_absent_from_the_current_state(self):
         with self.assertRaises(ResearchError) as caught:

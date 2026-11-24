@@ -14,13 +14,20 @@ from research_fixtures import client, xml_response, atom, entry
 
 
 class AcquisitionCompatibilityTests(jobs_fixtures.JobCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_job_with_historical_part_and_staged_records_preserves_receipts(self):
         self.load_jobs()
         import test_review_staged_scale_entry as staged_fixtures
         from research_harness import review_protocol as protocol
         fixture = staged_fixtures.StagedScaleEntryTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.oversized(count=6, characters=24000, limit=110000)
         part = fixture.assign('historical-part')
         fixture.invoke(part)

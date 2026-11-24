@@ -65,6 +65,10 @@ class CallCaptureRecoveryTests(LiteratureCase):
     records = fixtures.ReviewProtocolTests.records
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.route()
 
@@ -161,6 +165,7 @@ class CallCaptureRecoveryTests(LiteratureCase):
                                           request_id='reconcile-uncaptured')
         self.assertTrue(result['result']['released'])
         self.assertEqual(self.records()['review_route_probe']['uncaptured']['error']['code'], 'review_invocation_interrupted')
+        self.assertEqual(self.records()['review_route_probe']['uncaptured']['unverified_reasons'], ['call_incomplete'])
 
     def test_final_receipt_returns_before_changed_capture_dependencies(self):
         self.run_probe()
@@ -348,6 +353,13 @@ class CallCapturePreparationTests(TaskExecutionFixture):
 
 
 class NativeCorrectionCaptureTests(LiteratureCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_correction_uses_retained_native_rollout_after_source_is_removed(self):
         import test_visual_context_repair as visual
         from research_harness import research_decisions as decisions, review_codex_transport as codex

@@ -122,6 +122,10 @@ class RecordIntegrityTests(unittest.TestCase):
 
 class RecordCheckTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = fixtures.ProblemReviewTests()
         self.addCleanup(self.case.doCleanups)
         self.case.setUp()
@@ -307,8 +311,12 @@ class RecordCheckTests(unittest.TestCase):
         from research_harness import record_check
         with patch.object(record_check.transport, 'local_input_limit', return_value=1):
             report = self.check()
-        self.assertFalse(report['ready'])
-        self.assertEqual(self.step(report, 'continuation')['error']['code'], 'review_input_too_large')
+        # The plan asks the admission of its run, so the route limit ends the chain at a decision stop of the plan
+        # before any call, and the check reports that stop.
+        self.assertTrue(report['ready'])
+        action = self.step(report, 'continuation')['result']['chains'][0]['actions'][-1]
+        self.assertEqual((action['state'], action['code'], action['stop_class'], action['details']['phase']),
+                         ('stop', 'review_input_too_large', 'decision', 'dispatch_preflight'))
         self.assertFalse(self.case.read_records().get('review_invocation'))
 
     def test_allowed_capacity_refusals_are_reported_as_decision_stops(self):
@@ -682,9 +690,11 @@ from pathlib import Path
 import shutil
 import sys
 sys.path[:0] = sys.argv[1:3]
+from literature_fixtures import LiteratureCase
 from test_research_review_protocol import ReviewProtocolTests
 case = ReviewProtocolTests()
-case.setUp()
+# The archived release has no selection of the session rules: set the fixture up without the statement of its rules.
+LiteratureCase.setUp(case)
 try:
     # Use the archived route operation; modern test backends require later modules.
     case.mutate(case.protocol().record_route, dict(id='route', adapter='openai_responses_v1',
@@ -926,6 +936,20 @@ else:
 
 
 class RecordCheckFollowupTests(unittest.TestCase):
+    def test_composite_mismatch_identifies_acceptance_link(self):
+        from research_harness import record_check, review_composite, review_parts_native, review_parts_v3
+
+        final = dict(id='final', role='native_math', review_parts=dict(protocol=review_parts_v3.PROTOCOL))
+        link = dict(acceptance_id='acceptance', review=dict(assignment_id='final'))
+        records = dict(review_assignment={'final': final}, native_acceptance_review={'link': link})
+        with patch.object(review_parts_native, 'find_final_assignment', return_value=final), \
+             patch.object(protocol, 'assignment_state', return_value={}), \
+             patch.object(review_composite, 'read_final_output', return_value=({}, dict(id='composed'))):
+            with self.assertRaises(ResearchError) as caught:
+                record_check.check_acceptance_reviews(records, None)
+        self.assertEqual(caught.exception.code, 'record_acceptance_review_changed')
+        self.assertEqual(caught.exception.details, dict(link_id='link', acceptance_id='acceptance'))
+
     def test_deadline_during_timer_installation_still_reports_a_budget_failure(self):
         from research_harness import record_check
         with patch('signal.getitimer', return_value=(0, 0)), patch('signal.signal') as handler, \

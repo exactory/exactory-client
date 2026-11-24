@@ -12,6 +12,7 @@ or the temporary memory needed to build one request or parse one JSON value.
 """
 
 from collections import OrderedDict
+from contextlib import contextmanager
 import json
 import marshal
 import sys
@@ -97,6 +98,12 @@ class _HistoricalEvaluationReads:
 class Evaluation:
     def __init__(self, records, artifacts, *, retention_budget_bytes=None, _owner=None):
         inherited = artifacts if isinstance(artifacts, Evaluation) else _owner
+        if inherited is None:
+            # A plan's view, and an overlay nested in it, carry the evaluation of that plan: its arena, runtime scope
+            # and prospective entries (planning_view).
+            from .openness_reading_v7 import _PlanningArtifacts
+            if isinstance(artifacts, _PlanningArtifacts):
+                inherited = artifacts.planning_owner
         if retention_budget_bytes is None:
             retention_budget_bytes = inherited.retention_budget_bytes if inherited is not None else 64 * 1024 * 1024
         if type(retention_budget_bytes) is not int or retention_budget_bytes < 0:
@@ -108,7 +115,7 @@ class Evaluation:
         overlay = _owner is None and isinstance(records, _RecordedSnapshot) and any(
             isinstance(kind, _HistoricalKind) for kind in records.values())
         self._source_records = records
-        self.records, self.store, self.root = records, artifacts, artifacts.root
+        self.records, self.store, self.root = records, artifacts, getattr(artifacts, 'root', None)
         self.retention_budget_bytes = retention_budget_bytes
         self._historical_cache = None if _owner is None else _owner._historical_cache
         self._owner = None if _owner is None else weakref.ref(_owner)
@@ -126,6 +133,9 @@ class Evaluation:
         self._structural = {}
         self._active_states = set()
         self._runtime_scope = [None] if inherited is None else inherited._runtime_scope
+        self._planning_entries = None if inherited is None else inherited._planning_entries
+        self._planning_accounting = ({'overlays': weakref.WeakSet(), 'peak_bytes': 0, 'entries': None}
+                                     if inherited is None else inherited._planning_accounting)
         if historical or overlay:
             self._historical_cache = _HistoricalEvaluationReads(records, self)
             historical_records = records.read_snapshot(records.read_revision(), cache=self._historical_cache)
@@ -169,6 +179,36 @@ class Evaluation:
 
     of = reuse_evaluation
 
+    @contextmanager
+    def planning_view(self):
+        """Share the command arena and keep each plan's prospective bytes in its own view."""
+        from .openness_reading_v7 import _PlanningArtifacts
+        if isinstance(self.store, _PlanningArtifacts):
+            yield self
+            return
+        accounting = self._planning_accounting
+        overlay = _PlanningArtifacts(self, accounting=accounting, checks_destinations=True)
+        preview = Evaluation(self.records, overlay)
+        preview._structural = self._structural
+        preview.counters = self.counters
+        enclosing, earlier_views = accounting['entries'], set(accounting['overlays']) - {overlay}
+        preview._planning_entries = accounting['entries'] = set()
+        try:
+            yield preview
+        finally:
+            for view in list(accounting['overlays']):
+                if view not in earlier_views:
+                    view.clear()
+            accounting['entries'] = enclosing
+            for request, key in preview._planning_entries:
+                entries = self._requests if request else self._optional
+                value = entries.pop(key, None)
+                if value is not None:
+                    weight = value[1]
+                    self._retained_bytes[0] -= weight
+                    if request:
+                        self._request_bytes[0] -= weight
+
     def find_root(self):
         owner = None if self._owner is None else self._owner()
         return self if owner is None else owner
@@ -201,15 +241,21 @@ class Evaluation:
         weight = _weigh_value((key, value)) + sys.getsizeof((None, 0)) + (512 if request else 256)
         capacity = budget // 2 if request else budget - self._request_bytes[0]
         if weight <= capacity and not (request and value is None):
+            # The open plan forgets an evicted entry, so its list stays within the arena.
+            planned = self._planning_accounting['entries'] or set()
             if request:
                 while self._requests and self._request_bytes[0] + weight > capacity:
-                    _, (_, removed) = self._requests.popitem(last=False)
+                    evicted, (_, removed) = self._requests.popitem(last=False)
+                    planned.discard((True, evicted))
                     self._request_bytes[0] -= removed
                     self._retained_bytes[0] -= removed
             while self._optional and self._retained_bytes[0] + weight > budget:
-                _, (_, removed) = self._optional.popitem(last=False)
+                evicted, (_, removed) = self._optional.popitem(last=False)
+                planned.discard((False, evicted))
                 self._retained_bytes[0] -= removed
             entries[key] = value, weight
+            if self._planning_entries is not None:
+                self._planning_entries.add((request, key))
             self._retained_bytes[0] += weight
             if request:
                 self._request_bytes[0] += weight
@@ -223,6 +269,8 @@ class Evaluation:
         root = self.find_root()
         views = list(self._views)
         return {'budget_bytes': self.retention_budget_bytes,
+                'planning_live_bytes': sum(view._planning_bytes for view in self._planning_accounting['overlays']),
+                'planning_peak_bytes': self._planning_accounting['peak_bytes'],
                 'optional_bytes': self._retained_bytes[0],
                 'optional_entries': len(self._optional) + len(self._requests),
                 'request_bytes': self._request_bytes[0],
@@ -307,21 +355,62 @@ class Evaluation:
                                         None if compute is None else encode)
         return None if encoded is None else marshal.loads(zlib.decompress(encoded))
 
-    def index_records(self, kind, field, *, order=None):
-        """Index immutable rows once, preserving insertion order for equal sort keys."""
+    def index_records(self, kind, field, *, order=None, where=None):
+        """Group immutable rows once by a field or key function, with an optional scoped read."""
         key = ('index', kind, field, order)
+        if where:
+            key += (tuple(sorted(where.items())),)
         if key not in self._structural:
-            rows = self.records.get(kind, {}).values()
+            if where:
+                from .storage import read_filtered_records
+                rows = read_filtered_records(self.records, kind, **where).values()
+            else:
+                rows = self.records.get(kind, {}).values()
             if order is not None:
                 rows = sorted(rows, key=lambda row: row[order])
             index = {}
+            computed = callable(field)
             for row in rows:
-                index.setdefault(row[field], []).append(row)
+                group = field(row) if computed else row[field]
+                if group is not None or not computed:
+                    index.setdefault(group, []).append(row)
             self._structural[key] = index
             child_key = self._revision_cache_key
             if child_key is not None and child_key in self._optional and self._optional[child_key][0] is self:
                 self._retain_once(child_key, lambda: self, refresh=True)
         return self._structural[key]
+
+    @staticmethod
+    def assignment_rows(records, **where):
+        """Index immutable assignment filters during a command, keeping scoped reads authoritative."""
+        from .storage import _matches_record_filter, read_filtered_records
+        attached = getattr(records, '_review_evaluation', None)
+        evaluation = None if attached is None else attached()
+        if (getattr(records, 'read_filtered_records', None) is not None or evaluation is None
+                or evaluation._source_records is not records and evaluation.records is not records):
+            return read_filtered_records(records, 'review_assignment', **where).values()
+        fields = tuple(where)
+        values = tuple(where.values())
+        key = ('assignment_filters', fields)
+        if key not in evaluation._structural:
+            groups = {}
+            for row in records.get('review_assignment', {}).values():
+                identity = []
+                for field in fields:
+                    value = row
+                    for part in field.split('.'):
+                        value = value.get(part) if isinstance(value, dict) else None
+                    identity.append(value)
+                try:
+                    groups.setdefault(tuple(identity), []).append(row)
+                except TypeError:
+                    # A damaged binding cannot equal one of these scalar filter keys.
+                    continue
+            evaluation._structural[key] = groups
+        try:
+            return evaluation._structural[key].get(values, ())
+        except TypeError:
+            return (row for row in records.get('review_assignment', {}).values() if _matches_record_filter(row, where))
 
     def read_snapshot(self, revision):
         """Share authenticated history and budget; inactive child retention is optional."""

@@ -438,7 +438,15 @@ def check_acceptance_reviews(records, artifacts):
             if composite is not None:
                 binding = dict(id=composite['id'], digest=digest(composite))
                 if review.get('composite') != binding:
-                    raise ResearchError('record_acceptance_review_changed', 'The native acceptance link names another composite.')
+                    raise ResearchError('record_acceptance_review_changed',
+                                        'The composite binding of a native_acceptance_review record does not '
+                                        'match the store. The record links an accepted result of a math-solver '
+                                        'objective to the review that accepted it, and the final of that review '
+                                        'was written in pages and composed by the harness. review.composite of '
+                                        'the record is absent, or its id or digest differs from the composite of '
+                                        'the final turn. record-check changed nothing. Report link_id and '
+                                        'acceptance_id of the details with the failed step.',
+                                        {'link_id': identifier, 'acceptance_id': link['acceptance_id']})
                 observed = dict(observed, output=output, output_digest=digest(output))
         key = {name: link[name] for name in ('attack_root', 'objective_id', 'acceptance_digest')}
         if (identifier != digest(key) or final is None or final['role'] != 'native_math'

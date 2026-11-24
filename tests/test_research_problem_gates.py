@@ -11,6 +11,10 @@ from research_harness.problem_claims import compute_problem_evidence_digest
 
 class ProblemGateTests(ProblemDeliveryCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.prepare_ready()
         self.record_post_decision()
@@ -165,6 +169,13 @@ class ProblemGateTests(ProblemDeliveryCase):
 
 
 class ProblemSourceGateTests(ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_pending_observed_source_request_blocks_the_post_gate(self):
         from research_harness import review_protocol
         self.initialize_problem()

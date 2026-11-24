@@ -1,5 +1,6 @@
 """Scoped result assignments preserve the checked scientific byte boundary."""
 
+from unittest.mock import patch
 import copy
 import json
 
@@ -10,6 +11,13 @@ from research_harness import review_protocol
 
 
 class ScopedPacketTests(SourceLimitedCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     module = decision_fixtures.ScopedDecisionTests.module
     put = decision_fixtures.ScopedDecisionTests.put
     dossier = decision_fixtures.ScopedDecisionTests.dossier

@@ -162,44 +162,7 @@ FORM_SIZE_GAPS = {
 }
 # Cells whose rows hold the behaviour of the tree for a defect that this guard found; the lane report gives the
 # failing test of each for the supervisor. A fix of the unit removes its cell.
-MATH_V2_PROJECTION_FINDING = (
-    'review_plan_steps.complete_plan gives a math v2 final the answers of a problem chain: '
-    'describe_projection_decision treats only the math protocol v1 as a math chain, so both answers export a '
-    'problem openness packet (step 4) and the store accepts it as the next chain of the math review.')
-SERIES_READ_COMPACTION_FINDING = (
-    'review_failure_class.classify_final_capacity_attempt reads every failed read turn of a parts v3 series through '
-    'review_parts.find_failed_replacement first, so an input that the transport compacted is classified '
-    'output_over_cap; the row ends at the same replacement.')
-REPAIR_HISTORY_FINDING = (
-    'review_context_repair refuses the context repair of a parts v3 series after an answered page with '
-    'review_context_repair_history_unrecorded: it reads each answered page as an observed final that a value review '
-    'must record first, so the answer "Move to another route" (steps 8, 7, 1) of a stop on the closing page ends at a '
-    'refused review-assignment.')
-RUNTIME_PROBE_FINDING = (
-    'review_failure_class.plan_after_failure keeps the handoff review_runtime_missing (step 7, review-probe) after '
-    'the probe verified the route and after its not_before: the plan of the head is the same handoff until an attempt '
-    'that no plan names is recorded, so review-series ends with the same line again. This holds for every chain kind, '
-    'the reading chains of 0.91.0 included.')
-SMALLER_STATEMENT_FINDING = (
-    'The stop review_route_capacity_below_floor of a first assignment of a v7 chain offers the answer "Record a '
-    'statement with fewer neighbours" also when details.largest_one_request_targets is 0, that is when the route '
-    'cannot answer the statement alone: the check of review-assignment in its steps refuses every smaller export with '
-    'the same stop.')
-SPLIT_POSITION_FINDING = (
-    'review_failure_class.count_position counts a page of a split of a session v4 or of a series v3 in the position '
-    'of the page that it splits (list_turn_assignments holds the parent), while the pages of a split of a v7 and a '
-    'math v2 final, and the verification criterion of ci/route_capacity_profile, give each half a new position (D2 '
-    'G4; finding 3 of the Astra review of the plan, part c): the failures of the parent count against the halves.')
-FORM_DEFECTS = {
-    ('session-v4', 'page', 'split'): SPLIT_POSITION_FINDING,
-    ('parts-v3', 'page', 'split'): SPLIT_POSITION_FINDING,
-    ('v7-pages', 'admission', 'Record a statement with fewer neighbours'): SMALLER_STATEMENT_FINDING,
-    ('handoff', 'review_runtime_missing'): RUNTIME_PROBE_FINDING,
-    ('parts-v3', 'closing', 'Move to another route'): REPAIR_HISTORY_FINDING,
-    ('math-v2', 'final', 'input_over_limit', None): MATH_V2_PROJECTION_FINDING,
-    ('math-v2', 'final', 'input_over_limit', 'compacted'): MATH_V2_PROJECTION_FINDING,
-    ('parts-v3', 'read', 'input_over_limit', 'compacted'): SERIES_READ_COMPACTION_FINDING,
-}
+FORM_DEFECTS = {}
 FORM_ROWS_MESSAGE = ('A turn of a chain kind of this release has a size outcome without an executed row, a row lacks its '
                      'retained call or its executed boundary, or a gap names a cell that a row covers. Execute one '
                      'complete row for each cell of FORM_FAMILIES, or name the cell in the gap table with its reason.')

@@ -17,6 +17,13 @@ from test_research_problem_citation_metadata import CitationMetadataCase
 
 
 class ProblemResultPartsTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def add_url_citation_reading(self):
         import sys
         from research_harness.problem_evidence import describe_evidence

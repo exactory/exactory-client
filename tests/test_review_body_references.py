@@ -1,5 +1,6 @@
 """Ordinary history references preserve exact messages and reject damaged objects."""
 
+from unittest.mock import patch
 import base64
 import copy
 import hashlib
@@ -293,6 +294,13 @@ class BodyReferenceTests(unittest.TestCase):
 
 
 class OrdinaryAssignmentReferenceTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_new_text_continuation_stores_reference_without_repeated_bodies(self):
         import test_research_bar_sources as fixtures
         case = fixtures.BarSourceTests()

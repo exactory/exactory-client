@@ -13,6 +13,13 @@ from search_controller import reviewer
 
 
 class MathOpennessCaptureSelectionTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import openness_reading
+        released = patch.object(openness_reading, 'NEW_MATH_CHAIN_PROTOCOLS', (openness_reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def open_case(self):
         case = chain_fixtures.MathOpennessReadingTests()
         self.addCleanup(case.doCleanups)

@@ -41,6 +41,9 @@ def pin_artifact(store, payload, *, expected_revision, request_id):
     """Save authored program, review or provenance bytes without result credit."""
     from .probe_provenance import find_probe_path_bindings, pin_probe_local_artifact, should_stage_probe_artifact_pin
     snapshot = _read_preparation(store)
+    if isinstance(payload, dict) and 'text_form_of' in payload:
+        return declare_review_text(store, payload, expected_revision=expected_revision,
+                                   request_id=request_id, snapshot=snapshot)
     if not snapshot.has_request(request_id) and should_stage_probe_artifact_pin(snapshot.records, payload, request_id):
         return pin_probe_local_artifact(store, payload, expected_revision=expected_revision, request_id=request_id,
                                         _snapshot=snapshot)
@@ -61,6 +64,29 @@ def pin_artifact(store, payload, *, expected_revision, request_id):
             raise
         return pin_probe_local_artifact(store, payload, expected_revision=expected_revision, request_id=request_id,
                                         _snapshot=snapshot)
+
+
+def declare_review_text(store, payload, *, expected_revision, request_id, snapshot):
+    from .probe_provenance import find_probe_path_bindings
+    from .review_parts_slate import TEXT_CAPTURE_KIND, INVALID_TEXT_CAPTURE, derive_text_capture_id, read_capture_text
+
+    artifacts = store.build_artifact_store()
+
+    def prepare(records, value):
+        fields(value, ('id', 'path', 'media_type', 'text_form_of'))
+        original = value['text_form_of']
+        artifacts.verify(original)
+        if value['id'] != derive_text_capture_id(original) or find_probe_path_bindings(records, value['path']):
+            raise ResearchError('invalid_input', INVALID_TEXT_CAPTURE)
+        data = read_file(store.root, value['path'])
+        if read_capture_text(data, value['media_type']) is None:
+            raise ResearchError('invalid_input', INVALID_TEXT_CAPTURE)
+        artifact = artifacts.put(data, value['media_type'])
+        record = dict(value, artifact=artifact, scientific_validation=False)
+        return [(TEXT_CAPTURE_KIND, value['id'], record)], record
+
+    return prepared_mutation(store, 'workspace.artifact', payload, prepare,
+                             expected_revision=expected_revision, request_id=request_id, _snapshot=snapshot)
 
 
 def initialization_payload(store, kind, state, request_id, *, preparation_policy=None):

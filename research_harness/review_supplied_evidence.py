@@ -19,8 +19,8 @@ PROMPT = (
 
 
 def find_scientific_predecessor(assignment):
-    """Follow a fixed scientific slot across continuations, repairs, refreshes of a chain of the session rules v4 and
-    upgrades."""
+    """Follow a fixed scientific slot across continuations, repairs, refreshes that start a new chain (of a chain of the
+    session rules v4 or of an ordinary slate review) and upgrades."""
     if assignment.get('capacity_replacement_of') is not None:
         return assignment['capacity_replacement_of']
     context = assignment.get('context', {})
@@ -96,6 +96,15 @@ def list_delivered_objections(packet):
     historical = [entry.get('review', entry) for entry in packet.get('historical_reviews', [])]
     return packet.get('material_objections', []) + [objection for entry in historical
         for objection in entry.get('payload', entry).get('objections', [])]
+
+
+def list_historical_review_objections(packet):
+    """The earlier review objections available to the current value review."""
+    reviews = [objection for entry in packet.get('historical_reviews', [])
+               for objection in _list_review_objections(entry)]
+    bars = [objection for entry in packet.get('historical_bars', [])
+            for objection in entry.get('review', entry).get('objections', [])]
+    return reviews + bars
 
 
 def _list_review_objections(review):

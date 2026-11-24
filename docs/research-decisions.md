@@ -821,23 +821,35 @@ The subscription-backed route uses this shape:
 
 Its inspected startup contract is for Codex CLI 0.159.2 and 0.162.1 and, since
 the 0.85.1 release, for Codex CLI 0.167.0, with user configuration and rules
-disabled, at reasoning effort `high`. It accepts text evidence only. The
-adapter checks actual recorded input and rejects uninspected startup
-declarations, additional context and tool events. Codex CLI 0.167.0 records
-two startup inputs in the rollout that 0.162.1 does not record. The first is
-the model's tool list, an `additional_tools` item, and the adapter accepts it
-only when its digest is the audited digest. The second is a developer message
-with the review instructions, and the adapter accepts it only when its text is
-exactly the instructions of the request. Other runtime contexts
-remain unverified until inspected and probed. The route starts the CLI with the
-shell tool, multi-agent work, plugins, apps, hooks, memories, skill discovery,
-browser and computer use, web search and MCP servers disabled, and since 0.66.0
-with the five code-mode settings `features.code_mode`,
-`features.code_mode_host`, `features.code_mode_only`, `features.js_repl` and
-`features.js_repl_tools_only` set to false, checked on Codex CLI 0.163.0. These
-settings stop code execution. They do not remove the `exec` tool from the
-model's tool list: a call of it returns "code-mode host is disabled" and runs
-nothing.
+disabled, at the reasoning effort of the route (`effort` in its configuration,
+`high` without the member). It accepts text evidence only. The adapter checks
+actual recorded input and rejects uninspected startup declarations, additional
+context and tool events. Codex CLI 0.167.0 records two startup inputs in the
+rollout that 0.162.1 does not record. The first is the model's tool list, an
+`additional_tools` item, and the adapter accepts it only when its digest is
+the audited digest. Since 0.93.0 the comparison leaves out the model listing
+in the description of `spawn_agent`. The listing is the run of lines after
+`Available model overrides (optional; inherited parent model is preferred):`,
+one line for each model of the provider's catalog. The provider changes these
+lines when its catalog changes. They hold no context of the project or of the
+user, and they are part of the provider's service configuration, which the
+route state names as not audited. Every other character of the tool list stays
+pinned. The evidence of a call records the digest of the list as the CLI
+delivered it. Codex CLI 0.167.0 gives the model `gpt-6.2-astra` one more tool,
+`send_message_to_user_async`, and another `<multi_agent_role>` text than the
+earlier models. The audit of 2026-11-22 read a rollout of `gpt-6.2-astra`; the
+model catalog gives `gpt-6.2-sol` the same tool and role text. The second is a
+developer message with the review instructions, and the adapter accepts it
+only when its text is exactly the instructions of the request. Other runtime
+contexts remain unverified until inspected and probed. The route starts the
+CLI with the shell tool, multi-agent work, plugins, apps, hooks, memories,
+skill discovery, browser and computer use, web search and MCP servers
+disabled, and since 0.66.0 with the five code-mode settings
+`features.code_mode`, `features.code_mode_host`, `features.code_mode_only`,
+`features.js_repl` and `features.js_repl_tools_only` set to false, checked on
+Codex CLI 0.163.0. These settings stop code execution. They do not remove the
+`exec` tool from the model's tool list: a call of it returns "code-mode host
+is disabled" and runs nothing.
 
 A tool call in the recorded rollout is the issue `tool_call:<name>` in
 `context_evidence.issues` of the attempt's response, for example
@@ -863,13 +875,13 @@ is recorded; the CLI receives nothing. When the CLI exits with a nonzero code or
 the timeout, `execution.stderr_tail` of the attempt's response keeps the last 20
 lines of its standard error, at most 4,096 UTF-8 bytes; it is empty after a zero
 exit. Read it before a retry: it holds what the CLI printed, which the attempt
-record did not keep before 0.66.0. `timeout_seconds` is a hard
-wall-time limit, positive and at most 600. `max_output_tokens` is checked after
-generation; it is not a provider-side token reservation or a guarantee against
-spending beyond that value. Binary evidence requires a separately configured and
-verified supported route. The `openai_responses_v1` adapter uses an HTTPS
-endpoint and an API credential; its existence does not authorize paid calls or
-establish live route verification.
+record did not keep before 0.66.0. `timeout_seconds` is a hard wall-time
+limit, positive and at most 3,600 (600 before 0.93.0). `max_output_tokens` is
+checked after generation; it is not a provider-side token reservation or a
+guarantee against spending beyond that value. Binary evidence requires a
+separately configured and verified supported route. The `openai_responses_v1`
+adapter uses an HTTPS endpoint and an API credential; its existence does not
+authorize paid calls or establish live route verification.
 
 The reviewer of a Claude Code session is the Claude Code CLI itself, on the
 owner's subscription:

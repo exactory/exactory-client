@@ -388,6 +388,27 @@ class CardCondensingTests(unittest.TestCase):
 
 
 class GroupSizingTests(unittest.TestCase):
+    def test_a_correct_copy_of_a_group_row_fits_the_row_limit_of_the_answer(self):
+        """Repairs A12, not reproduced. A group row holds two unit handles ('u' and the position of the unit) and
+        integers. With each integer at 10**15 and each handle at eight digits, the late row of size_read_turn still
+        measures below CARD_GROUP_FIELDS_CHARACTERS on each adapter, so the check of a read answer never refuses a
+        correct copy of a row."""
+        plan = build_small_plan(rate=0.01, start=37500)
+        units = [dict(handle='prior', characters=99), dict(handle='late', characters=30001, late=True)]
+        cursor = dict(unit_index=1, unit_offset=0, delivered=99, card_count=1, card_reserve=300, card_budget=0)
+        card = parts.size_read_turn(plan, 37500, units, position=cursor)['cards'][0]
+
+        def inflate(value):
+            if isinstance(value, dict):
+                return {key: 'u' + '9' * 8 if key == 'unit' else inflate(item) for key, item in value.items()}
+            return 10 ** 15 if type(value) is int else value
+        largest = inflate(card)
+        self.assertIn('late_reserve_before', largest)
+        for adapter in ('codex_cli_v1', 'claude_cli_v1', 'openai_responses_v1'):
+            with self.subTest(adapter=adapter):
+                measured = capacity.measure_capacity_value(build_route(adapter=adapter), largest)
+                self.assertLess(measured, parts.CARD_GROUP_FIELDS_CHARACTERS)
+
     def test_late_funding_rounding_can_require_the_shorter_group_first(self):
         plan = build_small_plan(rate=0.01, start=37500)
         plan['task']['read']['answer_bound'] = 750

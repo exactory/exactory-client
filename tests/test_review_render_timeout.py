@@ -33,6 +33,10 @@ def run_isolated_child_in_process(clone, source, report, report_directory):
 
 class RenderTimeoutTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         from test_visual_result_delivery import VisualResultDeliveryTests
         self.fixture = VisualResultDeliveryTests()
         self.addCleanup(self.fixture.doCleanups)

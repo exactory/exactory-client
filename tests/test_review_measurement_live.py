@@ -123,9 +123,13 @@ class HistoricalFixtureTests(unittest.TestCase):
 
 class LiveSeriesTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         fixture = continuation_fixtures.ContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         self.case = fixture.case
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -288,12 +292,19 @@ class LiveSeriesTests(unittest.TestCase):
 
 
 class LiveCasePreparationTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_focused_case_recreates_retained_payload_with_fixed_route(self):
         from tools.review_measurement import live_cases
         from test_review_parts_adjudication_journey import AdjudicationPartsCase
         fixture = AdjudicationPartsCase()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         case = fixture.case
         payload = dict(id='refused-primary', route_id='route', dossier_id=None,
                        role='adjudicator', reviewer_id='third', author_id='author',

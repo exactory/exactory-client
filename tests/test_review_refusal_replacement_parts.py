@@ -1,5 +1,6 @@
 """Replacements preserve every stage of a real fresh-input series."""
 
+from unittest.mock import patch
 import copy
 import unittest
 
@@ -10,10 +11,17 @@ from research_harness.evidence import digest
 
 
 class PartsReplacementTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_every_parts_kind_can_be_replaced_and_the_corrected_series_records(self):
         fixture = fixtures.PartsResultCase()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.oversized(count=4, characters=24000, room=40000)
         assignment = fixture.assign()
         seen = set()
@@ -68,8 +76,8 @@ class PartsReplacementTests(unittest.TestCase):
     def test_ordinary_focused_adjudication_replaces_its_refusal_and_records(self):
         import test_review_parts_adjudication_journey as focused_fixtures
         fixture = focused_fixtures.AdjudicationPartsCase()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         assignment = fixture.assign()
         good = fixture.final_output()
         bad = dict(good, disposition='invalid')
@@ -93,8 +101,8 @@ class PartsReplacementTests(unittest.TestCase):
         import problem_parts_fixtures as legacy_fixtures
         from unittest.mock import patch
         fixture = legacy_fixtures.ResultPartsCase()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.oversized()
         with patch.object(protocol, 'COMMON_VERSION', 3):
             first = fixture.assign()

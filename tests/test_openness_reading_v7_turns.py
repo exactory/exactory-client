@@ -1,6 +1,7 @@
 """Bounded v7 turns. Synthetic shape of the 57-turn final-over-limit incident."""
 
 import copy
+import hashlib
 import json
 import unittest
 from unittest.mock import patch
@@ -49,6 +50,33 @@ def build_inventory(artifacts, characters=40000, unicode=False):
         record_id='minimum_gaps', artifact=gaps)], {reference['sha256']: content, gaps['sha256']: b'[]'})
 
 
+def use_earlier_v7_frames():
+    """Build a fixture chain that started before the notes and list reserves."""
+    measure_turn_frames = v7.measure_turn_frames
+
+    def measure_earlier_frames(*args, **kwargs):
+        frames = measure_turn_frames(*args, **kwargs)
+        for fields in frames.values():
+            fields.pop('notes_cost', None)
+            fields.pop('lists', None)
+        return frames
+
+    return patch.object(v7, 'measure_turn_frames', side_effect=measure_earlier_frames)
+
+
+def stub_fit_for_full_v7_reading_level(test):
+    """Give a fixture a fitting profile for the 120,000-character material grant."""
+    from test_review_output_profile import build_row
+    read_priors = capacity.read_profile_priors
+
+    def read_fitting_priors(route):
+        return read_priors(route) + [build_row(level=480000, count=8, thinking=1000)]
+
+    patcher = patch.object(capacity, 'read_profile_priors', side_effect=read_fitting_priors)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+
+
 class RatioAndAdmissionTests(unittest.TestCase):
     def setUp(self):
         self.artifacts = MemoryArtifacts()
@@ -93,6 +121,9 @@ class RatioAndAdmissionTests(unittest.TestCase):
         self.assertIsNone(v7.derive_inherited_ratio(self.records, self.artifacts, different, self.route))
 
     def test_q7_final_floor_admits_eight_targets_and_refuses_nine_with_numbers(self):
+        released = patch.object(v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         inventory = v7.plan_inventory([], {})
         route = build_route('codex_cli_v1', 'gpt-6-astra')
         with patch.object(v7, 'build_inventory', return_value=inventory):
@@ -134,16 +165,16 @@ class RatioAndAdmissionTests(unittest.TestCase):
         built = build_inventory(self.artifacts)
         with patch.object(v7, 'build_inventory', return_value=built), patch.object(
                 capacity, 'read_profile_priors', return_value=[]), patch.object(capacity, 'NOTES_MAXIMUM_CHARACTERS', 6000), patch.object(v7, 'derive_inherited_ratio',
-                return_value=dict(characters_per_token=.55, source=dict(chain='old', attempt='measured'))):
+                return_value=dict(characters_per_token=.56, source=dict(chain='old', attempt='measured'))):
             with patch.object(v7, 'UNREAD_CORE_CHARACTERS', 0):
                 before = v7.check_v7_admission({}, self.artifacts, route, native, finding_version=1)
             after = v7.check_v7_admission({}, self.artifacts, route, native, finding_version=1)
         self.assertEqual(before['state'], 'record')
-        self.assertEqual(before['capacity_plan']['task']['final']['request_bound']['text_characters'], 126325)
+        self.assertEqual(before['capacity_plan']['task']['final']['request_bound']['text_characters'], 128773)
         self.assertEqual((after['state'], after['code']), ('stop', 'review_route_capacity_below_floor'))
         self.assertEqual(after['details']['reason'], 'fixed_frame')
-        self.assertEqual(after['details']['room'], 127545)
-        self.assertEqual(after['details']['frames']['final']['characters'] + 45000 + 60000, 127825)
+        self.assertEqual(after['details']['room'], 129864)
+        self.assertEqual(after['details']['frames']['final']['characters'] + 45000 + 60000, 130273)
 
     def test_same_measurement_does_not_compound_margin_across_three_successors(self):
         self.add_chain('first', ratio=1.36, measured=1.0)
@@ -384,6 +415,9 @@ class TurnPacketTests(unittest.TestCase):
         self.assertLessEqual(cost, 15000)
 
     def test_gap_bodies_are_units_and_non_ascii_material_fits_token_bound(self):
+        released = patch.object(v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         many_gaps = build_native()
         many_gaps['scientific_context']['minimum_gaps'] = [dict(
             formulation=many_gaps['scientific_context']['openness_minimum']['statement'], text='Gap %d' % n)
@@ -755,7 +789,8 @@ class V7CommandTests(OpennessReadingCase):
                 self.assertEqual(len(recovery['details']['attempts']), number + 1)
                 if allowance == 15000:
                     self.assertEqual(recovery['kind'], 'decision')
-                    self.assertIn('range_not_served', recovery['details'])
+                    self.assertEqual(hashlib.sha256(recovery['details']['range_not_served'].encode()).hexdigest(),
+                                     'aba20c622d40bd903b6c5321ca60a6e7c3c1c6d210a6ba0995540c3fe54e85c5')
                     break
                 self.assertEqual(recovery['kind'], 'replace')
                 self.assertEqual(recovery['payload']['route_id'], 'route')
@@ -913,6 +948,9 @@ class V7CommandTests(OpennessReadingCase):
                 context=dict(native_packet=native, reading_replacement='turn-1')))
 
     def test_q7_q8_five_thousand_targets_refuse_both_admissions_before_writing(self):
+        released = patch.object(v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         from research_harness import review_protocol as protocol
         from research_harness.check_mode import check_mutation
         native = json.loads(self.artifacts.read(self.export()))
@@ -971,6 +1009,9 @@ class V7CommandTests(OpennessReadingCase):
         self.assertEqual(actual['prompt'], protocol.canonical_prompt('native_math', reading_stage='reading', reading_protocol=reading.PROTOCOL_V6))
 
     def test_q7_eight_targets_start_v7_and_nine_start_byte_identical_v6(self):
+        released = patch.object(v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         from research_harness import review_protocol as protocol
         from research_harness.problem_openness import export_openness
         from test_research_problem_openness_minimum import ProblemOpennessMinimumTests
@@ -1138,6 +1179,7 @@ class V7CommandTests(OpennessReadingCase):
         # Record 12 (20261120072937-v7-reading-refusals-without-bounds-and-an-empty-unread-list): the receipt held
         # a second forecast over the whole inventory of the plan, which a later turn no longer reads.
         from research_harness import cli, review_protocol as protocol
+        stub_fit_for_full_v7_reading_level(self)
         native = self.export()
         turns, prior = [], None
         for identifier in ('turn-1', 'turn-2'):
@@ -1156,6 +1198,7 @@ class V7CommandTests(OpennessReadingCase):
         from research_harness import cli, review_protocol as protocol
         from research_harness.check_mode import check_mutation
         from research_harness.review_continuation import plan_next
+        stub_fit_for_full_v7_reading_level(self)
         native = self.export()
         self.assign('turn-1', native)
         self.invoke('turn-1', self.build_v7_answer(self.read_packet('turn-1')))
@@ -1183,6 +1226,7 @@ class V7CommandTests(OpennessReadingCase):
     def test_status_and_preflight_give_the_forecast_over_the_inputs_that_remain(self):
         from research_harness import review_preflight
         from research_harness.evaluation import Evaluation
+        stub_fit_for_full_v7_reading_level(self)
         native = self.export()
         turns, prior = [], None
         for number in range(1, 10):

@@ -1,3 +1,4 @@
+from unittest.mock import patch
 import json
 from research_harness import review_protocol as protocol, review_parts as parts, problem_delivery
 from research_harness.review_bodies import read_history
@@ -6,6 +7,13 @@ from review_parts_fixtures import PartsResultCase
 
 
 class ResultJourneyTests(PartsResultCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_oversized_entry_records_inventory_and_empty_history(self):
         self.oversized(); assignment=self.assign(); packet=self.packet(assignment); header=packet['review_parts']
         self.assertEqual((header['protocol'],header['adapter'],header['kind'],header['turn']),('exactory-review-parts-v2','problem_result','read',1))

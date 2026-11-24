@@ -81,8 +81,8 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `strategy` | Freeze a comparative prospective, result or post-measurement dossier, exact dependencies and a bounded question. |
 | `work-item` | Retain one stable reviewer request or development obligation, classification, actual execution state and lineage. |
 | `research-lead` | Preserve an earlier discrepancy and its original provenance, verification status and next check. |
-| `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. The record pins the runtime of the installed adapter. Probes, attempts and output corrections verify against that pin. As a result, a review that was bound earlier stays verifiable after the adapter changes. A route record is stale when the runtime that it pins is not equal to the installed runtime. A new assignment, a run, a probe or an output correction on a stale route record is refused with `review_route_runtime_stale`. The refusal comes before any call and before any record. Record and probe a new route then. While the installed runtime of a route cannot be read, for example while the Codex CLI is missing, a new assignment on it is recorded as before, and `review-run` then refuses it with `review_runtime_missing`. Since 0.75.0 a new probe, invocation and assignment on `codex_cli_v1` or `codex_cli_framed_v1` record `codex_invocation: "codex-invocation-settings-v1"`. Every observation of a call on these routes (an attempt, an output correction or a staged task) records the field too. The child assignment that runs a staged task does not record the field. The response of such a call retains the native rollout of the call under `codex_invocation.native_rollout`, read after the call returns. A response that holds the field authenticates only through the retained rollout. A probe whose record carries the field authenticates only when its response holds the rollout. The same holds for an ordinary attempt whose assignment or attempt record carries the field, and for a staged task whose observation carries it. The rollout must have the recorded `rollout_digest` and hold one `session_meta` and one `turn_context`. The turn's `model` must be the route's model and its `effort` must be `high`. The inspection of the retained rollout must give the recorded `context_evidence` again. The answer in the response must be the assistant output of the rollout. When the rollout cannot be read after the call, the response records the error under `codex_invocation.error` instead, and the call does not authenticate. A record without the field keeps its earlier authentication. A record whose `codex_invocation` is another value authenticates nothing. A `status` read or a review preparation observes the installed runtime of the adapters in use at its start and at its end; when it changed in between, the command refuses with `review_runtime_changed` and writes nothing, and the same command run again reads the current runtime. |
-| `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. A probe interrupted after the reviewer answered is finished or reconciled as an interrupted `review-run` is. Since 0.89.2 the payload accepts `capacity: {input_tokens: N}`, where `N` is a positive integer. The probe is then a capacity probe: the same test with a request built for that target size, which gives the route evidence of its input limit (The capacity of a route, below). A probe that finds the reviewer capacity occupied waits for it (the queue, in [Staged problem reviews](#staged-problem-reviews)), and a standing store stop refuses it with `review_chain_stopped` ([Review chains and `review-series`](#review-chains-and-review-series)). |
+| `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. The record pins the runtime of the installed adapter. Probes, attempts and output corrections verify against that pin. As a result, a review that was bound earlier stays verifiable after the adapter changes. A route record is stale when the runtime that it pins is not equal to the installed runtime. A new assignment, a run, a probe or an output correction on a stale route record is refused with `review_route_runtime_stale`. The refusal comes before any call and before any record. Record and probe a new route then. While the installed runtime of a route cannot be read, for example while the Codex CLI is missing, a new assignment on it is recorded as before, and `review-run` then refuses it with `review_runtime_missing`. Since 0.75.0 a new probe, invocation and assignment on `codex_cli_v1` or `codex_cli_framed_v1` record `codex_invocation: "codex-invocation-settings-v1"`. Every observation of a call on these routes (an attempt, an output correction or a staged task) records the field too. The child assignment that runs a staged task does not record the field. The response of such a call retains the native rollout of the call under `codex_invocation.native_rollout`, read after the call returns. A response that holds the field authenticates only through the retained rollout. A probe whose record carries the field authenticates only when its response holds the rollout. The same holds for an ordinary attempt whose assignment or attempt record carries the field, and for a staged task whose observation carries it. The rollout must have the recorded `rollout_digest` and hold one `session_meta` and one `turn_context`. The turn's `model` must be the route's model, and its `effort` must be the effort of the route (The configuration of a Codex route, below). The inspection of the retained rollout must give the recorded `context_evidence` again. The answer in the response must be the assistant output of the rollout. When the rollout cannot be read after the call, the response records the error under `codex_invocation.error` instead, and the call does not authenticate. A record without the field keeps its earlier authentication. A record whose `codex_invocation` is another value authenticates nothing. A `status` read or a review preparation observes the installed runtime of the adapters in use at its start and at its end; when it changed in between, the command refuses with `review_runtime_changed` and writes nothing, and the same command run again reads the current runtime. After a plugin update that changes a Codex transport module, record and probe a new Codex route. The audited native declarations of the Codex CLI are in `research_harness/review_codex_declarations.py`. No route record pins that module, so a release that adds an audited declaration makes no route record stale. |
+| `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. A probe interrupted after the reviewer answered is finished or reconciled as an interrupted `review-run` is. Since 0.89.2 the payload accepts `capacity: {input_tokens: N}`, where `N` is a positive integer. The probe is then a capacity probe: the same test with a request built for that target size, which gives the route evidence of its input limit (The capacity of a route, below). A probe that finds the reviewer capacity occupied waits for it (the queue, in [Staged problem reviews](#staged-problem-reviews)), and a standing store stop refuses it with `review_chain_stopped` ([Review chains and `review-series`](#review-chains-and-review-series)). Since 0.93.0 the record of a probe holds `unverified_reasons`. The list is empty when the probe verifies its route record. If the list holds an entry, the probe verifies nothing. The route record then takes no review until a later probe verifies it. `capacity_evidence` is null, also when `status` is `completed`. The entries are: `call_incomplete`: the call did not complete. `error` and `provider_diagnostic` hold the detail. `context:<issue>`: one entry for each issue of `context_evidence.issues` of the response. `context:unknown_developer_input` means that the CLI delivered a developer input that the harness did not audit. `context:rollout_unavailable`: the rollout of the call was not read. `context:turn_model`, `context:turn_effort`: the turn of the rollout names another model, or another effort, than the route. `excluded_control`: a control of an excluded source is in the request or in the answer. `control_mismatch`: the answer does not hold the two controls, or it lists an excluded control. `unclassified`: no entry above applies. A larger probe does not remove an entry that starts with `context:`. |
 | `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. When a post closes the chain of a new assignment, the assignment is refused with `problem_already_posted` ([Problem creation](#problem-creation)). A packet whose request does not fit one input of a local text route, or whose fitted request withholds an evidence body, is delivered as a series of fresh-input turns when an adapter applies to its role (a problem `result` or `adjudicator` packet, a context repair, a `verification` or readiness `result` packet, a `native_math` packet without an openness minimum; [Reviews in fresh parts](#reviews-in-fresh-parts)) on a `claude_cli_v1`, `codex_cli_v1` or `codex_cli_framed_v1` route with a local input limit; an admitted adjudicator repair on such a route enters parts whatever its size. The next turn is assigned with a new id, the same role, dossier, route, reviewer and author, and the last turn as `context: {prior_assignment_id}`, and the assignment result carries `review_parts_plan`. A recorded 0.69.x result series continues in parts under its own protocol ([Problem evidence in parts](#problem-evidence-in-parts)). A staged review starts only through `context: {staged_upgrade: {assignment_id}}`, which opens one in a recorded slot; `{controller_assignment_id}` alone then plans and assigns its next task and returns the next command, `context: {controller_assignment_id, task_id}` records the child that runs one of its tasks, and `scheduler: {store_limit, route_limits}` records the reviewer capacity ([Staged problem reviews](#staged-problem-reviews)). A turn of a recorded 0.69.x series that the v1 part planner refuses with `review_input_too_large` can instead freeze a reduced replay history of completed earlier series, and since 0.73.0, when the planner refuses the reduced history too, starts one parts v2 successor in the same slot ([Problem evidence in parts](#problem-evidence-in-parts)). Since 0.71.0 an ordinary assignment, one that is neither on a `codex_cli_visual_v1` route nor the controller or a task of a staged review nor a turn of a parts v2 series (whose `history` is `[]`), stores its replayed history as `history_ref` instead of `history`: a version 1 root with `version`, `message_count`, `history_digest` and the ordered `pages`, each page an immutable artifact with `version`, `start` and at most 32 `messages`, and each message with `body` (an artifact that holds the exact content, UTF-8 text or JSON for a native content array), `metadata` (the other fields of the message), `source` (`assignment_id`, `message_index`) and `occurrence` (`session_id`, `index`); the pages and bodies of an unchanged prefix are shared between the turns of a session. Every command reads either form, and the reviewer receives the identical history. A record that carries both fields is refused with `review_history_ambiguous`, and a page or body that does not match its root with `review_history_invalid`, or with `artifact_missing` or `artifact_corrupt` when its artifact is gone or altered; either code means that the artifacts of the store are damaged or a record was edited, so stop and report it. |
 | `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. When a post closes the chain of the assignment, `review-run` is refused with `problem_already_posted`, except for a replay, an acceptance and a reconciliation ([Problem creation](#problem-creation)). When the reviewer answers, the run commits the answer as one immutable record, `review_call_observation`, before the write that records the run: this capture binds the operation and the invocation, the original request ID and the digest of the payload, the route and the request, the reservation and the calling process, and holds the exact observation with its artifacts. The write that records the run reads the capture and is tried again after `store_busy`, `stale_revision` or `review_task_dependency_changed`, at most 600 times within 600 seconds, without a second call. The run that waited exits with `store_busy`, whose `details.cause` holds the last of those refusals, and the capture stays. A run whose process ended after the capture committed, or whose write is still refused after that wait, is finished by repeating `review-run` with the same payload and the original request ID: that returns the recorded receipt when one exists and otherwise records the run from the capture, without calling the reviewer again. Until then the invocation is pending: a `review-run` of the assignment under another `id` refuses with `review_invocation_pending` and names that step, and `review-attempt` refuses an import under the run's `id`. A run whose process ended before the capture committed leaves an unknown outcome and the invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`, and the refusals say to reconcile it. `review-run` with `{"action": "reconcile", "operation": OPERATION, "invocation_id": ID}`, where the operation is `review.invoke` for a run, `review.route_probe` for a probe or `review.output_correction` for a correction and the id is the `id` of the original payload, releases the capacity of the call once its process and its transport processes have ended; for a call without a capture it also records the unknown outcome as a `failed` attempt, probe or correction with the error `review_invocation_interrupted`, which ends the pending state. For a run that 0.69.x started, which has no reservation, the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload), and the refusal carries that payload under `next`. After either step, a `review-run` of the assignment under a new `id` and request ID is permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. For a turn of a parts v2 series ([Reviews in fresh parts](#reviews-in-fresh-parts)) it checks a read, combine or check output and the request form of a final the same way, under `review.shape` whatever the role, with `invalid_value_review` for a contract failure and `review_parts_request_no_progress` for a request that makes no progress. For a task of a staged review, `review-run {assignment_id, epoch_id, task_id}` reserves the task, runs it through an owned worker, accepts its committed capture and reconciles the worker; `action: "accept"` resumes an acceptance and `action: "reconcile"` a reconciliation, neither with a reviewer call; a refused capture permits one retry with the same request, and the result names `review-assignment {controller_assignment_id}` as the next step ([Staged problem reviews](#staged-problem-reviews)). Since 0.89.2 a run that finds the reviewer capacity occupied waits for it (the queue, in [Staged problem reviews](#staged-problem-reviews)), and a review stop that stands for the chain or for the store refuses a new call with `review_chain_stopped` ([Review chains and `review-series`](#review-chains-and-review-series)). See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
 | `review-series` | `--assignment HEAD`, where any assignment of the chain resolves to the chain's current head, and `--workspace` (default `.`). Execute the planned actions of one review chain in process, through the same operations as the CLI, until the chain is done or needs the agent. It takes no `--file`, `--expected-revision` or `--request-id`, and has no turn limit. `--check` is refused with `check_unsupported` before any workspace or model effect. Every `stop` and `wait` line with a `code` carries `stop_class`, and the last line of a run that ends in a `stop` carries `stop_id`, the id of the `review_series_stop` record that the driver writes for that stop, with `revision_after_stop`, or `stop_record_error`. Since 0.89.2 a run that meets a review stop ends in a `stop` with the code `review_chain_stopped`, whose `stop_id` is the id of the `review_stop` record, and SIGTERM or SIGINT to the command stops its chain in the same way. [Review chains and `review-series`](#review-chains-and-review-series) states the plan of a chain, the exit statuses, the handoffs, the outcomes of a failed reviewer call, the stop record and the review stop. |
@@ -482,6 +482,42 @@ attempts do not run the preflight. After its preflight,
 route and reads the reviewer CLI of a local route. Both come before the
 invocation is recorded.
 
+The configuration of a Codex route. Since 0.93.0 the `configuration` of a
+`codex_cli_v1`, `codex_cli_framed_v1` or `codex_cli_visual_v1` route holds
+`max_output_tokens`, `timeout_seconds` and, optionally, `effort`. `effort` is
+the reasoning effort of each call on the route. Its value is `low`, `medium`,
+`high`, `xhigh` or `max`. A route without the member runs at `high`, as each
+Codex route of an earlier release did. The harness passes the effort to the
+CLI as `model_reasoning_effort`. A call authenticates only when the one
+`turn_context` of its rollout names the same effort.
+
+The effort is part of the identity of the route. The capacity key of a route
+that states `effort` holds it. Leave `effort` out for `high`: a route that
+states `high` and a route without the member run the same call and are two
+route records. The output profile of a route is read by adapter, model and
+effort. A result review that moves to a visual route keeps its effort. `ultra`
+is not a value of `effort`. The model catalog of Codex CLI 0.167.0 describes
+`ultra` as reasoning with automatic task delegation, and a reviewer route runs
+one turn without agents.
+
+`timeout_seconds` is the wall-time limit of one call. It is positive and at
+most 3,600 on the three Codex adapters, as on `claude_cli_v1`. Before 0.93.0
+the limit was 600.
+
+The ground of the limit is a measurement of 2026-11-22. Six research records
+held 255 completed Codex reviewer calls, all at effort `high`. The wall time
+of a call followed its output: 0.029 seconds for each output token and 0.0001
+seconds for each input token. That rate is 34.6 output tokens for each second.
+The longest completed call took 408 seconds and wrote 14,249 output tokens.
+Two of 279 calls ended at 600 seconds.
+
+At the measured rate, 600 seconds is the time of 20,800 output tokens, and
+3,600 seconds is the time of 124,000. The models document a largest output of
+128,000 tokens. The output bound of a route gives its timeout: an answer of
+32,000 output tokens takes about 925 seconds. The reviewer capacity queue
+waits for each active call for the timeout of its route plus 60 seconds. As a
+result, a longer timeout makes that wait longer.
+
 The capacity of a route. `review-route-assess`, and the receipts of
 `review-route` and `review-probe`, report the capacity of the route under
 `route_capacity` (`exactory-route-capacity-policy-v1`). `input_characters` is
@@ -493,7 +529,15 @@ verified capacity probe. `input_limits` shows the documented and the observed li
 side. `capacity_evidence` shows the `key` of the route (the adapter, the
 endpoint, the model, and the members of the runtime and of the configuration
 that `classification` marks as `key`), the `evidence` behind the observed
-limit, and `probe_input_tokens`, the size of a first capacity probe. The
+limit, and `probe_input_tokens`, the size of a first capacity probe. When
+`request_measure` is `bytes`, the harness holds no characters-per-token ratio
+for the model, and it cannot build a probe for a number of provider tokens.
+`probe_input_tokens` is then the character limit of the transport (1,048,576
+on `codex_cli_v1` and `codex_cli_framed_v1`). The first capacity probe of the
+route is then the largest request that the transport sends, and one verified
+probe gives the route the largest limit that its transport can reach. This
+rule holds for a Codex text route record with a complete key whose input limit
+has the source `observed` and whose transport has a character limit. The
 observed limit is the largest value that the evidence of the route gives, and
 it is 0 without evidence. For every route except a `claude_cli_v1` route of a
 listed model, the evidence is the verified calls under the same key, and each
@@ -502,8 +546,8 @@ call gives its input tokens less the output reservation, at least 0. For a
 every listed Claude model with the same compaction threshold, under any key.
 There an ordinary call gives its full input tokens and a capacity probe gives
 its input tokens less the output reservation, so `probe_id` can name a probe
-of another route. The report also holds the output profile of the route and the task
-limits that follow from it (`output_profile`, `task_limits`,
+of another route. The report also holds the output profile of the route and
+the task limits that follow from it (`output_profile`, `task_limits`,
 `final_reference_projection`, `near_limit_attempts`), with `capacity_warning`
 when the profile establishes no fitting task size for a turn kind.
 
@@ -575,40 +619,60 @@ evidence body without a text form, the command refuses with
 turn of an openness reading chain keeps its admission by characters while the
 route has an input limit above 0 and the request carries no binary input.
 The code is a decision stop, and `review-series` ends at it with exit status
-3. `details.reason` is one of four values. `no_parts_delivery`: the request
+3. `details.reason` is one of five values. `no_parts_delivery`: the request
 does not fit the character limit or the token limit of the route, and the
 assignment has no delivery in parts there. `binary_input_over_measure` and
 `binary_input_without_bound`: the two reasons of the measure above.
 `body_without_text_form`: the packet delivers an evidence body as bytes or
 omits it, the body is larger than one read turn (its base64 form with its two
 JSON quote characters exceeds 600,000 characters), and the packet delivers no
-text capture of it. The other details
-are `measure`, `capacity_source` (the `source` of the input limit),
+text capture of it. Since 0.93.0 the same reason stops a `slate` assignment
+whose forming records or imported forming records reference a body, of any
+size, that is not text and has no text form in the record. A slate chain in
+progress keeps the form of every body that its first turn delivered and stops
+only for a body that was added since. `session_below_floor`: the capacity plan
+of a new session under the source rules v4 does not fit the route ([Sessions
+under the source rules v4](#sessions-under-the-source-rules-v4)). The other
+details are `measure`, `capacity_source` (the `source` of the input limit),
 `serving_routes`, `owner_decides`, `then` and `closing_unit`, the name of the
-planned unit of the harness that covers the case. `serving_routes` lists the
+planned unit of the harness that covers the case. A stop with the reason
+`session_below_floor` holds `admission` in place of `measure`,
+`capacity_source` and `closing_unit`. `serving_routes` lists the other
 verified routes of the record, with a current runtime and without a
-retirement, whose request for this review fits: `{route_id, delivery,
-measure}`, where `delivery` is `single`, `parts`, or `reassessment` for a slot
-with history that continues through a context repair. When no route serves the
-review, `coverage` says so. `then` lists the answers that the owner can
-authorize, each with its steps:
+retirement, on which a trial of this assignment is accepted: `{route_id,
+delivery, measure}`. The trial prepares the exact payload on the route and
+writes nothing. `delivery` is `single`, `parts`, `session` for a session under
+the source rules v4 (a row without `measure`), or `reassessment` for a repair
+of a slot with history on a route record that holds a probe recorded after the
+cause event of the repair. When no route serves the review and no answer names
+a route, `coverage` says so. `then` lists the answers that the owner can
+authorize, each with its steps. An answer whose steps rest on something that
+has not happened yet states it in `condition`. An answer that ends at a probe
+names no command after it, because that command depends on what the probe
+verifies: run the stopped command again, or, for a stopped repair,
+`review-series` on the review that it repairs, and the next plan names the
+step.
 
 | `answer` | Steps | Offered when |
 | --- | --- | --- |
-| `Capture a text form` | `artifact` with `media_type: "text/plain"` for the complete text of the body that `body` names, then `review-assignment` with the stored text artifact in place of the body: in `context.artifact_refs`, the reference to the body is replaced by the reference to the text. Adding the text beside the body does not clear the refusal. A body that is the original of a work clears it when the packet delivers the text capture that the work's `fulltexts` link to that original. | The reason is `body_without_text_form`. |
-| `Probe this route` | `review-probe` with `capacity.input_tokens` set, then the same `review-assignment`. | The reason is `no_parts_delivery`, the adapter is not `codex_cli_visual_v1`, the `source` of the input limit is `observed` or `default`, and the transport can build the probe request. |
-| `Use a serving route` | `review-assignment` on the route. For an assignment with a predecessor, the steps of its role for a move to another route instead. For a `bar`, `slate` or `result` slot these are the retirement of the present route (`review-context`, `kind: "route_retired"`, with the reason filled in), a route record with the configuration of the serving route, its probe, and the context repair that continues the slot. | Once for each route of `serving_routes`. |
+| `Capture a text form` | `artifact` with `media_type: "text/plain"` for the complete text of the body that `body` names, then `review-assignment` with the stored text artifact in place of the body: in `context.artifact_refs`, the reference to the body is replaced by the reference to the text. Adding the text beside the body does not clear the refusal. A body that is the original of a work clears it when the packet delivers the text capture that the work's `fulltexts` link to that original. For the forming body of a slate the answer is the `artifact` step alone, with the fixed `id` `review-text-<sha256 of the body>` and `text_form_of` set to the body. The same `review-assignment` then finds the text under that id. | The reason is `body_without_text_form`. |
+| `Probe this route` | `review-probe` with `capacity.input_tokens` set. The steps end at the probe. | The reason is `no_parts_delivery`, the request is within the character limit of the route and above its token limit, the adapter is not `codex_cli_visual_v1`, the `source` of the input limit is `observed` or `default`, and the transport can build the probe request. The answer is left out when `Reassess the retained review` retires this route record. |
+| `Use a serving route` | `review-assignment` with the stopped payload on the route. For a repair the payload keeps the binding of the stopped repair, and `context.context_repair.probe_id` is a probe of that route record: the step fills it, or lists it under `chooses`. | Once for each route of `serving_routes`. |
+| `Reassess the retained review` | The steps that the route record still needs before the repair of the slot fits it, up to its first probe. Without a cause event: the retirement of the route record of the retained review (`review-context`, `kind: "route_retired"`, with the reason filled in), which gives the cause event, then `review-probe` on the route record of the answer. With a cause event and no probe after it: that `review-probe` alone. With a probe after the cause event: the repair `review-assignment` itself. `condition` states which of the three applies. | A `bar`, `slate` or `result` slot with history, or an `adjudicator` slot of a series or of a staged review, once for each route record on which the harness measured that the repair fits and that is not listed in `serving_routes`. This can be the stopped route record. |
+| `Prepare a new entry` | `review-route` with the adapter, model, endpoint and configuration of the route record that `route_id` names, with its `review-probe`, then the `review-assignment` of the role on the new route record. | An assignment with a predecessor in a role whose move needs a new route record (`verification`, `manuscript`, `standalone` and a plain `adjudicator`), once for each verified route record on which the request fits and on which the store admits the assignment of the role. |
 
 The size of the offered probe follows the capacity probes of the key. Before
 the first one it is `probe_input_tokens`: the largest input that a call under
-another key of the same adapter, endpoint and model carried, or 150,000. After
-a verified capacity probe it is the tokens of the request plus the route's
-`max_output_tokens`. After a capacity probe that was not verified it is half
-the `input_tokens` of that probe, rounded down, and at least 1. When the transport cannot build a probe of the size,
-no probe is offered, and `probe_unavailable` holds `input_tokens`,
-`measure_tokens`, `code`, `message` and `details`. Report the stop with its
-details; the owner decides whether a listed step is taken
-([The class of a stop](research-workflow.md#the-class-of-a-stop)).
+another key of the same adapter, endpoint and model carried, or 150,000, or,
+on a byte-measured Codex route, the character limit of its transport (The
+capacity of a route). After a verified capacity probe it is the tokens of the
+request plus the route's `max_output_tokens`. After a capacity probe that was
+not verified it is half the `input_tokens` of that probe, rounded down, and at
+least 1. When the transport cannot build a probe of the size, no probe is
+offered, and `probe_unavailable` holds `input_tokens`, `measure_tokens`,
+`code`, `message` and `details`. Report the stop with its details; the owner
+decides whether a listed step is taken ([The class of a
+stop](research-workflow.md#the-class-of-a-stop)).
 
 What this release does not deliver. `review-route-assess` and, when the store
 holds a route, `status` under `review` carry `outside_solved_part`: for each
@@ -616,8 +680,9 @@ role, the kinds of review that no route delivers in this release, as
 `{reason, unit, message}`. `unit` names the planned unit of the harness that
 covers the kind, or is null. Every role lists `https_parts` (delivery in
 parts on an HTTPS route), `binary_inputs`, `body_without_text_form` and
-`staged_scale`. The roles `manuscript` and `standalone` also list
-`no_parts_delivery`, and `native_math` lists `math_reading_v1`.
+`staged_scale`. The roles `manuscript` and `standalone` also list `no_parts_delivery`. Until
+0.93.0 `native_math` listed `math_reading_v1`; the math protocol v2 takes its
+place.
 
 ### Review chains and `review-series`
 
@@ -931,17 +996,21 @@ The handoffs:
 | --- | --- | --- |
 | `native_review_acceptance_required` | `search accept` | A native mathematical review has its output; the math-solver controller accepts it. |
 | `native_review_attestation_required` | `search review-packet` (openness chains: `export`, kind `problem-openness`) | A native first turn needs a replacement, which needs a new attestation. |
+| `native_review_completion_required` | `search complete` | Since 0.93.0, for a chain under `exactory-openness-reading-math-v2`. The closure review has its approved output; `details.step` holds the command with the payload that the math-solver controller checked. |
+| `native_review_not_approved` | `search review-packet` | Since 0.93.0, for a chain under `exactory-openness-reading-math-v2`. The final returned `revise` or `reject`; `details` hold `decision`, `reason`, `objections` and `step`, the export of a new packet with the assignment that follows it. |
+| `native_review_legacy_closure` | `search review-packet` | Since 0.93.0, for a chain under `exactory-openness-reading-math-v2`. The packet holds a closure subject of `schema_version` 1, and the harness sends no call of the chain; `details.step` exports a packet with the same closure subject at `schema_version` 2. |
 | `verification_verdict_body_required` | `bind-verdict` | A verification review has its output; recording needs the verdict body. |
 | `review_recording_required` | `manuscript-review`, `export` (standalone, kind `outputs`) or `review` | Another role's output needs its recording step. |
 | `review_slot_exhausted`, `review_refusal_notice_metadata_too_large` | For `review_slot_exhausted` only, `review-output-correction` when that operation admits the head and its request fits the route (the metadata correction of a problem result reassessment, below); the position is then not exhausted, and replacements can remain. Otherwise the step of the role of the head: `review-assignment` of a new eligible reviewer for a `bar` and for an `adjudicator`; `review-assignment` of a context repair with the member `exhaustion` for a `slate` and for a `result`; `export`, kind `problem-openness`, for an openness chain (a new chain; since 0.91.0, for a chain under v5, v6 or v7, the handoff states the admission of that chain under `details.successor`, and a stop with a decision takes its place when no protocol admits the new packet); `search review-packet` for another native mathematical review (a new attestation); `review-route` and then `review-assignment` for a `verification`, a `manuscript` and a `standalone` review. | An eligible problem result reassessment takes its one metadata correction, or the turn position is exhausted (A position whose replacements are spent, below). Follow `details.step`. On a stale route record this handoff also follows when no route record with the same adapter, model, endpoint and configuration can carry the replacement of a refused session turn (The renewal of the route, below). `details.renewal.unserved.reason` then says why: `limit` (the replacement does not fit, and capacity evidence does not change that), `probes_used` (the capacity probes of this refusal are used up) or `probe_unavailable` (the capacity probe cannot run). |
 | `review_resampling_forbidden` | `review-assignment` | An initial bar, slate or result review ended without an output; the same reviewer identity is not sampled again, so a new eligible reviewer is needed. |
 | `review_worker_reconciliation_required` | `review-attempt` | A pending invocation has no pool membership (a call of an earlier version). |
-| `review_context_unverified`, `review_context_contaminated`, each with `details.turn` | The command of `details.step`: `review-probe`; `review-context` for a route record that takes no probe; otherwise the command of the step of the role of the head | Since 0.92.0. The review records of the present give no verified context for a turn of the review of the head (A call reads the context of the present, below). `details.turn` names the turn, and `details.message` states the state and the step. For `review_context_unverified` the step is `review-probe` of the route record of that turn, which `details.route_id` names. When that record is stale, the step is its retirement (`review-context`, kind `route_retired`, on the named turn), and `details.steps` names `review-series` on the head after it. When that record is stale and retired and its state stays unverified, the step is the step of the role of the head. For `review_context_contaminated` the step is the step of the role of the head (next row). After the step, run `review-series` on the head again. |
+| `review_context_unverified`, `review_context_contaminated`, each with `details.turn` | The command of `details.step`: `review-probe`; `review-context` for a route record that takes no probe; otherwise the command of the step of the role of the head | Since 0.92.0. The review records of the present give no verified context for a turn of the review of the head (A call reads the context of the present, below). `details.turn` names the turn: `assignment_id`, `count` (the turns of the review without a verified context), `events` (the contamination events that name the turn) and `route` (`id` and, where the check read it, `context_status`). For a staged review the turn can be a task of the controller or a turn before the controller. `details.message` states the state and the step. Since 0.93.0 the step follows `events` and the route record of the turn, under both codes. When `events` is empty, that record lacks a probe that verifies it (`review_context_unverified`), or its latest probe found a control of an excluded source (`review_context_contaminated`): the step is `review-probe` of the record, which `details.route_id` names, and a probe that verifies it ends the state. When the record is stale, it takes no probe, and the step is its retirement (`review-context`, kind `route_retired`, on the named turn); `details.steps` names `review-series` on the head after it. When `events` names an event, or the record is stale and retired, the step is the step of the role of the head (next row). Where that step is a context repair and the slot of the head holds no cause event, the step is a retirement on the named turn, which gives the repair its cause. After the step, run `review-series` on the head again. `review-run` on such a head starts no call and is refused with the same code; the details of the refusal hold `assignment_id`, `turn` and `next`, the plan of the head. |
 | `review_context_*` without `details.turn`, `review_route_retired` | The command of `details.step` | The context of the head itself is not verified, the context repair of its lineage does not hold, or its route record is retired. Follow `details.step`, the step that the plan of the head names. For `review_context_unverified` it is `review-probe` of the route record whose probe ends the state. For the other codes it is the step of the role of the head: `review-assignment` of a context repair for a `bar`, a `slate`, a `result` and an `adjudicator`; `export`, kind `problem-openness`, for an openness chain; `search review-packet` for another native mathematical review; `review-assignment` on another verified route for a `verification`, a `manuscript` and a `standalone` review. When the retired route record is also stale, `details.steps` first names the step that gives the store a verified route record with the same adapter, model, endpoint and configuration and the installed runtime: `review-route`, or `review-probe` of such a record. |
 | `review_route_runtime_stale` | The command of `details.step` | The route record of the head is stale: it pins another reviewer runtime than the installed one. A stale route record takes no assignment, no run, no probe and no output correction. Every plan names route records that take their commands. So `review-series` ends with this handoff before it executes a command on the stale route record. It also ends with this handoff when the runtime changes after the plan and a command gives this code. Every handoff of this code carries `details.renewal` with the members `admitted`, `route_id` and `lacks`. When `details.renewal.admitted` is false, the next step of the head cannot move to another route record. This is the case for a next turn, a recorded turn without a call, and a retry after a failed call. It is the case for the next call of a staged review and for the first turn of a context repair. It is the case for a turn of a series in parts and for a turn of a reading chain. It is also the case for a session turn whose earlier turn is no longer verified. It is also the case for a call that failed because the runtime changed during the call. `details.steps` then lists the steps of the stale-route procedure in the order to take them. The procedure needs a route record with the same route identity (adapter, model, endpoint and configuration) that pins the installed runtime. `details.renewal.lacks` says what the store holds for that route record. For a bar, a slate, a result, and an adjudicator in parts or in a staged review, the order is this. First retire the stale route record with `review-context` (step 8). Then verify the other route record. When `details.renewal.lacks` is `record`, record such a route and probe it (step 7). When `details.renewal.lacks` is `probe`, probe the route record that `details.renewal.route_id` names. The probe must come after the retirement, because the context repair needs a probe that is later than its cause events. Then continue the slot through the context repair (step 1). The repair can name that route record as `route_id`. A retirement withdraws the route record for every head on it. So, before the retirement, run `review-series` on every other head of this route record that holds a refused answer. That head then takes its replacement first. For an adjudicator without parts, `details.steps` lists step 7 and the assignment of a new reviewer (step 3). For a verification, a manuscript review and a standalone review, it lists step 7 and a new first assignment (step 6). For an openness chain or a math chain, it lists step 7 and the export or the review packet of a new chain (step 4 or 5). In these three lists, step 7 is the probe of the named route record when `lacks` is `probe`. When `lacks` is null, the lists hold no step 7. One head gets a shorter list. It holds an observed answer, and its context is not verified now, because the latest probe of its route record did not verify. `details.steps` then lists the retirement and `review-series`. The plan after the retirement names the step that follows it. Before the steps, `review-series` on the same head gives this handoff again. When `details.renewal.admitted` is true, work of the head can run on another route record. That route record has the same route identity and pins the installed runtime. `details.renewal.lacks` names what the store lacks for it. This is the case for the replacement of a refused answer (The renewal of the route, below), for the output correction, and for the new chain of a stopped chain. For `record`, record the route and probe it. For `probe`, probe the route record of `details.renewal.route_id`. For `capacity`, obtain the owner's authorization first, because the capacity probe is a paid call. Then run the capacity probe of `details.step`. After that step, run `review-series` on the same head again. It then does one of three things. It records and sends the replacement on the new route record. Or it names the output correction or the export of the new chain with that route record. Or it names the next step. For a new chain that this route record does not admit, the plan is the stop of that admission. The reviewer, the slot and the count of replacements stay. When `review-output-correction` itself gave this code, the runtime changed after the plan. Then run `review-series` on the head again. Take its step. |
 | `review_chain_stopped` | `review-stop` | A review stop stands for the chain or for the store; `details.step` is its release (The stop, above). `review-series` prints this plan as a `stop`. |
 | `openness_review_not_approved` | `export`, kind `problem-openness` | The final turn of an openness chain returned a result that `problem-openness` does not accept (for example the decision `revise` or `reject`, or an approved finding whose evidence or statement does not match); `details` hold `assignment_id`, `decision`, `reason`, `kind` and `refusal` (the `code` and `message` of the `problem-openness` refusal). Obtain a new finding after the reviewer's reason and the refusal are addressed. |
-| `openness_packet_outdated` | `export`, kind `problem-openness` | Since 0.90.0, for a chain under `exactory-openness-reading-v6`. The records changed after the packet was exported: a binding check of its minimum now fails, or the gaps that the harness computes from the records of now differ from `minimum_gaps` of the packet. The planner compares before it runs, replaces or continues a turn, and again when `problem-openness` refuses a final finding with a resolved outcome. `details` hold `assignment_id`, `kind`, `message`, `added` and `removed`; each changed entry is `{row, entry}`, where `entry` is the gap or the binding error and `row` names the fact that changed: `current_statement`, `material_searches`, `bound_records`, `decisive_captures`, `required_bundle`, `inspection_bytes`, `source_deferrals` or `family_reading`. No refusal is recorded against the reviewer's answer, and the reading turns of the chain stay verified. Export a new packet and start a new chain. A final finding with the outcome `unresolved` skips the audit of the minimum, so it is recorded also after the searches or the gaps of the minimum changed. It still passes the other checks of the recording, among them that its statement is the current statement of the problem (`openness_statement_mismatch`). |
+| `openness_packet_outdated` | `export`, kind `problem-openness` | Since 0.90.0, for a chain under `exactory-openness-reading-v6`. The records changed after the packet was exported: a binding check of its minimum now fails, or the gaps that the harness computes from the records of now differ from `minimum_gaps` of the packet. The planner compares before it runs, replaces or continues a turn, and again when `problem-openness` refuses a final finding with a resolved outcome. `details` hold `assignment_id`, `kind`, `message`, `added` and `removed`; each changed entry is `{row, entry}`, where `entry` is the gap or the binding error and `row` names the fact that changed: `current_statement`, `material_searches`, `bound_records`, `decisive_captures`, `required_bundle`, `inspection_bytes`, `source_deferrals` or `family_reading`. No refusal is recorded against the reviewer's answer, and the reading turns of the chain stay verified. Export a new packet and start a new chain. A final finding with the outcome `unresolved` skips the audit of the minimum, so it is recorded also after the searches or the gaps of the minimum changed. It still passes the other checks of the recording, among them that its statement is the current statement of the problem (`openness_statement_mismatch`). Since 0.93.0 the same code stops a chain under `exactory-openness-reading-v7` or under the math protocol v2 whose reading units differ from the units that the records give now. Its `details` hold `units` and `step` in place of `kind`, `added` and `removed` (The reading protocol v7, under [Problem creation](#problem-creation)); the command of the plan is the command of `details.step`. |
+| `openness_carried_turn_unverified` | The command of `details.step` | Since 0.93.0, for a chain under `exactory-openness-reading-v7` or under the math protocol v2 that carries reading turns of earlier chains. The finding of the chain needs a verified context for each carried turn and for each turn before it in its earlier chain, and the review records no longer give it for at least one such turn. The harness sends no request of the chain while this state lasts; `review-run` on the head is refused with the same code and details. `details` hold `assignment_id`, `message`, `turns` and `step`. Each item of `turns` is one earlier chain: `chain` (its first assignment), `count` (its turns without a verified context), `assignment_id` (the turn that decides the recovery), `events` (the contamination events that name that turn), `route` (`{id, context_status}`) and `recovery`. `recovery: "probe"`: the route record lacks a probe that verifies it; the step is `review-probe` on it, and a probe that verifies it ends the state. `recovery: "retire"`: the route record pins another reviewer runtime than the installed one and takes no probe; the step is `review-context` with `kind: "route_retired"` on the turn that the item names. `recovery: "export"`: neither ends the state; the step is the export of a new packet, and the new chain carries no turn of this chain. The step follows the first item whose recovery is `export`, and otherwise the first item. When `details.own_turn` is present, a contamination event names a turn of this chain too, and the step is the export whatever the items state. A probe or retirement step ends, in its `then`, with `review-series` on the chain. |
 
 After a handoff, the agent performs the step that the handoff names.
 `review-series` sees a chain as done only through a final recorded in the
@@ -956,11 +1025,13 @@ work in the chain (for example `bind-verdict`), and with the new assignment id
 when the step starts a new chain.
 
 In this table an openness chain is a problem-creation openness chain, whose
-packets come from `export --kind problem-openness`. A math-solver openness
-reading chain (`exactory-openness-reading-math-v1`, packets from
-`search review-packet`) is another native mathematical review: its
-`review_slot_exhausted` and `native_review_attestation_required` handoffs name
-`search review-packet`, and its head belongs to the math-solver controller.
+packets come from `export --kind problem-openness`. A math-solver openness reading chain (`exactory-openness-reading-math-v1` or
+`exactory-openness-reading-math-v2`, packets from `search review-packet`) is
+another native mathematical review: its `review_slot_exhausted`,
+`native_review_attestation_required`, `native_review_not_approved`,
+`native_review_legacy_closure` and `openness_packet_outdated` handoffs name
+`search review-packet`, and its head belongs to the math-solver controller
+(The math protocol v2, under [Problem creation](#problem-creation)).
 
 The next step of a code. Since 0.90.0 one registry (`STOP_REGISTRY` in
 `research_harness/stop_classes.py`) gives each code that can end a series its
@@ -1197,8 +1268,11 @@ cannot be read, for example while the Codex CLI is missing, a new assignment on
 it is recorded as before, and `review-run` then refuses it with
 `review_runtime_missing`. For a session turn, the replacement runs on another
 route record. A session turn is a turn of a `bar`, `slate`, `result` or
-`adjudicator` review that is not staged, not delivered in parts and not the
-first turn of a context repair. Its earlier turn, when it has one, must be
+`adjudicator` review that is not staged, not delivered in parts, not a turn
+of a session under the source rules v4 and not the first turn of a context
+repair. A turn of a session under the rules v4 keeps the stale-route
+procedure.
+Its earlier turn, when it has one, must be
 verified as `review-run` requires it.
 `review-assignment` admits the replacement on a named route record under
 these conditions: the route record of the head is stale and not retired, and
@@ -1398,9 +1472,10 @@ call first, and this handoff before a run, a retry, a replacement or a next
 turn. The details of the handoff give `assignment_id`, `turn`, `route_id`,
 `message` and `step` (The handoffs, above). `status` lists the code as a row
 of the head with the member `turn`. A probe that verifies the route record
-ends the state of `review_context_unverified`, and the review continues from
-its last turn. A contamination event stays, and the review gives no result
-that counts. A request that is already
+ends the state of a turn that no contamination event names, under either
+code, and the review continues from its last turn. A contamination event
+stays: no probe ends that state, and the step is that of the role of the
+head. A request that is already
 committed is replayed as before. While the route record of the assignment is
 stale or retired and no contamination event names a turn, the refusal and
 the plan of that route record come first (`review_route_runtime_stale`,
@@ -1681,6 +1756,128 @@ output's digest. `status` shows `answer_recoveries` per assignment (and
 `recovered_calls` and `answer_recoveries`; a raw observation shows
 `answer_text`. The answer text stays in the response artifact.
 
+### Sessions under the source rules v4
+
+Since 0.93.0 a new `bar`, `slate` or `result` review starts as a session under
+the source rules `exactory-independent-review-sources-v4` ("the rules v4")
+when the admission of these rules accepts its packet on its route. A new
+review here is an assignment without `prior_assignment_id` that is no staged
+upgrade: a first review of a slot, a refresh, or a context repair. A session
+is a chain of turns, each a fresh input that holds no earlier turn. A stored
+chain keeps its rules, and a turn that continues a session of the rules v4 is
+a turn of that session.
+
+The admission. Without writing a record, `review-assignment` builds the
+inventory of the units of the packet and the capacity plan of the chain. The
+receipt, also with `--check`, carries `session_admission`: `{state: "record",
+protocol, capacity_plan, forecast}`, or `{state: "stop", protocol, reason}`
+with one of four reasons. `unsupported_role_or_route`: no composition rule
+serves the role and the packet, or the route is a `codex_cli_visual_v1` route.
+`scoped_support_contract`: the `support_contract` of the packet holds
+`target`. `binary_required_evidence`: a slate binds a captured text form of an
+original, or a required body is not UTF-8 text. After a stop for one of these
+three the review starts under the rules of release 0.92.1, and the receipt of
+the assignment holds the stop in `session_admission`. `below_floor`: the
+capacity plan does not fit the route; the stop holds the `code` and the
+`details` of that refusal. A context repair then starts under the earlier
+rules. A review whose request does not fit one input under the earlier rules
+starts its series in parts ([Reviews in fresh
+parts](#reviews-in-fresh-parts)), or stops with the reason of that measure
+when it has no delivery in parts. A review that would start as a session of
+the earlier rules is refused with `review_route_capacity_below_floor` and
+`details.reason: "session_below_floor"`, and nothing is recorded: such a
+session has no capacity plan, so the harness does not start one on a route
+below the floor of the rules v4. `details.admission` is the stop (`protocol`,
+`reason`, `code`, `details`), and `serving_routes` and `then` name each other
+route on which a trial of the assignment is accepted, with the
+`review-assignment` that starts the review there (A review that the route
+cannot deliver, above).
+
+The chain. The recorded assignment holds `session_chain`
+(`first_assignment_id`, `turn`, and references to the stored `inventory`,
+`logical` packet and `state`, with `final_page_plan` once a final in pages
+has its plan), `capacity_plan` with `capacity_plan_kind` (`request` or
+`final`), `session_id` and `slot_id`; its receipt adds `preflight` and
+`capacity_forecast`. The template id is
+`exactory-independent-review-sources-v4/<role>/<kind>`. The capacity plan is
+fixed at the first assignment. An assignment
+id has at most 120 characters (`invalid_input` with `characters` and
+`maximum_characters`). `plan_next` names the chain `session`, and
+`review-series` runs it as every chain: `continue` is `review-assignment`
+with `context: {prior_assignment_id}`.
+
+The turns. Every packet names `source_rules` and holds one member for its
+turn. A request turn holds `session_turn`: `frame` (the fields of the packet;
+a field that is too long is a unit), `targets`, `notes`, `allowances`,
+`capacity` and `plan` (`now`, `delivered`, `pending`), and `evidence` holds
+the content of each row of `plan.now`. The first turns deliver the required
+units; the reviewer keeps notes and excerpts and asks for sources, units,
+passages and list pages in the request form `{schema_version: 1, stage:
+"request", notes, excerpts, requests, settled_requests}`. A request for which
+the record holds no unit is answered by a row `{kind: "request_status",
+request_id, status: "unavailable", request_complete: true}`, and a request
+whose text an earlier turn delivered by a row with `status:
+"already_delivered"`; both close the request. The final follows the first
+request turn after which every required unit is delivered and no request is
+open. A final turn holds `session_final` (`notes`, `fill`, `entries`,
+`sources`, `targets`, `frame`, `capacity`) and delivers no source text; its
+answer is the review of the role. A final that one request does not hold is
+taken in pages. A page turn (`session_final.page`) decides the targets of
+its page, a condensing turn (`session_combine`) summarizes a block of entries
+that a later turn cannot hold, and the closing turn (`session_final.closing`)
+gives the fields that no page decided. The harness composes the review from
+these answers, and the recording command (`value-review`) reads the composed
+review. A page turn and the closing turn also accept the request form.
+
+Checks and stops. The check `review.session_turn` refuses an answer that
+breaks a rule of its turn with `invalid_review_session_turn`; the details
+hold `path`, the JSON Pointer of the member that failed, and the values that
+the rule compared, and the replacement turn carries them in its notice. A
+final whose answer used the whole output limit of its route is not recorded
+(`review_output_over_cap`); `review-series` plans a smaller turn in its place
+while the stored plan holds one, and otherwise a decision. When the next turn
+does not fit the capacity plan of the chain, the plan is a `stop` with the
+code of that refusal (`review_route_capacity_below_floor`,
+`review_route_capacity_plan_violated` or `review_input_too_large`), the
+command `review-stop` and a complete payload (`action: "stop"`, `mode:
+"after_turn"`); another route does not give the chain more room. A
+replacement for capacity is `review-assignment` with `context:
+{capacity_replacement: <assignment id>}`, which `review-series` plans. One
+that names another role, route, dossier, reviewer or author than its turn is
+refused with `review_source_continuation_mismatch`, and one that the plan of
+the turn does not hold with `invalid_review_context`. A stored turn that
+differs from the turn that the harness rebuilds from the chain is refused
+with `review_invocation_unverified`; check the record with `record-check`. A
+`review-assignment` that names an answered final as `prior_assignment_id` is
+refused with `review_resampling_forbidden`.
+
+The refresh. A review that a session of the rules v4 recorded and that no
+longer binds the current record is refreshed as a new chain in its slot, for
+a bar, a slate and a result alike. Assign the same role to the same reviewer
+with an empty `context`: the harness records `context: {session_refresh:
+{assignment_id}}`, which names the assignment that holds the recorded review.
+The plan of `review-series` for that head is this assignment:
+
+```json
+{
+  "id": "assignment-bar-a-refresh",
+  "route_id": "review-route-1",
+  "dossier_id": null,
+  "role": "bar",
+  "reviewer_id": "reviewer-a",
+  "author_id": "author",
+  "context": {"session_refresh": {"assignment_id": "assignment-bar-a-final"}}
+}
+```
+
+The packet of the new chain is the first packet of the role on the record as
+it is now, with `problem_refresh` and with each review of the slot in
+`historical_reviews`; its request replays no earlier turn. A second refresh
+of the same review is refused with `review_source_continuation_fork`. When
+the admission of the rules v4 stops the refresh for another reason than
+capacity, the refresh is a new request in the same slot under the earlier
+rules, without the history of the earlier chain.
+
 ### Reviews in fresh parts
 
 A review whose request does not fit one input of a text route with a local
@@ -1694,6 +1891,10 @@ delivery), `problem_adjudicator` (a focused adjudication of a problem record),
 adjudicator slot), `study_verification` (a `verification` review),
 `study_readiness` (a `result` review with a strategic dossier) and
 `native_math` (a `native_math` review without an openness minimum).
+Since 0.93.0 a new series starts under `exactory-review-parts-v3` ("parts
+v3") where that protocol admits it, and under parts v2 where it declines (The
+parts protocol v3, at the end of this section). The paragraphs between here
+and there describe parts v2.
 For new work outside an existing series, `review-assignment` builds the
 ordinary request first. A fitting request that carries every body stays
 ordinary and is recorded as before, byte for byte, unless a repair rule
@@ -2048,6 +2249,69 @@ next actions), and the output index entries carry `series_assignment_id`,
 `turn`, `adapter` and `review_parts_kind`.
 When the assignment of a turn is of a posted statement, the `next` list of its
 `review_parts` object is `[]` ([Problem creation](#problem-creation)).
+
+The parts protocol v3. Since 0.93.0 `review-assignment` plans a new series
+under `exactory-review-parts-v3` first and under parts v2 second. A recorded
+series keeps its protocol for every later turn, and a refresh, which starts a
+new chain, takes the order of a new series. Parts v3 serves the text routes
+with a local input limit and the adapters of parts v2, and it adds the adapter
+`problem_slate`: a new `slate` review of a problem record whose first request
+does not fit its route, or withholds a body, is a series under parts v3, and
+under no other protocol.
+
+The admission of v3. Without writing a record, the harness builds the
+inventory of the units and a capacity plan of the series, as for a chain of
+the reading protocol v7: the frame of each kind of turn, the levels of
+material and the allowances. Every turn carries the table of the targets of
+the review, each with its id and its label, and the frame of a turn holds at
+most 200,000 characters on every route. When the plan does not fit the
+route, v3 declines and the series starts under parts v2, as in 0.92.1. When
+parts v2 plans no series either, `review-assignment` records nothing: the
+refusal is a `review_parts_*` code of parts v2, or
+`review_route_capacity_below_floor`, whose details then hold `planner_floor`
+with the refusal of the admission of v3, `target_table: {targets,
+characters}` and `frame_maximum_characters` (A review that the route cannot
+deliver, above). Parts v3 admits a review whose table of targets alone
+exceeds that frame on no route.
+
+The series. The recorded assignment holds `review_parts` (`protocol`,
+`adapter`, `kind`, `turn`, `series_assignment_id`, `inventory_digest`),
+`review_parts_plan`, and `capacity_plan` with `capacity_plan_kind`. The
+template id is `exactory-review-parts-v3/<adapter>/<kind>-capacity-v1`.
+`plan_next` names the chain `parts_v2:<adapter>` under both protocols, and
+`review-series` runs a series of v3 as it runs one of v2. The packet of a turn
+holds the frame, the header `review_parts` (the bindings `inventory_digest`,
+`logical_packet_digest`, `plan_digest` and `state_digest`, `kind`, `turn`,
+`targets`, `capacity`, `counts` and the members of its kind) and, beside it,
+`review_parts_groups`, `review_parts_material`, `review_parts_context` and
+`review_parts_state`, the records that the series kept.
+
+The turns. A `read` turn delivers groups of units and returns `{kind, turn,
+cards, unborne}` with one card for each row of `review_parts_groups`. A
+`combine` turn with `mode: "scientific"` returns `{kind, turn, combinations,
+rest}`; with `mode: "condense"` it reduces a block of records that a later
+turn cannot hold. A `check` turn returns `{kind, turn, findings}`, one finding
+for each combination that it checks. A `final` turn holds the records of the
+series and, of the originals, only those that a request of this final
+brought; its answer is the review of the role, in which the
+reviewer cites by handle (`{"ref": "<handle>"}`), and the harness puts the
+reference in the place of each handle. In place of that answer a final turn
+accepts `{kind: "requests", unit_requests, source_requests}`, after which the
+next turn delivers the requested originals in `review_parts_requests`, and one
+part of an argument, `{stage: "material", title, part, text, more}`. A final
+that one request does not hold is taken in pages: the header states
+`final_form`, a page (`review_parts.page`) answers `{targets: [{target,
+fields, sentence}]}` for the targets of its page, and the closing turn
+(`review_parts.closing`) answers `{fields, bindings}` for the fields that no
+page decided. The harness composes the review of the role from these answers,
+and the recording command reads the composed review.
+
+Limits and replay. When the next turn of a series does not fit its stored
+capacity plan, the plan of `review-series` is a decision stop with
+`review_route_capacity_plan_violated` or `review_route_capacity_below_floor`
+and the answers of that decision. The replay of a stored turn of a series
+reads the plan and the records of the series alone and does not apply the
+input limit of the installed transport.
 
 ### Staged problem reviews
 
@@ -4944,8 +5208,8 @@ since 0.73.0, and is checked, not refused.
 | `problem-attempt` | `{id, statement_id, kind, solver, literature, outcomes, proportion}` | Appends `problem_attempt/<id>`, adding `recorded_revision`. Binds the current statement to a solver attempt delivered in this store or a critically assessed full-reading literature attempt. The latest record by recorded revision is current; a resolved attempt blocks posting as an open problem. |
 | `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. Every supplied minimum must pass the shared closed-schema validation. `supported_open` advances the claim; `unresolved` records the gap without an evidence audit; `already_solved` redirects to the settling result and blocks posting as open. |
 | `problem-value` | `{id, statement_id, accounts, motivation, changes_if_resolved, current_state}` | `problem_value/<id>` holds the accounts of the statement and three ordered paragraph arrays. Each paragraph is `{text, evidence}` with the optional `field_fact`, and its nonempty evidence cites entries of the accounts. `accounts` is required (`problem_accounts_required` otherwise). Since 0.91.6 a new value record also holds the part `places` of the accounts (`problem_places_required` otherwise) and the paragraph array `changes_if_resolved` (`problem_changes_if_resolved_required` otherwise), the public section "What a resolution would change". The record adds `recorded_revision`, the dates that the harness derives and, since 0.91.2, `accounts_version: 2`, which a payload cannot set. [The accounts of a value record](#the-accounts-of-a-value-record) gives the parts, the rules, the derived parts and the refusals. A value record that an earlier release recorded has no accounts, or has accounts without `places` and no `changes_if_resolved`, and keeps its contract. Since 0.89.2 the response of a new `problem-value` carries `size_report`; [Imported forming history](#imported-forming-history) gives its scope and its fields (the size report). The stored receipt holds none. |
-| `problem-citation-metadata` | `{id, version_id, title, authors, year, evidence}` | Appends `problem_citation_metadata/<id>`, adding `provenance` and `recorded_revision`, for an existing `url:` work with no DOI and no arXiv identity among its id, its aliases and its metadata (`problem_citation_work_ineligible` otherwise) that a valid full reading of this store covers (`problem_value_reading_missing` otherwise). `title` is nonblank text, `authors` is a nonempty ordered array of nonblank names, and `year`, optional, is four ASCII digits; a record without a year is cited without one, with no fallback to the work's year. `evidence` is `{title: span, authors: [span, ...], year: span}`: one span for the title, one span per author in the same order, and a year span exactly when `year` is given. A span is `{kind, source_id, sha256, start, end}`. `kind` is `fulltext`, the extracted text of a `fulltext` capture of this exact version, or `response`, the captured response of a `source` record; `source_id` names that source record; `sha256` is the hash of the retained object, the `text.sha256` of the capture or the `response.sha256` of the source record; `start` and `end` are zero-based UTF-8 byte offsets into that object, end exclusive, with `0 <= start < end <= size`. The selected bytes must equal the UTF-8 encoding of the field value exactly (`problem_citation_span_mismatch` otherwise): no JSON escape is decoded, no whitespace is normalized and no fragments are combined, so a line-wrapped title in a PDF text needs another retained capture that holds the clean title. An offset inside a multibyte character, or an object that is not valid UTF-8, is `invalid_input`. Every object is resolved through the stored records and the artifact store, never through a caller path: an absent source record is `unknown_source`; a source whose response is not a complete capture, or a capture that is not available and extracted, is `source_pending`; a `sha256` that is not the response of that source, a full text that no capture of this version with that source holds, or a retained object that is missing is `problem_citation_evidence_unbound`; retained bytes that fail their integrity check are `artifact_corrupt`. The record keeps the resolved provenance of every span: the source record's identity fields and digest, the response hash and, for a full text, the capture digest with the text and original hashes. The latest record for a version by `(recorded_revision, id)` is selected and revalidated at every projection. A correction is a new id with the complete replacement payload; a changed payload under an existing id is `record_conflict`. The selected record supplies the citation text alone; the locator does not change. |
-| `problem-citation-locator` | `{id, version_id, reading_id, original_sha256, url, source_id}` | Appends `citation_locator/<id>`, adding `reading_digest`, `source_digest` and `recorded_revision`: the HTTPS location of the exact original that an existing reading read. It supplies the locator of a read work that has no DOI, no arXiv id and no bundle HTTPS URL, for example a manuscript PDF in a GitHub repository, after those three in the locator order of `export --kind problem` (below); the citation text does not change. Every field is nonblank text. A payload that fails any of these conditions is refused with `problem_citation_locator_unbound`: `url` is an absolute `https` URL with a host, without a user name, a password, a fragment, whitespace or the port 0; `reading_id` names a reading of `version_id`; the bundle of that reading has `original_sha256`; `source_id` names a `source` record with this exact `url`, status `captured`, a complete response and a verified origin, whose response has the hash `original_sha256`; for a `url:` work, the text after `url:` equals `url`; a full-text capture of the work names this source and this original. The reading itself must still be valid (its own codes). Retained bytes that fail their integrity check are `artifact_corrupt`. The reading, its bundle and the work stay unchanged, and no new reading is needed. The latest record of a reading by `(recorded_revision, id)` is selected and revalidated at every projection; a selected record whose reading or source record changed after it was made is refused with `problem_citation_locator_unbound`. A correction is a new id; a changed payload under an existing id is `record_conflict`. |
+| `problem-citation-metadata` | `{id, version_id, title, authors, year, evidence}` | Appends `problem_citation_metadata/<id>`, adding `provenance` and `recorded_revision`, for an existing `url:` work with no DOI and no arXiv identity among its id, its aliases and its metadata (`problem_citation_work_ineligible` otherwise) that a valid full reading of this store covers (`problem_value_reading_missing` otherwise). `title` is nonblank text, `authors` is a nonempty ordered array of nonblank names, and `year`, optional, is four ASCII digits; a record without a year is cited without one, with no fallback to the work's year. Since 0.93.0 the command first composes the citation text as a post will carry it: the names joined by a comma and a space, then the title, then the year, the three parts joined by a period and a space. That text must be plain text that a post takes (`problem_citation_text_character` otherwise) and have 10 to 1,000 UTF-16 units after its ends are trimmed (`problem_citation_text_length` otherwise; the table of codes, below). The command is taken for a `url:` work alone. The citation of a work with a DOI or an arXiv identity is composed from its registry record or its work record (The registry text of a citation, below), and the command refuses such a work with `problem_citation_work_ineligible`. `evidence` is `{title: span, authors: [span, ...], year: span}`: one span for the title, one span per author in the same order, and a year span exactly when `year` is given. A span is `{kind, source_id, sha256, start, end}`. `kind` is `fulltext`, the extracted text of a `fulltext` capture of this exact version, or `response`, the captured response of a `source` record; `source_id` names that source record; `sha256` is the hash of the retained object, the `text.sha256` of the capture or the `response.sha256` of the source record; `start` and `end` are zero-based UTF-8 byte offsets into that object, end exclusive, with `0 <= start < end <= size`. The selected bytes must equal the UTF-8 encoding of the field value exactly (`problem_citation_span_mismatch` otherwise): no JSON escape is decoded, no whitespace is normalized and no fragments are combined, so a line-wrapped title in a PDF text needs another retained capture that holds the clean title. An offset inside a multibyte character, or an object that is not valid UTF-8, is `invalid_input`. Every object is resolved through the stored records and the artifact store, never through a caller path: an absent source record is `unknown_source`; a source whose response is not a complete capture, or a capture that is not available and extracted, is `source_pending`; a `sha256` that is not the response of that source, a full text that no capture of this version with that source holds, or a retained object that is missing is `problem_citation_evidence_unbound`; retained bytes that fail their integrity check are `artifact_corrupt`. The record keeps the resolved provenance of every span: the source record's identity fields and digest, the response hash and, for a full text, the capture digest with the text and original hashes. The latest record for a version by `(recorded_revision, id)` is selected and revalidated at every projection. A correction is a new id with the complete replacement payload; a changed payload under an existing id is `record_conflict`. The selected record supplies the citation text alone; the locator does not change. |
+| `problem-citation-locator` | `{id, version_id, reading_id, original_sha256, url, source_id}` | Appends `citation_locator/<id>`, adding `reading_digest`, `source_digest` and `recorded_revision`: the HTTPS location of the exact original that an existing reading read. It supplies the locator of a read work that has no DOI, no arXiv id and no bundle HTTPS URL, for example a manuscript PDF in a GitHub repository, after those three in the locator order of `export --kind problem` (below); the citation text does not change. Every field is nonblank text. Since 0.93.0 a nonblank `url` first meets the field rule that the post applies to a locator, and a `url` that fails it is refused with the code of the post: `problem_citation_locator_character` for a character that a post does not take, `problem_citation_locator_length` for more than 500 UTF-16 units, and `problem_citation_locator_format` for a text that is no DOI, no arXiv id and no `https` URL, for example `http://example.org/file.pdf` or `https://` (the table of codes, below). A payload that passes this rule and fails any of these conditions is refused with `problem_citation_locator_unbound`: `url` is an absolute `https` URL with a host, without a user name, a password, a fragment, whitespace or the port 0; `reading_id` names a reading of `version_id`; the bundle of that reading has `original_sha256`; `source_id` names a `source` record with this exact `url`, status `captured`, a complete response and a verified origin, whose response has the hash `original_sha256`; for a `url:` work, the text after `url:` equals `url`; a full-text capture of the work names this source and this original. The reading itself must still be valid (its own codes). Retained bytes that fail their integrity check are `artifact_corrupt`. The reading, its bundle and the work stay unchanged, and no new reading is needed. The latest record of a reading by `(recorded_revision, id)` is selected and revalidated at every projection; a selected record whose reading or source record changed after it was made is refused with `problem_citation_locator_unbound`. A correction is a new id; a changed payload under an existing id is `record_conflict`. |
 | `problem-assessment` | `{id, statement_id, grades, items, primary}` | `problem_assessment/<id>` binds the rubric self-assessment to the current statement, adding `recorded_revision`. Each item has evidence and a note; `primary` names its significance ground and criterion. |
 | `problem-formal-check` | `{evidence: {execution_id, output_id}, native_closure_digest}` | `problem_formal_check/<id>` binds a requested support check to an authenticated native completion in this store. Invalid bindings return `problem_formal_check_unbound`. |
 | `problem-decision` | `{id, action, review_ids, bar_review_ids, reason}` | `problem_decision/<id>` binds the current evidence digest. Action is `post`, `revise` or `withdraw`; `post` requires the minimum and observed review coverage, otherwise `problem_minimum_unmet`. The other actions record the reason. Since 0.85.0 a `withdraw` decision also records what it withdraws: `statement_id`, the current statement or null, and `candidate_ids`, the candidate of that statement, or, while no statement is current, the candidates that the current slate selects, or an empty list. The report of an exploration reads these fields. A `withdraw` decision of an earlier release has neither field and keeps its bytes. |
@@ -4956,6 +5220,8 @@ since 0.73.0, and is checked, not refused.
 | `problem-post-time` | `{post_id, posted_at, evidence}` | Records a statement of the time of an older external post: a `problem_post` with `gate` `bypassed` and no `recorded_at`, which 0.73.0 to 0.73.2 recorded. The immutable record `problem_post_time/<post_id>` holds the payload fields, `recorded_at` (UTC) and `recorded_revision`. `post_id` must be a non-empty text, the id of the stored `problem_post`. `posted_at` must be a timestamp with an explicit timezone, as defined for `problem-post-external`, and the record keeps it exactly as given. `evidence` must be a non-empty text or an artifact reference, which is verified (`artifact_missing` and the other artifact errors when its bytes are not stored). The post is found by its id, also when another problem statement is now current, and nothing compares `posted_at` with the stored recording time. One statement is accepted per post. `status` shows the statement with the post (the paragraph on a posted problem, below). The output views export each statement at `problem/post-times`, and the post's own export keeps its bytes. The statement is not part of the problem evidence or its digest, the post gate, or the reconstruction of review requests. Refusals, after the field checks and in this order: `problem_post_missing` (no `problem_post` has that id, details `post_id`), `problem_post_time_inapplicable` (the post has a `gate` other than `bypassed`, or it has `recorded_at`, details `post_id` and `gate`) and `problem_post_time_already_recorded` (a statement exists for that post, details `post_id`). Outside a problem record the command is refused with `orchestration_conflict`, as `problem-post-external` is. It follows the normal `--file`, `--expected-revision`, `--request-id` and `--check` contract. The same request id with the same payload returns its original receipt before any of these checks, and with another payload it fails with `request_id_conflict`. |
 | `problem-post-fact` | `{id, post_id, fact, source, date, bears_on}` | Records `problem_post_fact/<id>`: a fact about the place of a posted statement that arrived after its post, for example in a reply. `post_id` is the id of a stored `problem_post`, which `gate post` and `problem-posted` or `problem-post-external` recorded. The post is found by its id, also when another statement is now current (`problem_post_missing` otherwise). `fact` is nonempty text. `source` is a stored artifact descriptor `{path, sha256, size, media_type}`, which `exactory-research artifact` returns for a stored file, or an exact reading record of this store, `{kind: "record", record_kind: "reading", id, digest}`, at any depth. Another shape is `invalid_input`, missing bytes are `artifact_missing`, an unknown reading is `strategy_reference_missing`, and a digest that differs from the stored reading is `strategy_evidence_stale`. `date` is nonempty text: the day on which the fact became available, as the source gives it, or `unknown`. `bears_on` is `{value, description}`, two nonempty texts: what the fact bears on, as an open value such as `earlier_statement`, `alternative`, `relation` or `refutation`, with a description. The record adds `recorded_revision`. It needs no value record. It is not part of the problem evidence or its digest, of the post gate or of the reconstruction of review requests, so the stored post, the reviews and the gate result keep their bytes. `status` lists the fact under `after_post` with the code `problem_post_fact` and the fact as its `reason`, and the output views show it at `problem/post-facts`. The harness records the fact and does not review it. An id that holds another payload is `record_conflict`, and the same request replays its receipt. Outside a problem record the command is refused with `orchestration_conflict`. Supports `--check`. |
 | `problem-report` | `{id, reopen_when}` | `problem_report/<id>` records how the exploration ended. `reopen_when` is nonempty text: the finding that would make the exploration worth reopening. The harness computes every other field from the records at the current revision: the start, every form with its outcome, the forming imports, the candidates with their endings, the statements with their publication and the classification of each post, the counts, what was spent, and one of six outcomes. The record keeps its `cutoff` and the digest of the records that it read. `status` and `next` show a due report and a stale report as advisories, which change no gate. The command refuses a due report while a form is open (`problem_report_forms_open`) ([The report of an exploration](#the-report-of-an-exploration)). |
+| `problem-search-step` | `{id, slate_id, way, candidate_ids, learned, evidence, plan, passed_over, successor_workspace, other_leads}` | `problem_search_step/<id>` records what the search does next after the latest slate, which selects nothing. It holds one of five ways, what the record learned with its evidence, and the plan. It also holds a reason for each earlier way that the step passes over. A step with the way `next_exploration` names the workspace of the next record. `status` and `next` name the step to record ([Search steps](#search-steps)). |
+| `problem-search-origin` | `{id, source_workspace, source_revision}` | `problem_search_origin/<id>` keeps in this record what the earlier exploration of the run learned. The command reads the source record, which names this record in a search step with the way `next_exploration`. It writes nothing in the source ([Search steps](#search-steps)). |
 
 An exploration records its candidates with `problem-candidate` and compares
 them in a slate with `problem-slate`. The slate gives every current candidate
@@ -4989,9 +5255,9 @@ template_id}`. The refresh packet also carries `historical_reviews` with the
 version 1 bar, whose objections the refreshed bar addresses. The refreshed bar
 gives an `objection_findings` entry for every material objection of the version 1
 bar (`review_objection_history_incomplete`); until it is recorded, those
-objections stay current. Cite the refreshed bars in the slate; the slate and
-result reviews then continue the refreshed sessions, because only the latest bar
-of each slot is current. A reviewer whose latest bar is on
+objections stay current. Cite the refreshed bars in the slate; the result reviews
+and a slate review whose candidates cite no work then continue the refreshed
+sessions, because only the latest bar of each slot is current. A reviewer whose latest bar is on
 `exactory-problem-review-v2/bar` or `exactory-problem-review-v5/bar` cannot be
 assigned another bar (`review_resampling_forbidden`), unless its latest bar
 carries `review_evidence_undelivered` (the refresh below).
@@ -5012,8 +5278,20 @@ problem slate reviews from distinct reviewers and slots. Each must assess exactl
 the slate's bars, current candidates and imported objections and keep its observed
 independence; otherwise `problem_slate_review_unverified` names `review_id`. Assign a slate
 review with `review-assignment`, role `slate` and `dossier_id: null`, to one of
-the two bar reviewers: it continues that reviewer's bar session and slot
-(`review_bar_continuity`). The template is `exactory-problem-review-v5/slate` and
+the two bar reviewers: it takes that reviewer's slot (`review_bar_continuity`).
+Since 0.93.0, when a current candidate cites a work in `source.evidence`, by a
+reading record of the record or by a source link, the slate review is a session
+of its own in that slot. Its request replays no turn of the bar session, and its
+packet carries `slate_delivery`,
+`{protocol: "exactory-problem-slate-delivery-v1", cited_works}`. Each entry of
+`cited_works` is `{version_id, depth, candidate_ids, delivery}`: the version of
+the work; `fulltext`, or `abstract` when every cited reading of the version is a
+reading of the abstract; the candidates that cite it; and the source delivery of
+its text, built as a text-only delivery. The text is an evidence body of the
+packet, and the prompt carries the delivery paragraph of the same name. A
+continuation turn carries the entries without `delivery`. When no current
+candidate cites a work, the slate review continues the reviewer's bar session,
+as before 0.93.0. The template is `exactory-problem-review-v5/slate` and
 the subject is `{kind: "problem", statement_id: null}`. The packet carries the
 area, field, source inventory, `bar_ids`, `bars`, the reviewer's own bars and
 `candidates`: the id, record digest, statement, source kind and reference,
@@ -5034,11 +5312,21 @@ current `import_set_digest` of its `problem_objection_carry` marker. After a
 candidate is added or superseded, or after a bar is refreshed or replaced, assign
 the slate again to the same reviewer with an empty `context`. The same holds
 after a carry changes the imported set. The
-assignment refreshes the completed slate review: it continues that reviewer's
-session and slot, lists the current candidates and bars, carries the earlier slate
-findings in `historical_reviews`, and adds `problem_refresh` with `{assignment_id,
-previous_candidate_set_digest, candidate_set_digest, previous_bar_ids, bar_ids,
-review_ids}`. The new response covers the earlier material objections in
+assignment refreshes the completed slate review. Since 0.93.0 the refresh is a
+new session in the slot of that review. The harness records it with
+`context: {session_refresh: {assignment_id}}`, also when the payload names the
+review as `prior_assignment_id`, and its request replays no earlier turn. The
+packet is the first packet of a slate review on the record as it is now. It holds
+`slate_delivery`, with an empty `cited_works` when no candidate cites a work,
+each review of the slot in `historical_reviews`, and `problem_refresh` with
+`{assignment_id, previous_candidate_set_digest, candidate_set_digest,
+previous_bar_ids, bar_ids, review_ids}`. The recorded refresh supersedes the
+earlier review of its slot. A slate review that a context repair, a series of the
+parts protocol or a staged review recorded is refreshed as before 0.93.0.
+A slate review that a session under the source rules v4 recorded is
+refreshed as a new chain too.
+The new
+response covers the earlier material objections in
 `objection_findings`. While the candidate set and the bars are unchanged, another
 slate assignment for that reviewer returns `review_resampling_forbidden`, unless
 its latest slate review carries `review_evidence_undelivered`.
@@ -5086,9 +5374,10 @@ with `slate_id` and the `reason` `problem_objection_carry_changed`. So does a
 slate recorded before a later carry changed the
 imported set. The obligation ends when a new slate, cited to a focused slate
 review of the current set, is recorded. A slate whose candidate set is stale
-counts as no slate for the milestone and for `problem_no_post`. A slate that is
+counts as no slate for the milestone, for `problem_no_post` and for the search
+codes of `next`. A slate that is
 stale by the carry digest alone blocks readiness, but it still counts as the
-slate for those two computations. A statement recorded
+slate for those computations. A statement recorded
 in a 0.53.0 store before candidates existed carries no `candidate_id`; formulate
 it again under a new statement id with `candidate_id`, because re-selecting it
 unchanged gives `record_conflict`.
@@ -5857,16 +6146,30 @@ not bound; empty under v6) and `decision`. The stop is a decision stop.
 "Whether this review waits for a reading protocol that bounds the record of
 its chain, or runs over a packet that binds less material." with the answers
 `Wait for a reading protocol that bounds the record` and `Run over a smaller
-packet`; for a math-solver chain the question "Whether this chain continues to
-its final turn, waits for the protocol reading-math-v2, or runs over a packet
-that binds less material." with the answers `Continue this chain to its final
-turn` (on a stored head), `Wait for reading-math-v2` and `Run over a smaller
-packet`. Each answer lists its steps with their payloads, the fields to
-choose and their prerequisites. Since 0.91.0 the plan of `review-series`
-for a stopped problem chain under v5 or v6 is the handoff `export`, or the
-decision of the admission, in place of this decision (the admission of a
-successor chain, below). The protocol `reading-math-v2` is not part of this
-release. For a math-solver chain
+packet`; for a chain under `exactory-openness-reading-math-v1` the decision
+follows what was stopped. Since 0.93.0 a new math chain starts under
+`exactory-openness-reading-math-v2` where that protocol admits its packet
+(The math protocol v2, below), so a first assignment reaches math v1 only
+after math v2 refused the packet. Its refusal has no stored head and asks
+"Whether this chain continues to its final turn, the review waits for a
+release whose protocol exactory-openness-reading-math-v2 admits this packet,
+or the review runs over a packet that binds less material." with the answers
+`Wait for reading-math-v2` and `Run over a smaller packet`. The stop of a
+stored chain holds `details.successor`, the admission of a new chain over the
+same material, and asks whether the review runs over a packet that binds less
+material or, where an answer offers it, moves to a new chain over the same
+material. Its answers are `Run over a smaller packet` and, before it, `Build a
+new math review packet and start the admitted chain with the same reviewer`
+when the admission accepts a new chain. That answer is left out after an
+exact measure when the new chain would run under math v1 on the same route
+record, where it would read every unit again and stop in the same way. A stop
+on an estimate (`estimate: true`) keeps `Continue this chain to its final
+turn` as its first answer. Each answer lists its steps with their payloads,
+the fields to choose and their prerequisites. Since 0.91.0 the plan of
+`review-series` for a stopped problem chain under v5 or v6 is the handoff
+`export`, or the decision of the admission, in place of this decision (the
+admission of a successor chain, below).
+For a math-solver chain
 with two observed turns or more, the harness also stops before a call when
 its estimate of the final input is above the limit (`estimate: true` in the
 details), unless the owner's answer `Continue this chain to its final turn`
@@ -5934,12 +6237,18 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   carries no earlier turn and reads every unit.
   On a route that measures bytes, or when more than 5% of the characters of the
   material are outside ASCII, the ratio is at most 0.25 characters for each
-  token. v7 accepts a packet when a reading turn fits a level of the
-  plan and the final fits one request. It refuses with `reason:
-  "final_needs_pages"` (with `pages`, `targets` and
-  `largest_one_request_targets`), `"below_floor"` (the frame or the lowest
-  level does not fit the route) or `"binary_required_evidence"` (the packet
-  requires evidence that is not UTF-8 text). A packet that v7 refuses starts
+  token.
+  v7 accepts a packet when a reading turn fits a level of the
+  plan and the frame of a final turn fits the route. Since 0.93.0 the final
+  need not fit one request: the admission states `final_form`, which is
+  `request` when the plan holds the final in one request and `pages` when it
+  takes the final in pages (The final in pages, below). It refuses with
+  `reason: "below_floor"` (the frame or the lowest level does not fit the
+  route) or `"binary_required_evidence"` (the packet requires evidence that is
+  not UTF-8 text). The reason `"final_needs_pages"` of 0.91.0 to 0.92.1 (with
+  `pages`, `targets` and `largest_one_request_targets`) is now a reason of
+  the math protocol v2 alone (The math protocol v2, below).
+  A packet that v7 refuses starts
   under v6 when the projection of v6 admits it. When no protocol admits the
   packet, `review-assignment` records nothing and refuses with
   `review_route_capacity_below_floor`. The details hold `admissions`,
@@ -6071,6 +6380,68 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   next turn is then again a final turn. The rules of the refusal
   `openness_finding_invalid` add `reason_bound`, `coverage_bound`,
   `ground_bound` and `recorded_references`.
+- The final in pages. Since 0.93.0 a final that one request does not hold is
+  taken in pages: page turns, condensing turns where they are needed, and one
+  closing turn, each a fresh input and an assignment of the chain. The first
+  final turn stores the page plan (`reading_chain.final_page_plan`), and a
+  chain that an earlier release started takes its final in pages too when one
+  request does not hold it. A page turn holds `reading_final.page` with the
+  targets of its page and assesses those targets alone: its answer is
+  `{targets: [{formulation, coverage, grounds, sentence}]}`, one row for each
+  target of the page, and it gives no outcome. The closing turn holds
+  `reading_final.closing`, whose `rows` give one decision row for each target,
+  and answers `{statement, assumptions, scope, dependencies, policy, outcome,
+  reason, grounds}`. A condensing turn (`reading_combine`) reduces a block of
+  entries that a page or the closing turn cannot hold and answers `{block,
+  summary, refs}`. A page turn and the closing turn can return a reading
+  answer with requests or one part of an argument, as a final turn can; the
+  turn is then assigned again. The harness composes the finding of the final
+  turn, above, from the answers of the pages and of the closing turn, and
+  checks the composed finding by the rules of the finding. A check that
+  refuses the composed finding refuses the closing answer, and the notice of
+  the replacement names the check and the place in the composed finding. The
+  plan after the closing answer is `record` with `problem-openness`, and the
+  recorded finding holds `composite`, the turns from which it was composed. A
+  `review-assignment` that names the answered closing turn as
+  `prior_assignment_id` is refused with `review_resampling_forbidden`. The
+  receipt of a turn states the form: `reading_chain_admission` holds
+  `final_form`, `pages`, `condensing_turns` and `closing_pages`, and once the
+  chain has a page plan `capacity_forecast.by_kind.final` holds the same
+  counts with `final_form: "pages"` and a `message`. The counts are those of
+  the present page plan. After a capacity event or a denser measured ratio
+  `review-series` plans a smaller task under a new page plan, the same turn
+  once more, or a stop or a handoff: run it after each turn and take the step
+  that it plans, until the closing turn has its answer.
+- The finding index. Since 0.92.0 the request of a turn whose answer can hold
+  a ground of the kind `reviewer_gap` carries `finding_index` at the top of
+  its packet, and the prompt of the turn records `finding_version: 2`: the
+  final turn of a chain, a page and the closing turn of a final in pages, and
+  the finding review of one request. A v7 chain holds the index when its
+  capacity plan froze one at the first assignment; a chain without one keeps
+  the finding rules version 1 and has no index.
+  `finding_index.searches` holds one entry for each bound search of the
+  minimum (`record_id`, `search_digest`, `formulations`, and the digests of
+  its `queries`, `scope`, `dispositions`, `resolved` and `row_dispositions`
+  where the search record holds them), `finding_index.fields` holds each of
+  those values once under its digest, and `finding_index.read_works` lists
+  the bound readings (`reading_id`, `reading_digest`, `version_id`,
+  `identifiers` and `title`). A value that is too long for the fixed part of
+  a request stands under `finding_index.units` as `{unit, characters}`, and a
+  passage request for that handle returns it; an index that is too long as a
+  whole is the unit `Finding index`, and the packet holds `{unit, characters,
+  searches, read_works}` in its place. Under the finding rules version 2 a
+  ground of the kind `reviewer_gap` names one unread work or one search that
+  was not run. It holds `formulation`, `basis` (quotations from delivered
+  text), `need`, `unsettled` and exactly one of `work` (`{title,
+  identifiers?}`) and `search` (`{terms, missing_term}`). The harness checks
+  such a ground in this order and names the first rule that fails in
+  `details.rule` of `openness_finding_invalid`: `gap_fields`,
+  `gap_formulation`, `gap_basis`, `gap_work_read` (the work is none of
+  `read_works`), `gap_term_delivered` (the term occurs in a quotation of the
+  basis) and `gap_term_bound` (a content token of the term occurs in no bound
+  query of that formulation). `problem-openness` builds the index again from
+  the records and refuses a finding whose index differs from the bound
+  searches and readings with `openness_reading_incomplete`.
 - Carried turns. A new v7 chain takes over reading turns of earlier chains
   under v5, v6 or v7 that have the same reviewer, author, statement,
   formulations and route identity (adapter, model, endpoint and
@@ -6214,10 +6585,16 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   (The smaller task after a capacity event, under [Review chains and
   `review-series`](#review-chains-and-review-series)). A reading turn is
   assigned again at a lower level of the stored plan: the next one, or a lower
-  one when a denser measured ratio leaves less room. A final turn that waits
-  for a part of an argument is assigned again with half its answer bound, down
-  to the smallest answer bound of the plan; every other final turn has no
-  smaller task. Where no replacement is admitted, the plan follows the retry,
+  one when a denser measured ratio leaves less room.
+  A final turn that waits for a part of an argument is
+  assigned again with half its answer bound, down to the smallest answer bound
+  of the plan. A turn of a final in pages is divided under a new page plan: a
+  page of several targets into two pages, and a closing turn or a condensing
+  turn over several entries into two blocks of at least 1,024 characters of
+  entries each. A final in one request, a page of one target whose entries are
+  within the lowest level of the final, a closing turn over one row and a
+  condensing turn over one entry have no smaller task.
+  Where no replacement is admitted, the plan follows the retry,
   wait and stop rules of the outcome, and the details of the decision for a
   turn without a smaller task hold `range_not_served`. When the permitted
   failure sequences of a reading turn are used up, its last failure is
@@ -6267,12 +6644,21 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   every unit again, and when no protocol admits the packet the assignment
   returns the decision of the admission.
 - A denser ratio. When an attempt of the chain measures fewer characters for
-  each token than the plan assumes, and the final with the allowances that
-  the chain has granted no longer fits one request at that ratio,
-  `review-assignment` and `review-run` refuse the next request with
+  each token than the plan assumes, the harness measures the final again at
+  that ratio. A chain that takes its final in one request stops when that
+  final, with the allowances that the chain has granted, no longer fits one
+  request, or when those allowances exceed the material allowance of the
+  final. Since 0.93.0 a chain whose final can run in pages stops only when the
+  smallest turn of a final does not fit: the frame of a final turn, the 45,000
+  characters that the plan reserves for a notice, the smallest notes (6,000
+  characters) and one excerpt with its fields (6,700 characters).
+  `review-assignment` and `review-run` then refuse the next request with
   `review_chain_projection_over_limit`, and `review-series` ends with the
   handoff `export`, or with the decision stop of the admission when no
-  protocol admits a new chain. For a new chain under v7,
+  protocol admits a new chain. The details hold `ratio`,
+  `required_characters`, `available_characters`, `granted_characters` and
+  `final_material_allowance`.
+  For a new chain under v7,
   `details.successor.measure` gives the ratio of its plan: the measured ratio,
   or a denser one that another earlier chain over the same statement and route
   identity shows. A chain under v6 is admitted by its own projection.
@@ -6423,11 +6809,16 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   third, for a selection of version 2 or 3, is `claim_reassessment_required`.
   It occurs when the records were read without the history of the store. For
   a selection of version 3 it also occurs when the history does not show the
-  first assignment of an earlier chain at its `recorded_revision`. Version 3
-  reads each earlier chain when the selection is made, so this refusal can
-  also end a first assignment, its check, and the plan of a new chain in
-  `status`, `next` and `review-series`. Its
-  message asks to reassess a bound record. That step belongs to managed
+  first assignment of an earlier chain, as the records give it now, recorded
+  at the revision that its `recorded_revision` states. Version 3 reads each
+  earlier chain when the selection is made, so this refusal can also end a
+  first assignment, its check, and the plan of a new chain in `status`, `next`
+  and `review-series`. Since 0.93.0 the refusal of a selection of version 3
+  names the chain: `details.record_id` is `review_assignment:` followed by the
+  id of the first assignment of that earlier chain, and the message states
+  which of the two cases holds. The harness then selects and verifies no
+  carried turn. Every other refusal of this code keeps its message of release
+  0.92.1, which asks to reassess a record. That step belongs to managed
   research and does not apply to a problem chain. For
   `claim_reassessment_required`, run `record-check`, and then report the
   refusal with its details.
@@ -6441,10 +6832,37 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   route record of a carried chain while it is the latest probe of that record.
   For a selection of version 3 the first and the third fail the second part.
   The second does not: a change of the content records fails the verification
-  of a v7 chain only when it changes a unit of the packet of that chain. The
-  refusal is then the one of the stored inventory (`openness_reading_incomplete`,
-  "A stored inventory or state of this chain differs ..."), `record-check`
-  reports the record ready, and the step is a new export.
+  of a v7 chain only when it changes a unit of the packet of that chain. Since
+  0.93.0 the chain then stops by name. While its final is not observed,
+  `review-assignment` of its next turn is refused with
+  `openness_packet_outdated`, and the plan of its head is the handoff of that
+  code. The details hold `assignment_id`, `message`, `units` and `step`.
+  `units` lists the units that differ. An item with `state: "left"` is a unit
+  of the chain that the records no longer give; for a full text its
+  `main_captures` lists the captures that the records give now for that
+  version. An item with `state: "added"` is a unit that the records give and
+  the chain does not hold. An item with `state: "changed"` is a unit at
+  another position or with other bodies, with `stored` and `current`. A math
+  chain also lists, under `bindings`, the readings and the search responses
+  that its packet binds and the records no longer give. `step` is the export
+  of a new packet (`export`, or `search review-packet` for a math chain) with
+  a `then` that assigns the packet with the same `reviewer_id`, first in check
+  mode. The new chain carries the verified reading turns of the stopped chain
+  and reads the units that they do not cover. When the route record of the
+  chain pins another reviewer runtime than the installed one, the step is
+  `review-route` and the details hold `renewal`; when the route record lacks a
+  probe that verifies it, the step is `review-probe` and the details hold
+  `destination_probe`. In both cases the `then` of the step ends with
+  `review-series` on the chain, which names the step that follows. Take
+  `details.step`, and then the steps of its `then` in their order. For a final
+  that is observed and not recorded, `problem-openness` refuses with
+  `openness_reading_incomplete` and `details.units`, and the plan of the head
+  is the same handoff. For a recorded finding the plan of the chain stays
+  `done`, and the verification of the finding gives
+  `openness_reading_incomplete`: with `details.reassessment` (`{obligation:
+  "problem_openness_stale", openness_id, command: "export"}`) when the finding
+  is the latest of the record, and with `openness_id` and `latest_openness_id`
+  when a later finding took its place.
   After the first and after the third, `record-check` stays ready. Its step
   `authentication` lists the turn that is no longer ready under `assignments`,
   with `review_context_contaminated` or `review_context_unverified` among its
@@ -6551,8 +6969,72 @@ the final turn to withhold only bodies that reading turns delivered complete,
 and the chain to end at its first final turn that returns the native result.
 They store `reading_turns` on the acceptance or closure, and every later audit
 of that record follows the chain again and compares them. The math-solver
-`SEARCH.md` describes the receipts. A minimum whose units fit one turn stays a
-single native turn.
+`SEARCH.md` describes the receipts. Under math v1 a minimum whose units fit one turn stays a single native turn.
+
+The math protocol v2. Since 0.93.0 `review-assignment` chooses the protocol of
+a new math-solver reading chain by admission, as it does for a problem chain:
+`exactory-openness-reading-math-v2` first, then
+`exactory-openness-reading-math-v1`. On a route with a local input limit
+(`claude_cli_v1`, `codex_cli_v1` and `codex_cli_framed_v1`) a packet that math
+v2 admits is a reading chain under math v2, also when its units fit one input.
+A packet that math v2 refuses takes the path of math v1 above: one native turn
+when its units fit, and otherwise a chain under math v1. On a route without a
+local input limit the review stays one turn. The receipt of the first
+assignment, also with `--check`, carries `protocol_selection: {protocol,
+admissions, message}`, and a stored chain keeps its protocol. The admission of
+math v2 is the admission of v7 (The reading protocol v7, above) over the units
+and the prompts of the math chain. It refuses a packet with one of these
+values of `reason`: `text_route_required` (the route is a
+`codex_cli_visual_v1` route), `binary_required_evidence`, `below_floor`,
+`identifier_too_long` (the assignment id has more than 120 characters;
+`maximum`), `required_citations_over_bound` (the rows of the units that the
+minimum requires, or the smallest approval that cites them, do not fit the
+final; `details` hold `required`, `citable`, `request_characters`,
+`request_bound`, `answer_characters` and `answer_bound`) or
+`final_needs_pages` (with `pages`, `targets` and
+`largest_one_request_targets`). A chain under math v2 takes its final in one
+request, and `final_needs_pages` says that the final of this packet needs
+more. The chain has the capacity plan, the inventory, the state, the reading
+turns and the receipts of a v7 chain. Its first assignment selects the ready
+reading turns of earlier math chains, under math v1 or math v2, of the same
+reviewer, author, route identity, subject, claim and formulations
+(`carried_selection`, with the report `carried_readings`; Carried turns,
+above), and the chain reads the units that those turns do not cover. The final
+turn returns the native result. `review-series` then ends with one of these
+plans. An approval gives the handoff `native_review_acceptance_required`
+(`search accept`) or, for a closure review, `native_review_completion_required`
+(`search complete`). `details.step` holds that command with the workspace of
+the objective (`root`) and the payload that the math controller checked, with
+nothing left to choose, and once the controller holds the record the plan is
+`done`. A final that
+returned `revise` or `reject` gives the handoff `native_review_not_approved`:
+`details` hold `assignment_id`, `role`, `decision`, `reason`, `objections` and
+`step`, the export of a new packet (`search review-packet`) with a `then` that
+assigns it, first in check mode. A first turn over a closure subject of
+`schema_version` 1 gives the handoff `native_review_legacy_closure` with the
+same kind of step, and `review-run` on that turn is refused with the same
+code. A material search that was recorded after the export gives the stop
+`native_review_stale_minimum`: `details.step` exports a packet whose minimum
+binds the searches that `search_ids` names. In each case take `details.step`,
+and then the steps of its `then` in their order; after the new assignment is
+recorded, the plan of the old head is `done` with
+`details.successor_assignment_id`. A `review-assignment` that names an
+answered final as `prior_assignment_id` is refused with
+`review_resampling_forbidden`. The size stops of a math v2 final are decision
+stops. A final whose request is over the input limit of its route stops with
+`review_input_too_large`; the answers are `Start the review again over the
+same material on a route record that admits it` and `Run over a smaller
+packet`. A final whose answer ended at the output limit is sent once more;
+after the second such answer the chain stops with `review_output_over_cap`,
+`details.range_not_served` states that the protocol holds no smaller task, and
+the answer is `Move to another route`. A position whose replacements are used
+up gives the handoff `review_slot_exhausted` with the command `search
+review-packet` and `details.successor`, the admission of the new chain. A
+chain whose units changed gives the handoff `openness_packet_outdated` with
+`details.bindings` (The reading protocol v7, above). `exactory-math search
+accept` and `search complete` verify a chain under math v2 with the
+verification of the reading protocol v7 and store its `reading_turns` on the
+acceptance or closure.
 
 Refusal codes of a reading chain:
 
@@ -7364,8 +7846,15 @@ its packets did not deliver stays in the record and carries
 the details of the `value-review` refusal. The pair is not ready, and no refusal
 record is written for a recorded review. The audit reads the delivery as the
 packets recorded it, so a current reading added or removed after the record
-changes nothing. The same reviewer refreshes the review in its session and
-slot: a new assignment of the same role with an empty `context`. Its packet
+changes nothing. The same reviewer refreshes the review: a new assignment of the
+same role with an empty `context`. A bar or a result review is refreshed in its
+session and slot.
+A bar or a result review that a session under the source rules v4 recorded
+is refreshed as a new chain in its slot, like such a slate review ([Sessions
+under the source rules v4](#sessions-under-the-source-rules-v4)).
+Since 0.93.0 a slate review that no context repair, series of
+the parts protocol or staged review recorded is refreshed as a new chain in its
+slot, with `context: {session_refresh: {assignment_id}}`. Its packet
 carries `problem_refresh` with `reason: "evidence_undelivered"` and `review_ids`
 naming the superseded review, which `historical_reviews` delivers so that the
 new output gives its findings on the same objections. The refreshed review
@@ -7439,6 +7928,11 @@ example the population of the cohort tool. The post decision is
 | `problem_citation_work_ineligible` | Record citation metadata only for an existing `url:` work with no DOI and no arXiv identity; the refusal names `version_id`. A work with either identity is cited from its work record. |
 | `problem_citation_evidence_unbound` | Bind each span to a retained object of this store, the `response.sha256` of the named source record or the `text.sha256` of a `fulltext` capture of this exact version with that source, and keep the object retained; `source_id` and `sha256` name the span. Without details, the source record of a span changed after the record was made: record new metadata under a new id. |
 | `problem_citation_span_mismatch` | Make the field value equal the selected bytes exactly, or move `start` and `end` to the bytes that hold it; `source_id` and `sha256` name the span. |
+| `problem_citation_text_character` | Since 0.93.0. Remove the character that a post does not take from the citation text. `field` is `citation`, `character` gives the character as `U+` with its code point, and `line` and `column` give its place in the text. `problem-citation-metadata` gives the code for the text that it composes from the authors, the title and the year; its details also hold `step`, the command with the `version_id` and the fields to choose. `export --kind problem` gives it for the `citation` of an entry of `citations.json`; its details also hold `index`, the number of the entry, counted from 1. |
+| `problem_citation_text_length` | Since 0.93.0. Give a citation text of `minimum` to `maximum` UTF-16 units, which are 10 and 1,000, counted after the ends are trimmed; `characters` is the count, and `field` is `citation`. The same two commands give the code, with `step` or `index` as in the row above. |
+| `problem_citation_locator_character` | Since 0.93.0. Remove the character that a post does not take from the locator. `field` is `locator`, and `character`, `line` and `column` name the character. `problem-citation-locator` gives the code for a nonblank `url`; its details also hold `step`, the command with the `version_id`, the `reading_id` and the fields to choose. `export --kind problem` gives it for the `locator` of an entry of `citations.json`, with `index`. |
+| `problem_citation_locator_length` | Since 0.93.0. Give a locator of at most `maximum` UTF-16 units, which is 500; `characters` is the count, `minimum` is 0, and `field` is `locator`. The same two commands give the code, with `step` or `index` as in the row above. |
+| `problem_citation_locator_format` | Since 0.93.0. Give a locator that is a DOI, an arXiv id or an `https` URL; `field` is `locator`. The same two commands give the code, with `step` or `index`. The `url` of `problem-citation-locator` is an `https` URL: a DOI or an arXiv id passes this rule there and is refused with `problem_citation_locator_unbound`. |
 | `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. Under `problem_bar_pending`, `next` gives the bar assignment as a step, with the member `scheduler` where it applies (Capacity, under [Staged problem reviews](#staged-problem-reviews)). |
 | `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. When fewer than two result slots are occupied, `problem_review_pair_required` reports that the independent pair is missing, also when the occupied slot has pending work. It does not name a slot, and it carries `review_ids` (the current recorded reviews, possibly empty). |
 | `research_objection_unresolved` | Resolve the named material objection with evidence or a focused independent adjudication. An imported objection (`<id>@origin:<source identity>`) is resolved in this record the same way; its source's resolution does not count. |
@@ -7473,21 +7967,25 @@ valid value evidence, a passing current rubric self-assessment that grades A7,
 both bars, both result reviews grading every rubric item, A7 included, and
 passing the assurances and rubric after adjudication, and a current post
 decision, and `post` with a recorded post.
-`next` names the first missing condition in the order slate, statement,
-attempt, openness, value, reviews, decision, export. A stale slate leads with
-`problem_slate_stale`. When the current slate selects no candidate, `next` is
-`{code: "problem_no_post", reason, explanation}`
-with the slate's reason: the exploration ends without a post unless a new slate
-selects a candidate. The full `status` and `next` reports carry that reason; the
-`--summary` views show the code and the explanation only. Milestones impose no
-tool order. `status` also reports
-`candidates: {current, selected, deferred, rejected}`, the number of current
-candidates and the lengths of the latest slate's lists, and `slate_id`, the
-latest slate or null. Once the record holds a forming call, `status` and
-`status --summary` also report `forming: {calls, forms, by_standing,
-by_disposition, without_outcome, outcomes}`
-([Forming records](#forming-records)); a record without a forming call has no
-such entry. It lists the current depth plan under `limits` and no
+`next` names the first missing condition in the order slate, statement, attempt,
+openness, value, reviews, decision, export. A stale slate leads with
+`problem_slate_stale`. When the current slate selects no candidate, `next`
+depends on the posts and the search steps of the record
+([Search steps](#search-steps)). In a record that holds a post, it is `{code:
+"problem_no_post", reason, explanation}` with the reason of the slate. In a
+record without a post, it is `problem_search_step_required` while no search step
+follows the slate. It is `problem_search_step_open` while the latest step after
+the slate has another way than `next_exploration`, and
+`problem_search_continued` after a step with that way. The full `status` and
+`next` reports carry every member of the object. The `--summary` views show the
+code and the explanation, and for `problem_search_step_required` the step under
+`next_step`. Milestones impose no tool order. `status` also reports `candidates:
+{current, selected, deferred, rejected}`, the number of current candidates and
+the lengths of the latest slate's lists, and `slate_id`, the latest slate or
+null. Once the record holds a forming call, `status` and `status --summary` also
+report `forming: {calls, forms, by_standing, by_disposition, without_outcome,
+outcomes}` ([Forming records](#forming-records)); a record without a forming
+call has no such entry. It lists the current depth plan under `limits` and no
 cohort policy counts; those belong to ai-science. The full `status` and `next`
 reports also carry `literature_digest`, the digest of the record's current
 literature scope, frontier, search judgments and requirements. `cycle` compares
@@ -7525,7 +8023,16 @@ that holds other files is refused with `review_destination_exists`
 `<workspace root>/final/problem/exports/` is refused with
 `export_destination_outside_final` (`destination` and `folder`, the allowed
 folder, in the details); its message names the default.
-An unready export returns `readiness_required`. The deterministic projection is
+An unready export returns `readiness_required`.
+Since 0.93.0 `export --kind problem` applies to each entry of `citations.json`
+that it composed the field rule that the post applies, and before it writes a
+file it refuses an entry that the post would refuse, with the code of the
+post: `problem_citation_text_character` or `problem_citation_text_length` for
+its `citation`, and `problem_citation_locator_character`,
+`problem_citation_locator_length` or `problem_citation_locator_format` for its
+`locator`, with `field` and `index`, the number of the entry counted from 1,
+in the details (the table of codes, below).
+The deterministic projection is
 `title.txt`, `statement.md`, `motivation.md`, `state.md`, `criteria.md`,
 `citations.json`, `citation-refs.json`, optional `formal-statement.txt`, and
 `problem-export.json`. Since 0.91.6 it also holds `changes-if-resolved.md` when
@@ -9035,6 +9542,7 @@ command and stores it as the immutable `problem_report/<id>`:
 | `tests` | Every run that a value record enters as a check with the standing `test`, with its plan, its execution, its latest assessment and its outcome: `failed` when a failure signal is `observed`, `passed` when the check is marked passed and every signal is `not_observed`, and `unresolved` otherwise. |
 | `spent` | `accounts` and `strategy`, the resource accounts as they stand; `reviews`, the measured usage of the reviewer calls; and `reported_forming_usage`, the usage that each forming call reports. Unknown usage stays unknown. |
 | `outcome` | One of six texts (below). |
+| `search` | Present when the record holds a search step or a search origin: `{steps, slates_without_step, origin}`, as `status` reports it ([Search steps](#search-steps)). |
 | `reopen_when`, `recorded_revision` | The payload text, and the revision of the record. |
 
 How a candidate ends. A candidate is `posted` when a `problem_post` has the
@@ -9081,29 +9589,31 @@ The current slate is the latest slate while it covers exactly the current
 candidates. A record without a current slate skips the first step.
 
 When the report is due. The rule applies to a record whose marker has the
-retired start kind `phenomenon` or `thought_experiment`, and to every record that
-holds a forming call. For such a record the report is due once a current slate
-exists and selects nothing, or every candidate that it selects has ended.
-`status` and `next` then carry one `advisories` entry `{code:
-"problem_report_due", reason}` while the record holds no report. The command
-refuses a due report while a form has no outcome or the disposition `open`
-(`problem_report_forms_open`, with `form_ids`). A report can be recorded before
-it is due, and in a record to which the rule does not apply.
+retired start kind `phenomenon` or `thought_experiment`, and to every record
+that holds a forming call. For such a record the report is due once the
+exploration has ended. It has ended when every candidate that the current slate
+selects has ended. It has also ended when the current slate selects nothing and
+the record holds a post. The same holds when the latest search step after such a
+slate has the way `next_exploration`. `status` and `next` then carry one
+`advisories` entry `{code: "problem_report_due", reason}` while the record holds
+no report. The command refuses a due report while a form has no outcome or the
+disposition `open` (`problem_report_forms_open`, with `form_ids`). A report can
+be recorded before it is due, and in a record to which the rule does not apply.
 
-Currency. `dependency_digest` covers every record of the kinds that the
-report reads: the marker and the area records; the forming calls, the
-outcomes, the forming imports and the transfers; the candidates, the slates,
-the statements and the selection; the value records, the decisions, the posts,
-their time statements and the facts after a post; the reviews, the
-adjudications, the review assignments, the review epochs and the records of
-the reviewer calls; the attempt records, the delivered solver snapshots and
-their pointers; the plans, the runs, the assessments and the probes; and the
-resource accounts and budgets. When the latest report has another digest than
-the current records give, `status` and `next` carry the entry `{code:
-"problem_report_stale", reason, report_id}`. Record a new report under a new
-id. A record of another kind changes no digest by itself. A search, a reading
-or a computation that charges a resource account changes it through that
-account.
+Currency. `dependency_digest` covers every record of the kinds that the report
+reads: the marker and the area records; the forming calls, the outcomes, the
+forming imports and the transfers; the search steps and the search origins, when
+the record holds one; the candidates, the slates, the statements and the
+selection; the value records, the decisions, the posts, their time statements
+and the facts after a post; the reviews, the adjudications, the review
+assignments, the review epochs and the records of the reviewer calls; the
+attempt records, the delivered solver snapshots and their pointers; the plans,
+the runs, the assessments and the probes; and the resource accounts and budgets.
+When the latest report has another digest than the current records give,
+`status` and `next` carry the entry `{code: "problem_report_stale", reason,
+report_id}`. Record a new report under a new id. A record of another kind
+changes no digest by itself. A search, a reading or a computation that charges a
+resource account changes it through that account.
 
 Both advisories stand in `advisories` beside `output_views_stale`
 ([Status, projections, and recovery](#status-projections-and-recovery)), and
@@ -9122,6 +9632,166 @@ Refusals of `problem-report`:
 | `problem_report_forms_open` | The report is due, and a form has no outcome or the disposition `open` (`form_ids`). Record a `form-outcome` for each, with the disposition `superseded`, `taken_up_as_candidate` or `set_aside`. |
 | `problem_report_evidence_missing` | A post passed the gate, and no saved review packet delivers the value record that its evidence digest covered (`post_id`). Restore the store from a copy that holds those packets and that value record unchanged. |
 | `record_conflict` | The report id is in use. A report does not change; record a new report under a new id. |
+
+### Search steps
+
+A run of problem creation ends when a problem is posted. When the current slate
+of a record selects nothing and the record holds no post, the search goes on.
+`status` and `next` then name the next search step
+([math-conjecturer The search after a slate that selects nothing](../skills/math-conjecturer/SKILL.md#the-search-after-a-slate-that-selects-nothing)).
+Two commands record the search. `problem-search-step` records in a record what
+the search does next. `problem-search-origin` records in the next record what
+the earlier exploration learned. Both take the ordinary `--file`,
+`--expected-revision`, `--request-id` and `--check` flags, and
+`exactory-research example` prints each payload. A search record is no gate. It
+receives no review, no reviewer receives it, and it is no part of the problem
+evidence or of its digest. The output views show every search step in
+`final/problem/search-steps/` and the latest search origin in
+`final/problem/search-origins/`.
+
+Names used below. The latest slate is the slate with the highest
+`recorded_revision`. The current slate is the latest slate while it covers
+exactly the current candidates. A step is after a slate when its `slate_id` is
+the id of that slate. Steps are ordered by `recorded_revision`.
+
+The ways. A search step has one of five ways, in this order. `status` and `next`
+give each way as `{way, applicable, step_ids}`, with the ground that the table
+names; `step_ids` holds the steps of that way after the slate.
+
+| Way | `applicable` | Further member |
+| --- | --- | --- |
+| `raise_deferred` | The slate defers at least one candidate | `candidates`: the `deferred` rows of the slate, `{candidate_id, evidence_needed}` |
+| `pose_stated_item` | Always | none |
+| `study_refutation` | The record holds a form whose latest outcome has the standing `refuted` | `refuted_forms`: the number of such forms |
+| `attack_stated_question` | Always | none |
+| `next_exploration` | Always | `leads`: the `other_leads` of the `source` of the latest search origin of this record, or an empty list |
+
+`problem-search-step` takes `{id, slate_id, way, candidate_ids, learned,
+evidence, plan, passed_over, successor_workspace, other_leads}`, every member
+present, and records the immutable `problem_search_step/<id>`: the payload, with
+`successor_workspace` as the resolved path, and `recorded_revision`. It accepts
+a payload that meets the table below. The step that `next` names, completed with
+the members under `chooses` and with the reference that a later step needs, is
+accepted: `next` and the command read the same ways.
+
+A step whose way is later in the order gives in `passed_over` one `{way,
+reason}` for each earlier way that is applicable and has no step after the
+slate. When a step already follows the slate, `evidence` holds at least one
+reference. Limits: `learned` and `plan` have at most 4,000 characters each; a
+`reason` and a `field` at most 1,000; `other_leads` at most 16 entries; a
+carried list of a search origin at most 32 rows.
+
+| Member | Accepted value |
+| --- | --- |
+| `id` | Nonempty text. An id is used once (`record_conflict`) |
+| `slate_id` | The id of the latest slate, and that slate selects nothing. The slate can be stale by its candidate set |
+| `way` | One of the five ways, with `applicable` true |
+| `candidate_ids` | Distinct ids. `raise_deferred`: at least one, each deferred by the slate. `next_exploration`: none. Another way: any candidates of the slate, or none |
+| `learned`, `plan` | Nonempty text within the limit |
+| `evidence` | References in the shared grammar of strategy evidence (a record of the store with its digest, a stored artifact, a source link); the list can be empty for the first step after a slate |
+| `passed_over` | Entries `{way, reason}`: each `way` is earlier in the order than the way of the step and is named once |
+| `successor_workspace` | `next_exploration`: the absolute path of an existing directory other than the workspace of this record. Another way: null |
+| `other_leads` | `next_exploration`: entries `{field, reason}`. Another way: an empty list |
+
+Refusals of `problem-search-step`, in this order:
+
+| Code | When | Details | Next action |
+| --- | --- | --- | --- |
+| `orchestration_conflict` | The workspace holds no problem record | none | Run the command in the workspace of a problem record. |
+| `invalid_input` | A member is missing or extra, has another type, is over a limit, or does not fit the way of the step (a `successor_workspace` or `other_leads` with another way, a relative or missing path, a `passed_over` entry for the same or a later way) | as `fields` gives them | Only a step with the way next_exploration has a successor_workspace and other_leads. For each other way, send successor_workspace as null and other_leads as an empty list. Give successor_workspace as the absolute path of the workspace of the next record. If that record does not exist, open it with problem-init first. Each passed_over entry names one way that is earlier in the order than the way of this step. Name each way one time. A text over its limit: make the text shorter. other_leads over its limit of 16: keep the leads that are still open. |
+| `problem_search_slate_mismatch` | The record holds no slate, `slate_id` is not the latest slate, or the latest slate selects a candidate | `slate_id` (the latest, or null), `selected` | A search step follows the latest slate, and only when that slate selects nothing. The value of slate_id does not name such a slate. Read slate_id and candidates in exactory-research status. If the latest slate selects a candidate, formulate that candidate. |
+| `problem_search_way_inapplicable` | `applicable` is false for the way | `way` | The record holds no ground for this way. The way raise_deferred needs a candidate that the slate defers. The way study_refutation needs a form whose latest outcome has the standing refuted. Choose a way that exactory-research next shows with applicable true. |
+| `problem_search_candidate_mismatch` | `candidate_ids` does not fit the way | `candidate_ids` (the ids that do not fit) | The candidates in candidate_ids do not fit this way. For raise_deferred, name one or more candidates that the slate defers. For next_exploration, send an empty list. For each other way, name candidates of the slate, or send an empty list. |
+| `problem_search_way_passed_over` | An earlier way that is applicable and has no step after the slate has no entry in `passed_over` | `ways` (the ways without a reason) | This step takes a later way than the first way that applies. Add one {way, reason} entry to passed_over for each way that the details name. Each of these ways applies and has no step after this slate. |
+| `problem_search_evidence_missing` | A step already follows the slate, and `evidence` is empty or cites only records whose stated revision is not later than that step | `step_id` (the latest step after the slate) | A search step already follows this slate, and evidence cites no record of its work. Cite in evidence one or more records that the work of that step made. Examples are a search, a reading, a form outcome, a probe and an accepted result. A record that states its revision counts only when that revision is later than the step. If that step left no record, do its work first. |
+| the codes of strategy evidence | A reference has another shape (`invalid_strategy`) or does not resolve (`strategy_reference_missing`, `strategy_evidence_stale`, an artifact code) | as that check gives them | Cite a record, an artifact or a source link that the store holds, with its current digest. |
+| `problem_search_successor_self` | `successor_workspace` resolves to the workspace of this record | none | successor_workspace is the workspace of this record. Give the absolute path of the workspace of the next record. |
+| `record_conflict` | The id is in use | `kind`, `id` | Record the step under a new id. |
+
+`next` at a current slate that selects nothing. In a record without a
+`problem_post` record, `next` has one of three codes. In every other state
+`next` is as before, and a stale latest slate leads with `problem_slate_stale`.
+
+- With no step after the current slate: `{code: "problem_search_step_required",
+  slate_id, reason, explanation, deferred, rejected, objections, ways, next}`.
+  `reason`, `deferred` and `rejected` are the members of the slate. `objections`
+  holds, for each review of `review_ids` of the slate in that order, each
+  objection of the stored review as `{review_id, id, candidate_ids, claim,
+  resolution_condition}`, with an empty `candidate_ids` when the stored
+  objection has none. `ways` is the table above. `next` holds one step,
+  `{command: "problem-search-step", payload, chooses}`. Its `payload` is
+  `{slate_id, way, candidate_ids, passed_over: [], successor_workspace: null,
+  other_leads: []}`: `way` is the first way of the order that is applicable and
+  has an empty `step_ids`, and `candidate_ids` holds every deferred candidate
+  for `raise_deferred` and nothing for another way. `chooses` is `["id",
+  "learned", "evidence", "plan"]`, with `"successor_workspace"` and
+  `"other_leads"` added for `next_exploration`. `next --summary` shows the step
+  under `next_hint.next_step`.
+- When the latest step after the current slate has another way than
+  `next_exploration`: `{code: "problem_search_step_open", slate_id, reason,
+  explanation, step_id, way, plan, ways, then}`. `step_id`, `way` and `plan` are
+  those of that step. `then` holds one step in the same form for the first
+  applicable way without a step after the slate, and for `next_exploration` when
+  every applicable way has one.
+- When the latest step after the current slate has the way `next_exploration`:
+  `{code: "problem_search_continued", slate_id, reason, explanation, step_id,
+  successor_workspace}`.
+- When the store holds a `problem_post` record, a current slate that selects
+  nothing gives what it gave before: `problem_already_posted` when the current
+  statement is the posted one, and `{code: "problem_no_post", reason,
+  explanation}` otherwise.
+
+The member `search`. When the store holds a search step or a search origin,
+`status` has the member `search: {steps, slates_without_step, origin}`. `steps`
+holds every step in recorded order: the record, with `ended_by` (`{kind: "slate"
+| "step", id}` for the first slate or the next step that was recorded after it,
+or null) and `produced_candidate_ids` (the candidates recorded after the step
+and before what ended it). `slates_without_step` holds the id of each slate that
+selects nothing, has no step, and was followed by a later slate. `origin` is the
+latest search origin record, or null. `status --summary` shows `search: {steps,
+latest_way, has_origin}`: the number of steps, the way of the latest step or
+null, and a boolean.
+
+`problem-search-origin` takes `{id, source_workspace, source_revision}` and
+records the immutable `problem_search_origin/<id>`: `{id, source_workspace,
+source_revision, source, earlier, earlier_omitted, recorded_revision}`, with
+`source_workspace` as the resolved path. It opens the source store for reading
+and writes nothing there. It accepts when the source is a problem record other
+than this one, `source_revision` is its current revision, its latest slate
+selects nothing, and the latest step after that slate has the way
+`next_exploration` with a `successor_workspace` equal to the resolved workspace
+of this record. `source` is computed from the records of the source:
+
+| Member of `source` | Content |
+| --- | --- |
+| `area`, `field` | The members of the marker |
+| `slate` | `{id, reason, comparison, review_ids}` of the latest slate |
+| `candidates` | For each candidate that the slate defers or rejects: `{id, statement, source_kind, disposition, evidence_needed}` or `{..., reason}` |
+| `objections` | As in `next` above |
+| `forms` | `{id, text, standing}` for each form whose latest outcome has the standing `refuted`, `proved`, `implied_by_known_results` or `found_in_literature` |
+| `steps` | `{id, slate_id, way, candidate_ids, learned, plan}` for each search step |
+| `other_leads` | The `other_leads` of the step that names this record |
+| `report` | `{id, outcome, reopen_when}` of the latest report, or null |
+| `omitted` | `{candidates, objections, forms, steps}`: for each list, the number of rows over the limit of 32. The latest rows are kept |
+
+`earlier` holds one row for each exploration before the source, the oldest
+first: `{workspace, revision, area, field, ways, other_leads, report}`. When the
+source holds a search origin, the rows are the `earlier` rows of its latest
+origin, followed by one row made from the `source` of that origin (`ways` is the
+way of each of its steps in order). Otherwise `earlier` is empty. The latest 32
+rows are kept, and `earlier_omitted` counts the others.
+
+Refusals of `problem-search-origin`, in this order:
+
+| Code | When | Details | Next action |
+| --- | --- | --- | --- |
+| `orchestration_conflict` | The workspace holds no problem record | none | Run the command in the workspace of a problem record. |
+| `invalid_input` | A member is missing or extra, `source_workspace` is not an absolute path, or `source_revision` is not a nonnegative integer | as `fields` gives them | Give source_workspace as an absolute path and source_revision as a nonnegative integer. |
+| `problem_search_origin_self` | `source_workspace` resolves to the workspace of this record | none | source_workspace is the workspace of this record. Give the absolute path of the workspace of the earlier record. |
+| `problem_search_source_unavailable` | The path does not resolve, the store does not open, or it holds no problem record. `store_busy` passes through unchanged | `source_workspace`, `cause` | The harness cannot open source_workspace as a problem record. Make sure that source_workspace is the absolute path of the workspace of the earlier record. If that workspace moved, give its new path. |
+| `problem_search_source_revision_mismatch` | `source_revision` is not the current revision of the source | `source_revision` (the current one), `expected_source_revision` | source_revision is not the current revision of the source. Read the revision with exactory-research status in the source workspace. Then run this command again with that revision. |
+| `problem_search_origin_unlinked` | The source does not name this record as stated above | `source_workspace`, `successor_workspace` (what the source names, or null) | The source does not name this record as the next exploration. In the source, record a search step with the way next_exploration and this workspace as successor_workspace. Then run this command again. |
+| `record_conflict` | The id is in use | `kind`, `id` | Record the origin under a new id. |
 
 ### The removed kind of start
 

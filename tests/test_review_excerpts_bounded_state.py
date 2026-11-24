@@ -1,5 +1,6 @@
 """Rejected reviewer copies cannot enlarge retained excerpt state without bounds per entry."""
 
+from unittest.mock import patch
 import hashlib
 import json
 
@@ -101,6 +102,13 @@ class BoundedExcerptStateTests(LiteratureCase):
 
 
 class BoundedPassageSessionTests(ExcerptSessionCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_an_over_allowance_passage_response_keeps_a_bounded_diagnostic(self):
         from unittest.mock import patch
         with patch.object(review_excerpts, 'SESSION_PASSAGE_CHARACTERS', 10):

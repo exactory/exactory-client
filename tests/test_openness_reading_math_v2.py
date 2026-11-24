@@ -5,6 +5,7 @@ Every test sets openness_reading.NEW_MATH_CHAIN_PROTOCOLS to (math v2, math v1) 
 
 import copy
 import json
+import unittest
 from unittest.mock import patch
 
 from test_openness_carried_math import MathCarriedCase
@@ -29,7 +30,7 @@ def cite_evidence_bodies(artifacts, assignment, native, seen):
             and units[row['units'][0]]['sha256'] in listed]
 
 
-class MathV2Support(MathCarriedCase):
+class MathV2RequestSupport(MathCarriedCase):
     text_sizes = (1000,)
     route_output_tokens = 128000
     build_v7_answer = turn_fixtures.V7CommandTests.build_v7_answer
@@ -60,21 +61,46 @@ class MathV2Support(MathCarriedCase):
             dict(kind='artifact', digest=self.supplementary['sha256'], artifact=self.supplementary)])
         return self.artifacts.put(serialize_record(native), 'application/json')
 
+    def build_covered_packet(self, count, identifier):
+        from openness_legacy_fixtures import export_as_0_85_3
+        from research_harness.openness_minimum import validate_minimum_bindings
+        from test_research_problem_openness_minimum import ProblemOpennessMinimumTests
+
+        neighbours = ['Synthetic neighbour %d' % index for index in range(count - 1)]
+        self.selected = self.select_statement(identifier=identifier + '-statement', candidate_id='candidate-1',
+                                              neighbours=neighbours)
+        self.searches.extend(ProblemOpennessMinimumTests.search(self, formulation=label)
+                             for label in neighbours[len(self.searches) - 1:])
+        minimum = dict(searches=[dict(formulation=row['question'], search_id=row['id']) for row in self.searches],
+                       settling_work_id=None, duplicate_resolutions=[])
+        exported = export_as_0_85_3(self.store, dict(assignment_id=identifier, reviewer_id='openness-reviewer',
+                                                   minimum=minimum), self.root / identifier)['native_packet']
+        with patch.object(self, 'export', return_value=exported):
+            reference = self.build_math_packet(name=identifier, assignment_id=identifier, neighbours=count - 1)
+        minimum = json.loads(self.artifacts.read(reference))['scientific_context']['openness_minimum']
+        validate_minimum_bindings(minimum, minimum['statement'], self.store.snapshot()['records'])
+        return reference
+
     def build_final_answer(self, packet, assignment, seen, decision='approve'):
         """The native result review of a final. Its evidence cites each delivered body that belongs to one unit that
         the native packet lists: a whole record or text, or the residual of a bound search."""
         if decision != 'approve':
-            return dict(decision=decision, reason='The result requires further work.', objections=['A missing argument.'])
+            return dict(decision=decision, reason='The result requires further work.',
+                        objections=[dict(blocking=True, description='A missing argument.')])
         native = json.loads(self.artifacts.read(assignment['context']['native_packet']))
         output = self.build_native_result(dict(native=native))
-        output['findings']['openness']['evidence'] = [dict(ref=handle) for handle in
-                                                      cite_evidence_bodies(self.artifacts, assignment, native, seen)]
         if reading.find_stage(packet) == 'closing':
+            output['findings']['openness']['evidence'] = [dict(ref=handle) for handle in
+                                                          cite_evidence_bodies(self.artifacts, assignment, native, seen)]
             output = {key: output[key] for key in ('decision', 'findings')}
             for key in ('minimum', 'statement_digest', 'coverage'):
                 output['findings']['openness'].pop(key)
         else:
-            output['findings']['openness'].pop('minimum')
+            finding = output['findings']['openness']
+            binding = packet['reading_final']
+            finding['evidence'] = [dict(ref=row['handle']) for row in binding['evidence_units']['rows']]
+            finding['searched_at'] = binding['minimum']['searched_through']
+            finding.pop('minimum')
         return output
 
     def finish(self, native, first='math-1', decision='approve', assigned=False):
@@ -127,6 +153,14 @@ class MathV2Support(MathCarriedCase):
         return output, composite
 
 
+class MathV2Support(MathV2RequestSupport):
+    def setUp(self):
+        super().setUp()
+        forms = patch.object(v7, 'MATH_V2_FINAL_FORMS', ('request', 'pages'))
+        forms.start()
+        self.addCleanup(forms.stop)
+
+
 class MathV2ChainTests(MathV2Support):
     def test_a25_request_final_delivers_native_evidence_with_its_binding_and_records_the_review(self):
         native = self.build_math_packet()
@@ -160,10 +194,13 @@ class MathV2ChainTests(MathV2Support):
             neighbours=dict(count=0), searches=dict(count=len(packet['scientific_context']['openness_minimum']['searches'])),
             reading_digests=dict(count=len(packet['scientific_context']['openness_minimum']['reading_digests']))))
         self.assertEqual(context['supplementary_inputs'], packet['scientific_context']['supplementary_inputs'])
+        [minimum_unit] = [row['handle'] for row in inventory['units']
+                          if row['identity'].get('record_kind') == 'openness_minimum']
         self.assertEqual(packets[-1]['reading_final']['minimum'], dict(
             digest=digest(packet['scientific_context']['openness_minimum']), schema_version=1,
             searches=context['openness_minimum']['searches']['count'],
-            readings=context['openness_minimum']['reading_digests']['count']))
+            readings=context['openness_minimum']['reading_digests']['count'],
+            unit=minimum_unit, searched_through='2026-10-15'))
 
     def test_a25_forty_neighbours_reach_a_recorded_composite_at_the_final_floor(self):
         native = self.build_math_packet(neighbours=40)
@@ -412,3 +449,13 @@ class MathV2UncheckedAnswerTests(MathV2Support):
             self.assign('math-2', native, prior='math-1')
         assert_unchecked(self, raised.exception, 'review_source_continuation_unverified',
                          (v7, 'UNCHECKED_HEAD_MESSAGE'), 'math-1', 'attempt-math-1')
+
+
+class MathNonapprovalObjectionTests(unittest.TestCase):
+    def test_refusal_of_the_objections_of_a_nonapproval_names_that_member(self):
+        """Repairs A14. The check of objections of a math nonapproval names objections, not unresolved_objections."""
+        for value, path, message in (('none', '/objections', 'objections must be a list'),
+                                     (['x'], '/objections/0', 'Each objection is exactly {blocking,description}')):
+            with self.subTest(path=path), self.assertRaises(ResearchError) as caught:
+                native_review._validate_objections(value, path='/objections')
+            self.assertEqual((caught.exception.details['path'], caught.exception.message), (path, message))

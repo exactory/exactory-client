@@ -431,6 +431,13 @@ class ProblemAttemptTests(ProblemCase):
 
 
 class ProblemAttemptDeliveryTests(ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_accepted_root_support_before_closure_counts_as_resolved(self):
         from research_harness.problem_attempt import record_attempt
         from research_harness.gates import gate_state

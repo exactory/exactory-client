@@ -104,6 +104,13 @@ class CorrectionOriginCase(unittest.TestCase):
 
 
 class LaterRecordTests(CorrectionOriginCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def compare(self, write, expected_codes):
         """Write the same later record to both stores; the corrected assignment has the state of the ordinary one."""
         ordinary, corrected = self.build_ordinary(), self.build_corrected()
@@ -193,6 +200,13 @@ class LaterRecordTests(CorrectionOriginCase):
 
 
 class CallOriginTests(CorrectionOriginCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_answer_is_accepted_when_a_record_arrives_during_the_call(self):
         case = self.build_refused()
         identifier = case.case.assignment['id']
@@ -248,6 +262,13 @@ class CallOriginTests(CorrectionOriginCase):
 
 
 class OriginViewTests(CorrectionOriginCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_origin_of_scoped_records_lists_and_serves_the_rows_that_they_list_and_serve(self):
         case = self.build_refused()
         # A cause event outside the slot and the lineage of the repair, recorded before the correction call.

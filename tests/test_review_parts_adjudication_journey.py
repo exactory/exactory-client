@@ -79,6 +79,13 @@ class AdjudicationPartsCase(PartsResultCase):
 
 
 class AdjudicationJourneyTests(AdjudicationPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_final_validates_its_parts_contract_once(self):
         self.oversized()
         _, final = self.finish_series()

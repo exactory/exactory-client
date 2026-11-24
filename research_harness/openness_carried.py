@@ -127,14 +127,44 @@ CHAIN_OBSERVERS = MappingProxyType({
 STORE_REFUSAL_CODES = ('artifact_missing', 'artifact_corrupt', 'storage_io', 'unsafe_path')
 # The two refusals with which an observer states that a prefix of an earlier chain is no ready reading prefix.
 PREFIX_STATE_CODES = ('review_context_unverified', 'openness_reading_incomplete')
+ORIGIN_HISTORY_ERR_MSG_PARTS = (
+    'A carried selection reads an earlier reading chain as the records stood when that chain started, and the '
+    'harness cannot find that revision for one chain, so it selects and verifies no carried turn. '
+    'details.record_id names the first assignment of that chain. {reason} Run record-check, and report this '
+    'refusal with its details to the owner.',
+    'The records were read without their history, which states the revision at which that assignment was recorded.',
+    'The history does not show that assignment, as the records give it now, recorded at the revision that its '
+    'recorded_revision states.',
+)
 
 
-def _describe_chain(records, artifacts, first, identity):
+def _read_cutoff_revision(records, kind, key, row, protocol):
+    """Read creation order for v3, and retain the stored chronology of earlier protocols."""
+    if protocol != SELECTION_PROTOCOL_V3:
+        return row['recorded_revision']
+    read_creation = getattr(records, 'read_creation_revision', None)
+    return None if read_creation is None else read_creation(kind, key)
+
+
+def _require_origin_stamp(records, first, revision, *, authenticate=False):
+    """Require the first assignment and its stamp to agree with the retained history."""
+    has_history = revision is not None and getattr(records, 'read_snapshot', None) is not None
+    stamp = first.get('recorded_revision')
+    if has_history and type(stamp) is int and stamp == revision:
+        if not authenticate or records.verify_record_version('review_assignment', first['id'], revision, digest(first)):
+            return
+    message, missing_history, mismatched_stamp = ORIGIN_HISTORY_ERR_MSG_PARTS
+    raise ResearchError('claim_reassessment_required',
+                        message.format(reason=mismatched_stamp if has_history else missing_history),
+                        {'record_id': 'review_assignment:' + first['id']})
+
+
+def _describe_chain(records, artifacts, first, identity, *, protocol=None, report_only=False):
     """Qualify one named first assignment, independently of every other chain. The caller compares the reviewer.
 
     An artifact is read only when the result can depend on it, so the comparisons run in four steps, and the
-    first that fails ends them. The records come first: the role, the first turn of a reading chain, the cutoff,
-    the author and the route identity. Then comes the native packet, which decides the two digests and the
+    first that fails ends them. The records come first: the role, the first turn of a reading chain, the author,
+    the route identity and the cutoff. Then comes the native packet, which decides the two digests and the
     formulations for every value: an openness_minimum that is no object makes the assignment no candidate. Then
     comes the packet with its reading protocol, which has the math prefix exactly when identity names the
     packet_kind math, and last the envelope with its evidence, where the kind of the packet alone is tested. An
@@ -143,10 +173,18 @@ def _describe_chain(records, artifacts, first, identity):
     """
     if (first['role'] != 'native_math' or first['context'].get('prior_assignment_id') is not None
             or first.get('reading_chain', {}).get('first_assignment_id') != first['id']
-            or first['recorded_revision'] >= identity['recorded_revision']
+            or protocol != SELECTION_PROTOCOL_V3 and first['recorded_revision'] >= identity['recorded_revision']
             or first['author_id'] != identity['author_id']
             or not review_context_repair.is_same_route(records['review_route'][first['route_id']], identity['route'])):
         return None
+    revision = _read_cutoff_revision(records, 'review_assignment', first['id'], first, protocol)
+    if protocol == SELECTION_PROTOCOL_V3:
+        if revision is not None and revision >= identity['recorded_revision']:
+            return None
+        if not report_only:
+            _require_origin_stamp(records, first, revision)
+        if revision is None:
+            return None
     binding = strict_json(artifacts.read(first['context']['native_packet']))
     context = binding.get('scientific_context') if isinstance(binding, dict) else None
     minimum = context.get('openness_minimum') if isinstance(context, dict) else None
@@ -163,10 +201,20 @@ def _describe_chain(records, artifacts, first, identity):
     native = load_packet(artifacts, first['context']['native_packet'], first['reviewer_id'])
     if not (reading.is_math_openness_packet(native) if is_math else reading.is_openness_packet(native)):
         return None
-    return dict(chain=first['id'], protocol=protocol, recorded_revision=first['recorded_revision'])
+    return dict(chain=first['id'], protocol=protocol, recorded_revision=revision)
 
 
-def list_qualifying_chains(records, artifacts, identity):
+def _list_ordered_assignments(records, protocol):
+    """Visit newest assignments first, leaving absent history for qualification to diagnose."""
+    assignments = records.get('review_assignment', {}).values()
+    if protocol != SELECTION_PROTOCOL_V3:
+        return sorted(assignments, key=lambda row: row['recorded_revision'], reverse=True)
+    return sorted(assignments,
+                  key=lambda row: _read_cutoff_revision(records, 'review_assignment', row['id'], row, protocol) or 0,
+                  reverse=True)
+
+
+def list_qualifying_chains(records, artifacts, identity, *, protocol=None):
     """Return the chains that qualify, newest first. No artifact of an assignment under another reviewer is read.
 
     identity is {reviewer_id, author_id, route, subject_digest, claim_digest, formulations,
@@ -175,17 +223,16 @@ def list_qualifying_chains(records, artifacts, identity):
     the qualification ends the selection.
     """
     chains = []
-    for first in sorted(records.get('review_assignment', {}).values(),
-                        key=lambda row: row['recorded_revision'], reverse=True):
+    for first in _list_ordered_assignments(records, protocol):
         if normalized_text(first['reviewer_id']) != normalized_text(identity['reviewer_id']):
             continue
-        chain = _describe_chain(records, artifacts, first, identity)
+        chain = _describe_chain(records, artifacts, first, identity, protocol=protocol)
         if chain is not None:
             chains.append(chain)
     return chains
 
 
-def list_passed_over_chains(records, artifacts, identity):
+def list_passed_over_chains(records, artifacts, identity, *, protocol=None):
     """Return {passed_over, unavailable_chains} for the chains under another reviewer, newest first.
 
     These rows belong to the report alone: no selection holds such a chain. A chain whose artifact the
@@ -193,12 +240,11 @@ def list_passed_over_chains(records, artifacts, identity):
     other refusal ends the report.
     """
     passed_over, unavailable = [], []
-    for first in sorted(records.get('review_assignment', {}).values(),
-                        key=lambda row: row['recorded_revision'], reverse=True):
+    for first in _list_ordered_assignments(records, protocol):
         if normalized_text(first['reviewer_id']) == normalized_text(identity['reviewer_id']):
             continue
         try:
-            chain = _describe_chain(records, artifacts, first, identity)
+            chain = _describe_chain(records, artifacts, first, identity, protocol=protocol, report_only=True)
         except ResearchError as error:
             if error.code not in STORE_REFUSAL_CODES:
                 raise
@@ -210,11 +256,16 @@ def list_passed_over_chains(records, artifacts, identity):
     return dict(passed_over=passed_over, unavailable_chains=unavailable)
 
 
-def _select_recorded_attempts(records, identity):
+def _select_recorded_attempts(records, identity, protocol):
     """Exclude outputs first recorded at or after the new first assignment."""
-    return storage.overlay_kinds(records, {kind: {key: row for key, row in records.get(kind, {}).items()
-                                 if row['recorded_revision'] < identity['recorded_revision']}
-                            for kind in ('review_attempt', 'review_invocation')})
+    eligible = {}
+    for kind in ('review_attempt', 'review_invocation'):
+        eligible[kind] = {}
+        for key, row in records.get(kind, {}).items():
+            revision = _read_cutoff_revision(records, kind, key, row, protocol)
+            if revision is not None and revision < identity['recorded_revision']:
+                eligible[kind][key] = row
+    return storage.overlay_kinds(records, eligible)
 
 
 def read_chain_records(records, first, protocol):
@@ -227,17 +278,9 @@ def read_chain_records(records, first, protocol):
     """
     if protocol != SELECTION_PROTOCOL_V3:
         return records
-    stamp = first['recorded_revision']
-    view = storage.pin_kinds(records, reading.READING_CONTENT_KINDS, stamp - 1)
-    if (not records.verify_record_version('review_assignment', first['id'], stamp, digest(first))
-            or first['id'] in records.read_snapshot(stamp - 1).get('review_assignment', {})):
-        raise ResearchError('claim_reassessment_required',
-                            'The history of this store does not show the first assignment of an earlier reading '
-                            'chain at its recorded_revision, so the harness cannot read that chain as it started. '
-                            'details.record_id names that assignment. Check the record with record-check, and '
-                            'report this refusal with its details.',
-                            {'record_id': 'review_assignment:' + first['id']})
-    return view
+    revision = _read_cutoff_revision(records, 'review_assignment', first['id'], first, protocol)
+    _require_origin_stamp(records, first, revision, authenticate=True)
+    return storage.pin_kinds(records, reading.READING_CONTENT_KINDS, revision - 1)
 
 
 def observe_qualifying_chain(records, artifacts, chain, identity, *, protocol=None):
@@ -249,15 +292,18 @@ def observe_qualifying_chain(records, artifacts, chain, identity, *, protocol=No
     protocol names the selection whose rule reads the records (read_chain_records); without it the chain is
     observed on records as given, the rule of versions 1 and 2.
     """
-    eligible = read_chain_records(_select_recorded_attempts(records, identity),
+    eligible = read_chain_records(_select_recorded_attempts(records, identity, protocol),
                                   records['review_assignment'][chain['chain']], protocol)
     artifacts = _SelectionEvaluation.of(eligible, artifacts)
-    members = [row for row in records['review_assignment'].values()
-               if row['recorded_revision'] < identity['recorded_revision']
-               and (row['id'] == chain['chain']
-                    or row.get('reading_chain', {}).get('first_assignment_id') == chain['chain'])]
+    members = []
+    for row in records['review_assignment'].values():
+        if row['id'] != chain['chain'] and row.get('reading_chain', {}).get('first_assignment_id') != chain['chain']:
+            continue
+        revision = _read_cutoff_revision(records, 'review_assignment', row['id'], row, protocol)
+        if revision is not None and revision < identity['recorded_revision']:
+            members.append((revision, row))
     observer = CHAIN_OBSERVERS[chain['protocol']]
-    for assignment in sorted(members, key=lambda row: row['recorded_revision'], reverse=True):
+    for _, assignment in sorted(members, key=lambda member: member[0], reverse=True):
         try:
             return observer(eligible, artifacts, assignment)
         except ResearchError as error:
@@ -454,7 +500,7 @@ def select_carried_readings(records, artifacts, inventory, identity, *, protocol
     artifacts = _SelectionEvaluation(records, noted)
     try:
         candidates, chains = [], []
-        for chain in list_qualifying_chains(records, artifacts, identity):
+        for chain in list_qualifying_chains(records, artifacts, identity, protocol=protocol):
             observations = observe_qualifying_chain(records, artifacts, chain, identity, protocol=protocol)
             first = records['review_assignment'][chain['chain']]
             classes = classify_carried_notes(inventory, observations,
@@ -491,7 +537,10 @@ def select_carried_readings(records, artifacts, inventory, identity, *, protocol
             {row['origin']['assignment_id']: row for observation, credit, row in candidates})
         selected = [dict(row, entries=derived[row['origin']['assignment_id']])
                     for observation, credit, row in candidates if row['origin']['assignment_id'] in derived]
-        return sorted(selected, key=lambda row: records['review_attempt'][row['origin']['attempt_id']]['recorded_revision'])
+        def read_attempt_revision(row):
+            key = row['origin']['attempt_id']
+            return _read_cutoff_revision(records, 'review_attempt', key, records['review_attempt'][key], protocol)
+        return sorted(selected, key=read_attempt_revision)
     finally:
         if noted.refusals:
             raise noted.refusals[0]
@@ -518,6 +567,89 @@ def _verify_entry_spans(inventory, artifacts, observation, selected):
         v7._require_selected(text == entry['text'] and hashlib.sha256(text.encode('utf-8')).hexdigest() == entry['sha256'])
 
 
+def _list_selection_endpoints(records, selection, cutoff):
+    """For each chain that gives a stored turn of a selection, its last stored turn, which was recorded before the
+    cutoff revision. A stored turn of another form ends with the selection refusal."""
+    endpoints, revisions = {}, {}
+    protocol = selection.get('protocol')
+    for selected in selection['turns']:
+        _require_shape(selected, ('origin', 'ranges', 'searches', 'entries', 'notes'))
+        origin = selected['origin']
+        _require_shape(origin, ('chain', 'protocol', 'assignment_id', 'attempt_id'))
+        key, chain = origin['assignment_id'], origin['chain']
+        assignment = records['review_assignment'][key]
+        revision = _read_cutoff_revision(records, 'review_assignment', key, assignment, protocol)
+        v7._require_selected(revision is not None and revision < cutoff)
+        if chain not in revisions or revision > revisions[chain]:
+            endpoints[chain] = assignment
+            revisions[chain] = revision
+    return endpoints
+
+
+def list_unverified_carried_turns(records, artifacts, first):
+    """Rule C28: one row for each earlier chain with a turn on which the stored selection of first rests and whose
+    context the review records of the present do not verify, or no row.
+
+    The selection rests on each chain that gives a stored turn, from its first turn to its last stored turn, and on
+    the selection that such a chain stores, at any depth. The observer of each such chain requires a verified context
+    at every position, and two kinds of record that a command writes later decide that context: a probe of the route
+    record of the turn (route_state) and a contamination event that names the turn. This function reads these two
+    and nothing else; it authenticates no attempt and rebuilds no packet.
+
+    A row is {chain, assignment_id, events, route: {id, context_status}, count, recovery}, merged over every path to
+    the chain. count is the number of such turns of the chain. recovery is export when a contamination event names
+    the turn, or when its stale route record is retired or its latest answered probe failed; retire for the other
+    stale routes; and probe otherwise. assignment_id names the first such turn with recovery export, or else the
+    first such turn. A stored selection of another form ends with the selection refusal, and a refusal of the
+    store passes through."""
+    from .review_protocol import find_answered_route_status, route_state
+    from .review_route_plan import read_route_standing
+    contaminated = {}
+    for key, event in storage.read_filtered_records(records, 'review_context_event', kind='contamination').items():
+        if event['kind'] == 'contamination':
+            contaminated.setdefault(event['assignment_id'], []).append(key)
+    states, recoveries, found, pending, seen = {}, {}, {}, [first], set()
+    while pending:
+        current = pending.pop(0)
+        if current['id'] in seen or current.get('carried_selection') is None:
+            continue
+        seen.add(current['id'])
+        try:
+            selection = json.loads(artifacts.read(current['carried_selection']['artifact']))
+            endpoints = _list_selection_endpoints(records, selection, current['recorded_revision'])
+            chains = [(records['review_assignment'][chain_id], reading._list_chain(records, endpoint))
+                      for chain_id, endpoint in endpoints.items()]
+        except (KeyError, TypeError, ValueError, IndexError):
+            v7._require_selected(False)
+        for chain_first, members in chains:
+            pending.append(chain_first)
+            for member in members:
+                route_id, events = member['route_id'], sorted(contaminated.get(member['id'], []))
+                if route_id not in states:
+                    states[route_id] = route_state(records, artifacts, route_id)['context_status']
+                if not events and states[route_id] == 'verified_for_route':
+                    continue
+                if not events and route_id not in recoveries:
+                    standing = read_route_standing(records, artifacts, route_id)
+                    recovery = 'probe'
+                    if standing['stale']:
+                        answered = (None if standing['retired']
+                                    else find_answered_route_status(records, artifacts, route_id))
+                        recovery = ('export' if standing['retired'] or answered not in (None, 'verified_for_route')
+                                    else 'retire')
+                    recoveries[route_id] = recovery
+                found.setdefault(chain_first['id'], {})[member['id']] = dict(
+                    chain=chain_first['id'], assignment_id=member['id'], events=events,
+                    route=dict(id=route_id, context_status=states[route_id]),
+                    recovery='export' if events else recoveries[route_id])
+    rows = []
+    for turns in found.values():
+        listed = list(turns.values())
+        decisive = next((row for row in listed if row['recovery'] == 'export'), listed[0])
+        rows.append(dict(decisive, count=len(listed)))
+    return rows
+
+
 def verify_carried_selection(records, artifacts, inventory, identity, selection, *, plan=None):
     """Verify a stored JSON selection item by item and return its turn projections, without selecting.
 
@@ -536,24 +668,17 @@ def verify_carried_selection(records, artifacts, inventory, identity, selection,
         v7._require_selected(selection['protocol'] in (SELECTION_PROTOCOL_V1,) + CUTOFF_PROTOCOLS
                              and selection['inventory_digest'] == digest(inventory)
                              and isinstance(selection['turns'], list))
-        eligible = _select_recorded_attempts(records, identity)
+        protocol = selection['protocol']
+        eligible = _select_recorded_attempts(records, identity, protocol)
         artifacts = Evaluation.of(eligible, artifacts)
-        observations, notes, projections, seen, endpoints = {}, {}, [], set(), {}
-        for selected in selection['turns']:
-            _require_shape(selected, ('origin', 'ranges', 'searches', 'entries', 'notes'))
-            origin = selected['origin']
-            _require_shape(origin, ('chain', 'protocol', 'assignment_id', 'attempt_id'))
-            assignment = records['review_assignment'][origin['assignment_id']]
-            v7._require_selected(assignment['recorded_revision'] < identity['recorded_revision'])
-            previous = endpoints.get(origin['chain'])
-            if previous is None or assignment['recorded_revision'] > previous['recorded_revision']:
-                endpoints[origin['chain']] = assignment
+        observations, notes, projections, seen = {}, {}, [], set()
+        endpoints = _list_selection_endpoints(records, selection, identity['recorded_revision'])
         for chain_id, endpoint in endpoints.items():
             first = records['review_assignment'][chain_id]
-            chain = _describe_chain(records, artifacts, first, identity)
-            v7._require_selected(chain is not None
-                                 and normalized_text(first['reviewer_id']) == normalized_text(identity['reviewer_id']))
-            view = read_chain_records(eligible, first, selection['protocol'])
+            same_reviewer = normalized_text(first['reviewer_id']) == normalized_text(identity['reviewer_id'])
+            chain = _describe_chain(records, artifacts, first, identity, protocol=protocol, report_only=not same_reviewer)
+            v7._require_selected(chain is not None and same_reviewer)
+            view = read_chain_records(eligible, first, protocol)
             observed = CHAIN_OBSERVERS[chain['protocol']](view, Evaluation.of(view, artifacts), endpoint)
             classes = classify_carried_notes(inventory, observed,
                 search_dependencies=_list_search_dependencies(records, artifacts, first,
@@ -571,7 +696,8 @@ def verify_carried_selection(records, artifacts, inventory, identity, selection,
                                  and selected['notes'] == notes[origin['assignment_id']]
                                  and (selection['protocol'] != SELECTION_PROTOCOL_V1
                                       or bool(selected['ranges'] or selected['searches'])))
-            revision = eligible['review_attempt'][origin['attempt_id']]['recorded_revision']
+            key = origin['attempt_id']
+            revision = _read_cutoff_revision(eligible, 'review_attempt', key, eligible['review_attempt'][key], protocol)
             v7._require_selected(previous_revision < revision < identity['recorded_revision'])
             previous_revision = revision
             for span in selected['ranges']:
@@ -699,7 +825,7 @@ def describe_carried_selection(records, artifacts, inventory, identity, selectio
                           for body in inventory['material']]
     remaining = [row for row in remaining if row['ranges']]
     remaining_material = [row for row in remaining_material if row['ranges']]
-    uncarried = list_passed_over_chains(records, artifacts, identity)
+    uncarried = list_passed_over_chains(records, artifacts, identity, protocol=selection['protocol'])
     report = dict(chains=[dict(chain=chain, turns=turns) for chain, turns in chains.items()],
                   ranges=[dict(unit=unit, start=start, end=end, characters=end - start)
                           for unit, spans in ranges.items() for start, end in _merge_ranges(spans)],
@@ -711,7 +837,8 @@ def describe_carried_selection(records, artifacts, inventory, identity, selectio
                   credited_material_characters=sum(_count_characters(spans) for spans in material_ranges.values()),
                   passed_over=uncarried['passed_over'],
                   outputs=_describe_outputs(records, artifacts, inventory, identity, selection,
-                                            list_qualifying_chains(records, artifacts, identity)))
+                                            list_qualifying_chains(records, artifacts, identity,
+                                                                  protocol=selection['protocol'])))
     if uncarried['unavailable_chains']:
         report['unavailable_chains'] = uncarried['unavailable_chains']
     return report

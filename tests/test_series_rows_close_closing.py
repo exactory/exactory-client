@@ -134,10 +134,17 @@ def entry(error):
 
 
 class ClosingRowTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare_case(self):
         fixture = continuation_fixtures.ContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         return fixture
 
     def run_refusal(self, fixture, code, *, recorded=True):
@@ -424,12 +431,19 @@ class ClosingAdmissionTests(unittest.TestCase):
 
 
 class MalformedContextAnswerTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_malformed_peer_is_reported_before_scanning_refusal_replacements(self):
         from research_harness.review_continuation import list_chain_heads
 
         fixture = continuation_fixtures.ContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         case = fixture.case
         healthy = case.assign('bar', 'second', **case.deliver_supporting('second'))
         damaged = copy.deepcopy(fixture.assignment)
@@ -446,8 +460,8 @@ class MalformedContextAnswerTests(unittest.TestCase):
 
     def prepare_context_case(self, *, malformed):
         fixture = continuation_fixtures.ContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         case = fixture.case
         healthy = case.assign('bar', 'second', **case.deliver_supporting('second'))
         # Retained content can be malformed even though the assignment command
@@ -545,8 +559,8 @@ class MalformedContextAnswerTests(unittest.TestCase):
             for malformed in malformed_values:
                 with self.subTest(field=field, malformed=malformed):
                     fixture = continuation_fixtures.ContinuationTests()
-                    fixture.setUp()
                     self.addCleanup(fixture.doCleanups)
+                    fixture.setUp()
                     case = fixture.case
                     healthy = case.assign('bar', 'second', **case.deliver_supporting('second'))
                     assignment = copy.deepcopy(fixture.assignment)
@@ -567,8 +581,8 @@ class MalformedContextAnswerTests(unittest.TestCase):
         for controller in ('absent', '', ['absent']):
             with self.subTest(controller=controller):
                 fixture = continuation_fixtures.ContinuationTests()
-                fixture.setUp()
                 self.addCleanup(fixture.doCleanups)
+                fixture.setUp()
                 case = fixture.case
                 case.assign('bar', 'second', **case.deliver_supporting('second'))
                 assignment = copy.deepcopy(fixture.assignment)
@@ -590,8 +604,8 @@ class MalformedContextAnswerTests(unittest.TestCase):
 
     def test_unreadable_retained_packet_returns_its_code_and_preserves_other_heads(self):
         fixture = continuation_fixtures.ContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         case = fixture.case
         healthy = case.assign('bar', 'second', **case.deliver_supporting('second'))
         assignment = copy.deepcopy(fixture.assignment)

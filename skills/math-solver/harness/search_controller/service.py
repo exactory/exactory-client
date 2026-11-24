@@ -281,8 +281,9 @@ class Controller:
         operations, effects = [], []
         def emit(kind, value):
             operations.append({"kind": kind, "payload": value})
-        def load_inputs(inputs, *, common_workspace=None):
-            bindings = import_inputs(self.root, inputs, content, state=state, common_workspace=common_workspace)
+        def load_inputs(inputs, *, common_workspace=None, allow_common_artifacts=False):
+            bindings = import_inputs(self.root, inputs, content, state=state, common_workspace=common_workspace,
+                                     allow_common_artifacts=allow_common_artifacts)
             if bindings:
                 from .provenance import record_probe_origins
                 payload = {"bindings": bindings}
@@ -537,7 +538,12 @@ class Controller:
                                   "Finish or retreat admitted standalone nodes before root closure: " +
                                   ", ".join(node_ids),
                                   {"node_ids": node_ids})
-            load_inputs(spec["inputs"])
+            if any("common_artifact" in item for item in s.records(spec["inputs"])):
+                from .reviewer import common_root
+                load_inputs(spec["inputs"], common_workspace=common_root(self.root, state, spec),
+                            allow_common_artifacts=True)
+            else:
+                load_inputs(spec["inputs"])
             s.require(not audit_state(self.root, state, content, fresh=True), "Accepted proof audit failed", "audit_failed")
             subject = spec["subject"]
             s.closed(subject, "schema_version objective_id contract_digest outcome acceptance_ids evidence_digests local_deliveries deliverables")

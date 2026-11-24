@@ -9,6 +9,13 @@ from research_harness.errors import ResearchError
 
 
 class ProblemInitialSlotReplacementTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def failed_initial(self, code='review_input_too_large'):
         assignment = self.assign('failed-initial')
         with patch.object(transport, 'send_request', side_effect=ResearchError(code, 'Synthetic pre-dispatch failure')):

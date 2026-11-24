@@ -143,6 +143,12 @@ def prepared_mutation(store, operation, payload, prepare, *, expected_revision, 
                         _preparation=snapshot.release_proof())
 
 
+def find_record(records, kind, identifier):
+    """The record of this kind and id, or None. A record key is a text, so an id of another JSON type names no record;
+    a command can look up a payload member with it before the member's shape is checked."""
+    return records.get(kind, {}).get(identifier) if isinstance(identifier, str) else None
+
+
 def immutable_record(records, kind, key, value):
     text(key, "Record ID")
     existing = records.get(kind, {}).get(key)

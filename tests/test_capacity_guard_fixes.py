@@ -12,6 +12,13 @@ from research_harness.errors import ResearchError
 
 
 class CapacityGuardFixTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def make_case(self, characters=50000):
         from test_route_capacity_properties import ReadingCapacityCommandTests
         driver = ReadingCapacityCommandTests()
@@ -25,7 +32,9 @@ class CapacityGuardFixTests(unittest.TestCase):
             case.assign('turn-1', native)
             result = driver.drive_commands(case, native, stub='every_level')
         self.assertEqual(result['end'], 'decision_after_floor')
-        self.assertEqual(result['replacements'], [(120000, 60000), (60000, 30000), (30000, 15000)])
+        # The frame of a v7 turn reserves its notes cost and its list rows, so the first reading turn of this fixture
+        # takes 60,000 characters, and the cap walks the two lower levels.
+        self.assertEqual(result['replacements'], [(60000, 30000), (30000, 15000)])
 
     def test_new_search_hands_off_before_the_first_v7_request(self):
         from research_harness.review_continuation import plan_next
@@ -42,12 +51,14 @@ class CapacityGuardFixTests(unittest.TestCase):
                          ('handoff', 'export', 'openness_packet_outdated'))
         self.assertEqual(case.store.snapshot()['records'], before)
 
-    def test_visual_runtime_identity_keeps_the_091_file_bytes(self):
+    def test_visual_runtime_identity_keeps_the_093_file_bytes(self):
+        # Release 0.93.0 changes the Codex transports in place (design codex-routes, D1): a stored visual route record
+        # of 0.92.1 pins 470283f4... and reads as stale, while its stored reviews and manifests still verify.
         from research_harness import review_codex_visual_transport as visual, review_codex_transport as text
         with patch.object(text, 'runtime', return_value={}):
             observed = visual.runtime()
         self.assertEqual(observed['implementation_sha256'],
-            '470283f4ba72485268ab9e893c87d927fddfa7afbf66aff7be2479b13d164722')
+            '8af94b60f01b960e3ba9f28c23c944225dec09e236ab07f8134daabe7f1a4191')
 
     def test_visual_v7_admission_declares_a_text_route_before_inventory_or_request(self):
         from reading_capacity_fixtures import build_reading_route

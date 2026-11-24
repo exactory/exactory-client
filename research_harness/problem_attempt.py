@@ -121,6 +121,7 @@ def validate_attempt(records, artifacts, value):
             raise ResearchError("invalid_input", "A literature attempt requires full readings")
         for reading in readings:
             fields(reading, ("version_id", "reading_id"))
+            text(reading["reading_id"], "Attempt reading ID", code="problem_value_reading_missing")
             validate_reading(records, artifacts, dict(reading, kind="reading"))
     for section in ("footholds", "obstructions"):
         for row in outcomes[section]:

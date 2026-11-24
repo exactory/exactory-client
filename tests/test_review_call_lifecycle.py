@@ -45,6 +45,13 @@ with patch.object(protocol, '_observed', side_effect=observe), \
 
 
 class PublicCallLifecycleTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def call_payload(self, command, identifier='owned'):
         if command == 'review-probe':
             return dict(id=identifier, route_id='route')

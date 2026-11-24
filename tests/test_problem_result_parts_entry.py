@@ -11,6 +11,13 @@ from research_harness.evidence import digest
 
 
 class ProblemResultPartsEntryTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     staged_entry = True
 
     def make_legacy_first(self):
@@ -111,6 +118,13 @@ class ProblemResultPartsEntryTests(ResultPartsCase):
 
 
 class NativeOrdinaryEntryTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_complete_fitting_native_repair_stays_an_ordinary_visual_assignment(self):
         import test_visual_context_repair as fixtures
         fixture = fixtures.VisualContextRepairTests()

@@ -21,6 +21,10 @@ from research_harness.errors import ResearchError
 
 class VisualResultDeliveryTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         import test_research_complete_source_continuation as fixtures
         from research_fixtures import client
         from test_research_binary_pdf import authored_pdf

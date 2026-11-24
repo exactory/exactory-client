@@ -23,6 +23,82 @@ def make_packet(*args, **kwargs):
     return packet
 
 
+class RequestAnswerTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.artifacts = ArtifactStore(Path(directory.name))
+        self.route = build_route()
+        self.inventory = dict(units=[dict(handle='u1', text='Original.', required=True,
+            components=[dict(kind='item', start=0, end=9)]),
+            dict(handle='u2', text='Abstract.', required=False,
+                 source=dict(kind='abstract', identity=dict(version_id='source')))])
+        self.plan = dict(task={kind: dict(levels=[dict(material_allowance=60000)])
+                              for kind in ('combine', 'check')})
+        self.state = parts.build_series_state([])
+        self.state['cards'] = [dict(id='g1', output=dict(summary='A stored card.'))]
+        block = dict(handle='b1', entries=['g1'], characters=1000)
+        self.state['combinations'] = [dict(id='b1', mode='condense', block=block, output=dict(block='b1'))]
+        self.header = dict(kind='combine', turn=2, adapter='problem_result', targets=[dict(id='target')],
+                           entries_artifact=parts._put_value(self.artifacts, ['g1']))
+        self.combination = dict(units=['u1'], question='What follows?', view='The claim follows.',
+                                read=[dict(unit='u1')])
+
+    def validate(self, output, **header):
+        return parts.validate_planned_output({legacy.KEY: dict(self.header, **header)}, output, self.inventory,
+            self.plan, self.state, self.route, artifacts=self.artifacts, assignment={})
+
+    def check_refusal(self, output, **header):
+        with self.assertRaises(ResearchError) as caught:
+            self.validate(output, **header)
+        self.assertEqual(caught.exception.code, 'invalid_value_review')
+
+    def combination_answer(self, **changes):
+        return dict(kind='combine', turn=2, combinations=[dict(self.combination, **changes)], rest='Reviewed.')
+
+    def test_combination_bearing_names_distinct_targets(self):
+        for bearing in (['target'], 'target', [dict(target='unknown')],
+                        [dict(target='target')] * 2, [dict(target='target', reason='Extra')]):
+            with self.subTest(bearing=bearing):
+                self.check_refusal(self.combination_answer(bearing=bearing))
+        result = self.validate(self.combination_answer(bearing=[dict(target='target')]))
+        self.assertEqual(result['combinations'][0]['output']['bearing'], [dict(target='target')])
+
+    def test_combination_read_names_only_inventory_ranges(self):
+        for scope in (dict(unit='g1'), dict(unit='b1', entries=True), dict(unit='u1', item=True),
+                      dict(unit='u1', start=0), dict(unit='u1', extra=True)):
+            with self.subTest(scope=scope):
+                self.check_refusal(self.combination_answer(read=[scope]))
+        for scope in (dict(unit='u1'), dict(unit='u1', start=0, end=4)):
+            with self.subTest(scope=scope):
+                self.validate(self.combination_answer(read=[scope]))
+
+    def test_malformed_answers_get_contract_refusals(self):
+        def request(scope):
+            return dict(kind='requests', unit_requests=[scope], source_requests=[])
+        for scope in ('u1', {}, dict(unit=[])):
+            with self.subTest(scope=scope, form='combine'):
+                self.check_refusal(self.combination_answer(read=[scope]))
+            with self.subTest(scope=scope, form='request'):
+                self.check_refusal(request(scope), kind='final')
+        for scope in (dict(unit='u1', why=[]), dict(unit='u1', item='yes'), dict(unit='u1', entries={}),
+                      dict(unit='u1', body=[]), dict(unit='u1', start=False, end=4)):
+            with self.subTest(scope=scope):
+                self.check_refusal(request(scope), kind='final')
+        self.check_refusal(self.combination_answer(units=[[]]))
+        finding = dict(combination='c2-1', finding='The claim follows.', effect='supports', statements=[])
+        self.state['combinations'] = [dict(id='c2-1', output=self.combination)]
+        for row in ('finding', {}, dict(finding, combination=[]),
+                    dict(finding, statements=[dict(unit=[], text='Original.', why='Evidence.')])):
+            with self.subTest(finding=row):
+                self.check_refusal(dict(kind='check', turn=2, findings=[row]), kind='check',
+                                   check_combinations=['c2-1'])
+        source = dict(kind='source', id='r', version_id='source', depth='abstract')
+        for changes in (dict(depth='full'), dict(id=[]), dict(version_id=[]), dict(why={})):
+            with self.subTest(source=changes):
+                self.check_refusal(dict(kind='requests', unit_requests=[], source_requests=[dict(source, **changes)]),
+                                   kind='final')
+
 class InventoryTests(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
@@ -178,8 +254,23 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(state['pending_requests'], [])
 
 
+def set_up_parts_v2_fixture(test, case):
+    """Set up, inside a test of parts v3, a fixture whose own tests are of parts v2. The fixture states parts v2 alone
+    in its setUp, so the order with parts v3 first is stated again after it."""
+    test.addCleanup(case.doCleanups)
+    case.setUp()
+    selected = patch.object(legacy, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL, legacy.PROTOCOL))
+    selected.start()
+    test.addCleanup(selected.stop)
+    return case
+
+
 class AdapterJourneyTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         original = capacity.plan_chain_capacity
         def build_request_plan(*args, **kwargs):
             kwargs['final_pages'] = False
@@ -199,9 +290,7 @@ class AdapterJourneyTests(unittest.TestCase):
     def test_native_adapter_recorded_final_authenticates_without_inline_handles(self):
         import test_review_parts_native as fixtures
         from codex_route_fixtures import invoke_codex
-        case = fixtures.NativePartsTests()
-        self.addCleanup(case.doCleanups)
-        case.setUp()
+        case = set_up_parts_v2_fixture(self, fixtures.NativePartsTests())
         with patch.object(fixtures, 'make_output', side_effect=make_turn_output):
             turns, final = case.finish_series()
         self.assertEqual(case.read_packet(final)[legacy.KEY]['protocol'], parts.PROTOCOL)
@@ -236,9 +325,7 @@ class AdapterJourneyTests(unittest.TestCase):
     def test_verification_adapter_reaches_the_verdict_command_boundary(self):
         import test_review_parts_study as fixtures
         from research_harness import review_transport as transport, verification
-        case = fixtures.VerificationPartsTests()
-        self.addCleanup(case.doCleanups)
-        case.setUp()
+        case = set_up_parts_v2_fixture(self, fixtures.VerificationPartsTests())
         case.enlarge_verification()
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 1300000), \
                 patch.object(fixtures, 'make_output', side_effect=make_turn_output):
@@ -262,9 +349,7 @@ class AdapterJourneyTests(unittest.TestCase):
     def test_readiness_adapter_reaches_its_review_command_boundary(self):
         import test_review_parts_study as fixtures
         from research_harness import review_transport as transport, development
-        case = fixtures.ReadinessPartsTests()
-        self.addCleanup(case.doCleanups)
-        case.setUp()
+        case = set_up_parts_v2_fixture(self, fixtures.ReadinessPartsTests())
         case.enlarge_readiness()
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 1300000), \
                 patch.object(fixtures, 'make_output', side_effect=make_turn_output):
@@ -307,25 +392,7 @@ class AdapterJourneyTests(unittest.TestCase):
 
 
     def test_native_command_accepts_and_audits_a_v3_series(self):
-        import importlib.util
-        import sys
-        import tests as package
-        harness = Path(__file__).resolve().parents[1] / 'skills/math-solver/harness'
-        sys.path.insert(0, str(harness))
-        original_paths = package.__path__
-        package.__path__ = list(original_paths) + [str(harness / 'tests')]
-        self.addCleanup(lambda: sys.path.remove(str(harness)))
-        self.addCleanup(setattr, package, '__path__', original_paths)
-        spec = importlib.util.spec_from_file_location('parts_v3_native_command_fixture', harness / 'tests/test_review_parts_native.py')
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        case = module.NativePartsAcceptanceTests()
-        self.addCleanup(case.doCleanups)
-        case.setUp()
-        import tests.openness_chain_support as support
-        original_route = support.record_codex_route
-        with patch.object(support, 'record_codex_route', side_effect=lambda fixture: original_route(fixture, output_tokens=128000)):
-            case.build_native_fixture()
+        case = build_native_acceptance_case(self, 'parts_v3_native_command_fixture')
         from research_harness import review_transport as transport
         turns = []
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 1300000):
@@ -514,6 +581,72 @@ class BuilderScaleTests(unittest.TestCase):
 
 
 
+def build_native_acceptance_case(test, module_name):
+    """Build the acceptance fixture of the math harness at the output limit.
+
+    The fixture imports modules from the harness tree. Each of them, and each attribute that its import sets on a
+    package that was already loaded, is restored when the test ends, and the last cleanup checks that.
+    """
+    import importlib.util
+    import sys
+    import tests as package
+    harness = Path(__file__).resolve().parents[1] / 'skills/math-solver/harness'
+    missing = object()
+    original_modules = dict(sys.modules)
+    original_packages = {name: dict(vars(module)) for name, module in original_modules.items()
+                         if module is not None and hasattr(module, '__path__')}
+    restored_attributes = []
+
+    def list_temporary_imports():
+        return [name for name, module in list(sys.modules.items())
+                if module is not original_modules.get(name)
+                and getattr(module, '__file__', None)
+                and Path(module.__file__).is_relative_to(harness)]
+
+    def assert_imports_restored():
+        test.assertEqual(list_temporary_imports(), [])
+        for name, attribute in restored_attributes:
+            test.assertIs(vars(original_modules[name]).get(attribute, missing),
+                          original_packages[name].get(attribute, missing))
+
+    def restore_imports():
+        for name in list_temporary_imports():
+            original = original_modules.get(name, missing)
+            if original is missing:
+                sys.modules.pop(name)
+            else:
+                sys.modules[name] = original
+            parent, _, attribute = name.rpartition('.')
+            if parent in original_packages:
+                attributes = vars(original_modules[parent])
+                before = original_packages[parent].get(attribute, missing)
+                if before is missing:
+                    attributes.pop(attribute, None)
+                else:
+                    attributes[attribute] = before
+                restored_attributes.append((parent, attribute))
+
+    test.addCleanup(assert_imports_restored)
+    test.addCleanup(restore_imports)
+    sys.path.insert(0, str(harness))
+    original_paths = package.__path__
+    package.__path__ = list(original_paths) + [str(harness / 'tests')]
+    test.addCleanup(lambda: sys.path.remove(str(harness)))
+    test.addCleanup(setattr, package, '__path__', original_paths)
+    spec = importlib.util.spec_from_file_location(module_name, harness / 'tests/test_review_parts_native.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    case = module.NativePartsAcceptanceTests()
+    test.addCleanup(case.doCleanups)
+    case.setUp()
+    import tests.openness_chain_support as support
+    original_route = support.record_codex_route
+    with patch.object(support, 'record_codex_route',
+                      side_effect=lambda fixture: original_route(fixture, output_tokens=128000)):
+        case.build_native_fixture()
+    return case
+
+
 def make_turn_output(packet):
     header = packet[legacy.KEY]
     if header['kind'] == 'read':
@@ -534,6 +667,10 @@ class RecordedSeriesTests(PartsResultCase):
     output_tokens = 128000
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         # Keep these existing journeys on the stored request-plan shape. The
         # page module exercises prospective admission with final_pages=True.
@@ -717,6 +854,61 @@ class RecordedSeriesTests(PartsResultCase):
         records['review_assignment'][answered['id']].update(
             packet=parts._put_value(self.case.artifacts, missing), packet_digest=missing['digest'])
         self.assertFalse(legacy.verify_series(records, self.case.artifacts, answered['id'])['complete'])
+
+    def test_result_final_names_bindings_places_sources_and_arguments(self):
+        """Exercise the four reference members through a single recorded final."""
+        self.oversized(count=1, characters=50000, limit=1300000)
+        sources = [self.case.metadata(number) for number in (91, 92)]
+        for source, text in zip(sources, ('First optional capture.', 'Second optional capture.')):
+            self.case.capture(source, pdf_text=text)
+        with patch.object(capacity, 'read_profile_priors', return_value=[]):
+            first = self.assign()
+        turns, final = self.finish_series(first)
+        header = self.packet(final)[legacy.KEY]
+        logical = legacy.read_logical_packet(self.case.artifacts, header)
+        inventory = legacy.read_inventory(self.case.artifacts, header['inventory'])
+
+        with self.subTest(rule='B6'):
+            self.assertEqual(header.get('binding_values'),
+                             {'/stage': 'result', '/value/bar_ids': logical['bar_ids']})
+        places = {row['path']: row for row in header.get('places', {}).get('rows', [])}
+        with self.subTest(rule='B7'):
+            self.assertEqual(places['/bars']['entries'], 2)
+            own = places['/own_bars']['units'][0]
+            self.assertIn(own, places['/bars']['units'])
+            self.assertNotIn('/material_objections', places)
+        with self.subTest(rule='B8'):
+            optional = [row for row in inventory['units'] if not row['required']
+                        and row['source']['kind'] in ('fulltext', 'abstract')]
+            expected = [dict(unit=row['handle'], version_id=row['source']['identity']['version_id'],
+                             depth=row['source']['kind'], characters=len(row['text'])) for row in optional]
+            self.assertTrue(set(sources) <= {row['version_id'] for row in expected})
+            self.assertEqual(header.get('sources'), dict(total=len(expected), rows=expected))
+
+        own = (places['/own_bars']['units'][0] if '/own_bars' in places else
+               next(row['handle'] for row in inventory['units'] if row['digest'] == digest(logical['own_bars'][0])))
+        self.invoke(final, dict(kind='requests', unit_requests=[dict(unit=own)], source_requests=[]))
+        delivery = self.assign('own-bar', final['id'])
+        self.assertEqual(self.packet(delivery)['review_parts_requests'][0]['unit'], own)
+        argument = dict(stage='material', title='Finite argument', part=1, text='A short justification.', more=False)
+        self.invoke(delivery, argument)
+        resumed = self.assign('argument-complete', delivery['id'])
+        final_header = self.packet(resumed)[legacy.KEY]
+        with self.subTest(rule='B9'):
+            self.assertEqual(final_header.get('arguments'),
+                             dict(total=1, rows=[dict(handle='m1', title=argument['title'], parts=1)]))
+
+        output = self.final_output()
+        for pointer, value in final_header.get('binding_values', {}).items():
+            if pointer == '/stage':
+                output['stage'] = value
+            else:
+                output['value']['bar_ids'] = value
+        self.record_final(resumed, output)
+        members = {row['id'] for row in turns + [final, delivery, resumed]}
+        for attempt in self.case.read_records()['review_attempt'].values():
+            if attempt['assignment_id'] in members:
+                self.assertTrue(attempt['preflight']['plan_comparison']['fits'])
 
     def test_multipart_material_resumes_pending_final_and_authenticates(self):
         self.oversized(count=1, characters=50000, limit=1300000)
@@ -1013,11 +1205,12 @@ class RecordedSeriesTests(PartsResultCase):
             dict(unit=block['id'], entries=True), dict(unit=contradiction['card']), dict(unit=contradiction['unit'], start=start, end=start + len(sentence))]))
         answering = self.assign('archived-answer', assignment['id'])
         deliveries = self.packet(answering)['review_parts_requests']
-        self.assertIn(card['output'], [json.loads(row['text']) for row in deliveries if row['unit'] == contradiction['card']])
-        self.assertEqual(next(json.loads(row['text']) for row in deliveries if row['unit'] == block['id'] + '/entries')['entries'], block['block']['entries'])
+        block_delivery, card_delivery = deliveries[:2]
+        self.assertEqual(json.loads(card_delivery['text']), card['output'])
+        self.assertEqual(json.loads(block_delivery['text'])['entries'], block['block']['entries'])
         output = self.final_output()
         for array in evidence_arrays(output):
-            array[:] = [dict(ref=contradiction['unit'], start=start, end=start + len(sentence)), dict(ref=contradiction['card'])]
+            array[:] = [dict(ref=contradiction['unit'], start=start, end=start + len(sentence)), dict(ref=card_delivery['unit'])]
         self.invoke(answering, output)
         attempt, expanded = protocol.read_assignment_output(self.case.read_records(), self.case.artifacts, answering['id'])
         self.case.mutate(__import__('research_harness.research_decisions', fromlist=['record_value_review']).record_value_review,

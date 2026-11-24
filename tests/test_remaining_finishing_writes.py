@@ -1,6 +1,7 @@
 """The records around a Colab release, around the start of a reviewer program and around a refused reviewer output
 commit while other commands use the same store."""
 
+from unittest.mock import patch
 import json
 import os
 import shutil
@@ -943,6 +944,10 @@ class RecordingRefusalTests(OtherWriters, delivery_fixtures.ProblemDeliveryCase)
     invoke_output = resolution_tests.ReviewOutputRefusalTests.invoke_output
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.output = self.prepare_bar()
         self.invoke_output(self.output)

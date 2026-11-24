@@ -14,9 +14,13 @@ import test_research_problem_reviews as problem_fixtures
 
 class RefusalReplacementTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = problem_fixtures.ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
         self.case.prepare_review_route()
 
@@ -342,11 +346,18 @@ class RefusalReplacementTests(unittest.TestCase):
 
 
 class CitationReplacementTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def build_case(self, count):
         import test_record_reading_handoff as fixtures
         harness = fixtures.ReadingHandoffTests()
-        harness.setUp()
         self.addCleanup(harness.doCleanups)
+        harness.setUp()
         assignment, output = harness.build_final(count=count, abstract=True)
         if count == 0:
             # build_final includes the abstract alone when no fulltext was requested.

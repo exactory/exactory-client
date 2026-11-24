@@ -1,6 +1,7 @@
 """Tests for bin/exactory-draft: the init layout and the Zenodo deposit flow."""
 
 from __future__ import annotations
+from unittest.mock import patch
 
 import contextlib
 import hashlib
@@ -616,6 +617,13 @@ class _LegacyWorkspaceDepositTestCase(_PlainWorkspaceDepositTestCase):
 
 
 class TestDeposit(_DepositTestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def _read_sent_metadata(self) -> dict:
         metadata_request = _read_request(self.fake_api.requests, "PUT",
                                          "/deposit/depositions/4242")
@@ -913,6 +921,13 @@ class TestDeposit(_DepositTestCase):
 
 
 class TestProductionPublishConfirmation(_DepositTestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_refuses_without_the_confirm_publish_flag(self) -> None:
         stderr_text = self._deposit(
             ["--production", "--publish", "--creator", "Shiroshita, Ryosuke"],
@@ -948,6 +963,12 @@ class TestManagedDepositAfterALostPublishResponse(_DepositTestCase):
     """The managed path holds the whole deposit as one saved intent, so the
     same command finishes it through remote reads. This is what the deposit
     skill sends an agent to do, and the record it protects is permanent."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def test_the_same_command_reads_the_record_and_sends_no_second_publish(self) -> None:
         self.fake_api = _LostResponseZenodoApi("/actions/publish")
@@ -1006,6 +1027,12 @@ class TestManagedDepositAfterALostCreateResponse(_DepositTestCase):
     intent's token into the notes of the deposition it creates. Its next run
     finds that deposition by the token before it creates anything
     (research_harness.zenodo), so its advice stays the plain one."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def test_the_advice_is_to_run_the_same_command_again(self) -> None:
         self.fake_api = _LostResponseZenodoApi("/deposit/depositions")
@@ -1018,6 +1045,13 @@ class TestManagedDepositAfterALostCreateResponse(_DepositTestCase):
 
 
 class TestProductionDepositCitationReport(_DepositTestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_a_failing_report_is_printed_and_the_managed_deposit_continues(self) -> None:
         (self.workspace_dir / ".exactory" / "citation-check.json").unlink()
         output = self._deposit(["--production", "--creator", "Shiroshita, Ryosuke"])
@@ -1053,6 +1087,13 @@ class TestParserStrictness(unittest.TestCase):
 
 
 class TestDepositPreconditions(_DepositTestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_deposit_outside_a_workspace_points_at_init(self) -> None:
         outside_dir = tempfile.TemporaryDirectory()
         self.addCleanup(outside_dir.cleanup)
@@ -1097,6 +1138,13 @@ class TestInitLiteraturePreservation(unittest.TestCase):
 
 
 class TestDepositState(_DepositTestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def read_deposit_state(self) -> dict:
         return json.loads(
             (self.workspace_dir / ".exactory" / "deposit.json").read_text()
@@ -1119,6 +1167,13 @@ class TestDepositState(_DepositTestCase):
 
 
 class TestNewVersion(_DepositTestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def record_prior_deposit(self, environment: str = "sandbox") -> None:
         args = ["--creator", "Shiroshita, Ryosuke", "--publish"]
         if environment == "production":

@@ -193,6 +193,13 @@ class StagedBinaryTests(unittest.TestCase):
 
 
 class StagedBinaryOutcomeTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     staged_entry = True
 
     def test_text_binary_frontier_records_execution_incomplete_and_resumes_stably(self):

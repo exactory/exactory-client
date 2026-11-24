@@ -801,6 +801,70 @@ OPERATIONS = {'review-run': _review_run, 'review-probe': _review_probe,
         self.assertEqual(result['reachable'], ['stopped_correction', 'stopped_probe', 'stopped_run'])
         self.assertNotIn('outside_settlement', result['by_command']['review-stop'])
 
+    def test_a_declared_catch_keeps_a_built_code_out_of_the_codes_that_leave(self):
+        """A code that a callee builds inside a declared catch stays in the root's built codes and leaves no root;
+        another root that calls the callee outside a catch lets it leave; a catch that the source lacks fails."""
+        module = 'research_harness/review_continuation.py'
+        sources = {module: """
+def check():
+    ResearchError('caught_code', '')
+def plan_next():
+    try:
+        check()
+    except ResearchError:
+        pass
+    ResearchError('own_code', '')
+def command():
+    check()
+"""}
+        catches = {module + ':plan_next': dict(handler='ResearchError', callees=(module + ':check',), keeps=())}
+        plan = reach.analyze_sources(sources, {'plan_next': [module + ':plan_next']}, declared_catches=catches)
+        self.assertEqual(plan['by_command']['plan_next'], ['caught_code', 'own_code'])
+        self.assertEqual(plan['reachable'], ['own_code'])
+        both = reach.analyze_sources(sources, {'plan_next': [module + ':plan_next'], 'command': [module + ':command']},
+                                     declared_catches=catches)
+        self.assertEqual(both['reachable'], ['caught_code', 'own_code'])
+        uncaught = dict(sources, **{module: sources[module].replace(
+            "    try:\n        check()\n    except ResearchError:\n        pass\n", "    check()\n")})
+        with self.assertRaisesRegex(ValueError, 'Declared catch not found in source'):
+            reach.analyze_sources(uncaught, {'plan_next': [module + ':plan_next']}, declared_catches=catches)
+        for caller, row in reach.DECLARED_CATCHES.items():
+            self.assertTrue(row['callees'], caller)
+
+    def test_math_handoff_reaches_the_controller_calls_that_its_file_import_hides(self):
+        """review_math_handoff.load_controller imports the controller by its file location, so only the declared
+        edges carry its calls; each declared target is a controller function and each caller is a handoff function."""
+        controller = 'skills/math-solver/harness/search_controller/'
+        handoff = 'research_harness/review_math_handoff.py:'
+        callers = {caller for caller in reach.DECLARED_EDGES if caller.startswith(handoff)}
+        self.assertEqual(callers, {handoff + name for name in ('read_objective', 'check_recording', 'check_export')})
+        for caller in callers:
+            self.assertTrue(all(target.startswith(controller) for target in reach.DECLARED_EDGES[caller]), caller)
+        sources = {
+            'research_harness/review_math_handoff.py': """
+def load_controller():
+    import importlib
+    return importlib.import_module('search_controller.reviewer')
+def check_recording():
+    reviewer = load_controller()
+    return reviewer.check_result_command()
+""",
+            controller + 'reviewer.py': """
+from .errors import SearchError
+def check_result_command():
+    raise SearchError('controller_refusal', 'refused')
+""",
+            controller + 'errors.py': """
+class SearchError(Exception):
+    pass
+"""}
+        roots = {'plan_next': [handoff + 'check_recording']}
+        hidden = reach.analyze_sources(sources, roots)
+        self.assertNotIn('controller_refusal', hidden['by_command']['plan_next'])
+        declaration = {handoff + 'check_recording': {controller + 'reviewer.py:check_result_command': 'A file import.'}}
+        declared = reach.analyze_sources(sources, roots, declared_edges=declaration)
+        self.assertIn('controller_refusal', declared['by_command']['plan_next'])
+
     def test_series_roots_use_only_the_commands_declared_by_driver_source(self):
         sources = {
             'research_harness/cli.py': """

@@ -29,7 +29,11 @@
         "test_openness_final_pages.IncidentFinalPagesTests.test_t4_fifty_seven_carried_turns_reach_a_recorded_paged_finding",
         "test_openness_final_pages.FinalPagesCommandTests.test_a5_q7_nine_targets_record_one_authenticated_composite",
         "test_openness_final_pages.CondensingCommandTests.test_stored_request_plan_condenses_at_measured_ratio_and_ignores_new_priors",
-        "test_openness_final_pages.FinalPagesCommandTests.test_verify_refuses_changed_plan_target_output_missing_page_and_currency"
+        "test_openness_final_pages.FinalPagesCommandTests.test_verify_refuses_changed_plan_target_output_missing_page_and_currency",
+        "test_property_drivers_b_v7.PendingV7Allowance.test_v7_pages_allowances",
+        "test_property_drivers_b_v7.V7ClosingTests.test_refused_recording_after_a_closing_answer_gives_an_export_handoff",
+        "test_property_drivers_b_v7.V7UnreadRecoveryTests.test_prompt_only_unread_finding_records_after_refused_page_and_two_combinations",
+        "test_property_drivers_b_v7.V7UnreadRecoveryTests.test_unread_closing_notice_replans_to_a_runnable_combination"
       ]
     },
     {
@@ -6480,7 +6484,7 @@
         "test_review_uncovered_stop.UncoveredReviewTests.test_an_unrepresentable_probe_retains_the_prescribed_size_without_an_invalid_step",
         "test_review_uncovered_stop.UncoveredReviewTests.test_equal_page_pdfs_stop_before_call_with_the_same_estimate",
         "test_review_uncovered_stop.UncoveredReviewTests.test_pdf_attachment_stops_and_text_route_completes_same_review",
-        "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+        "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot",
         "test_review_uncovered_stop.UncoveredReviewTests.test_the_prescribed_probe_uses_utf8_to_fit_then_records_the_same_assignment",
         "test_review_uncovered_stop.UncoveredReviewTests.test_unverified_route_is_rejected_before_validating_its_runtime"
       ],
@@ -6923,9 +6927,11 @@
         "test_openness_page_replacement.PageFloorTests.test_single_target_page_after_condensing_keeps_request_refusal_position",
         "test_openness_page_replacement.PageFloorTests.test_capacity_rows_cover_request_page_closing_and_combine",
         "test_openness_page_replacement.PageFloorTests.test_one_target_one_block_above_pinned_floor_gets_condensing_then_page",
-        "test_openness_page_replacement.PageFloorTests.test_closing_with_three_rows_splits_even_when_each_half_is_one_small_block",
+        "test_openness_page_replacement.PageFloorTests.test_closing_cannot_split_two_rows_into_unanswerable_blocks",
         "test_review_session_v4_pages.SessionPagesTests.test_refused_page_replaced_at_same_level_with_notice_then_records",
-        "test_review_parts_v3_pages.PagedSeriesTests.test_a6_refused_closing_is_replaced_with_notice_then_records"
+        "test_review_parts_v3_pages.PagedSeriesTests.test_a6_refused_closing_is_replaced_with_notice_then_records",
+        "test_review_refusal_notice.WireNoticeTests.test_large_finding_forecast_preserves_the_rule_and_truncates_each_value",
+        "test_review_refusal_notice.WireNoticeTests.test_tight_details_room_fits_a_literal_rule_and_forecast_preview"
       ],
       "class": "refused output continuity"
     },
@@ -7157,7 +7163,7 @@
         "test_capacity_guard_fixes.CapacityGuardFixTests.test_text_v7_exception_never_removes_visual_page_requirements",
         "test_capacity_guard_fixes.CapacityGuardFixTests.test_visual_v7_admission_declares_a_text_route_before_inventory_or_request",
         "test_capacity_guard_fixes.CapacityGuardFixTests.test_visual_v7_command_stops_before_requests_and_executes_the_text_answer",
-        "test_capacity_guard_fixes.CapacityGuardFixTests.test_visual_runtime_identity_keeps_the_091_file_bytes"
+        "test_capacity_guard_fixes.CapacityGuardFixTests.test_visual_runtime_identity_keeps_the_093_file_bytes"
       ]
     },
     {
@@ -7397,7 +7403,7 @@
         "test_review_session_v4_record.SessionAllowancePlanTests.test_pending_rows_are_separate_from_the_single_allowance_projection_bound",
         "test_review_session_v4_record.SessionAllowancePlanTests.test_pending_request_bound_is_validated_before_any_plan_publication",
         "test_review_session_v4_record.SessionAllowancePlanTests.test_allowance_page_cursor_is_rebuilt_from_the_authenticated_turn",
-        "test_review_session_v4_record.SessionAllowancePlanTests.test_v7_fixture_admission_plan_artifacts_keep_their_base_digests"
+        "test_review_session_v4_record.SessionAllowancePlanTests.test_v7_fixture_admission_plan_artifacts_keep_their_digests"
       ]
     },
     {
@@ -7565,7 +7571,10 @@
       "test_kind": "real_shape",
       "tests": [
         "test_openness_named_gaps.NamedGapRecordingTests.test_unread_work_is_validated_and_preserved_through_every_real_recording_path",
-        "test_openness_named_gaps.NamedGapRecordingTests.test_refused_variant_search_is_replaced_with_its_notice_and_recorded"
+        "test_openness_named_gaps.NamedGapRecordingTests.test_refused_variant_search_is_replaced_with_its_notice_and_recorded",
+        "test_openness_named_gaps.NamedGapRecordingTests.test_page_named_gap_with_long_formulation_expands_and_composes",
+        "test_openness_named_gaps.NamedGapRecordingTests.test_off_target_gap_is_refused_at_page_and_its_correction_records",
+        "test_openness_named_gaps.NamedGapRecordingTests.test_page_formulation_citations_stay_out_of_material_and_other_fields"
       ]
     },
     {
@@ -8715,6 +8724,1423 @@
       "tests": [
         "test_series_verification_costs.SeriesVerificationCosts.test_render_lists_once_per_parts_verification",
         "test_series_verification_costs.SeriesListingCosts.test_listing_parses_each_packet_once"
+      ]
+    },
+    {
+      "id": "capacity-answer-names-a-refused-adjudicator-replacement",
+      "record": "20261122143013",
+      "class": "Capacity stop answers and the admission of their steps",
+      "summary": "The capacity stop of a plain adjudicator's continuation offered a focused replacement that the store refuses with review_adjudicator_fixed.",
+      "expected": "The answer is offered only when the trial of its assignment on the serving route is admitted.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_capacity_steps.CapacityNewEntryTests.test_plain_adjudicator_names_the_focused_assignment_only_when_the_store_takes_it"
+      ]
+    },
+    {
+      "id": "capacity-stop-repair-keeps-serving-route-usable",
+      "record": "20261122143013",
+      "class": "review continuity",
+      "summary": "A stopped context repair offered a serving route and retired that same route before creating a copy. The same steps could turn an exhaustion repair into a retirement repair.",
+      "expected": "Each unconditional capacity alternative takes the exact public assignment on its named verified route. A future retirement or probe is conditional. A bound retry retains the exhaustion and evidence, and invalid scheduler data is rejected before assignment. No alternative retires a route that another answer needs.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_contamination_repair_reuses_the_predecessors_serving_route",
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_each_serving_answer_leaves_both_routes_usable",
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_exhaustion_repair_keeps_its_binding_on_the_serving_route",
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_slate_without_a_cause_keeps_the_direct_answer_under_the_same_evidence",
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_an_earlier_retirement_alone_does_not_supply_a_cause",
+        "test_review_capacity_steps.CapacitySlateSeriesStepsTests.test_series_answer_protects_its_route_from_the_reassessment_answer",
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_capacity_probe_answer_uses_the_new_probe_in_the_same_repair",
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_floor_repair_trials_known_proofs_on_other_routes",
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_stopped_repair_keeps_scheduler_when_retried",
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_ordinary_slate_can_use_its_bar_route_without_retirement",
+        "test_review_capacity_steps.CapacityPublicEntryTests.test_slate_refresh_falling_back_from_v4_keeps_the_refresh_link",
+        "test_review_capacity_steps.CapacityPublicEntryTests.test_admitted_parts_adjudicator_retry_contains_only_public_context",
+        "test_review_capacity_steps.CapacitySlateSeriesStepsTests.test_projected_slate_turn_stays_on_its_exact_route",
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_fresh_bar_trials_the_public_payload_at_the_profile_boundary",
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_exhaustion_trial_with_an_old_probe_keeps_the_known_binding",
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_invalid_scheduler_fails_before_offering_or_committing_a_repair",
+        "test_review_capacity_steps.CapacityPublicEntryTests.test_stopped_study_slate_can_reassess_its_bar_on_the_same_record",
+        "test_review_capacity_steps.CapacityPublicEntryTests.test_body_capture_resumes_the_original_capacity_stop",
+        "test_review_capacity_steps.CapacityNewEntryTests.test_plain_adjudicator_names_the_focused_assignment_only_when_the_store_takes_it",
+        "test_review_capacity_steps.CapacityNewEntryTests.test_standalone_review_moves_by_route_record_and_new_first_assignment"
+      ]
+    },
+    {
+      "id": "command-payload-member-of-another-json-type-ends-with-a-python-exception",
+      "record": "20261122143013",
+      "class": "shape of a payload before its members are read",
+      "summary": "An audit of release 0.92.0 ran the changes of tests/payload_changes.py (each node removed, replaced by null, a text, a number, a boolean, an empty list or an empty object, an unknown member added) over the example payload of every exactory-research command that takes a JSON payload, 29,857 changed payloads. 42 ended with TypeError in 16 commands and inputs: a member given as a list or an object was used as the key of a mapping or a member of a set before the command checked its type, or a null, a number or a boolean was iterated. Independent reviews of the repair found more of the same class behind the first refusal of the example seeds: review-assignment with a context that is not an object, a predecessor, verification task, bundle, replacement or staged task id of another type, or review ids of another type; evidence descriptors whose digest is not a text; bind-verdict with an assessment assignment id of another type; a literature attempt on a reading id, a captured search on a disposition work id, sample on a collection id; and a probe outcome resubmitted with a member that the record lacks (KeyError). The reviews also found two checks of the repair that were stricter than 0.92.0: one refused a predecessor that is an empty text, false or 0, and one refused review ids of a focused adjudicator given as an object of two keys or a text of two characters, so that a stored chain in that form repeated its step-3 handoff.",
+      "expected": "Each such command checks the type of the member at its edge, or looks a record up only by a text id, and refuses with a code that it already gives for a wrong shape or a missing record. An assignment id of a review context is refused only as an array or an object: a fresh assignment admits an empty, false, zero or null predecessor as 0.92.0 does, and a planned replacement copies an empty or null predecessor. The review ids of a focused adjudicator are two distinct texts in a list, the keys of an object or the characters of a text, as 0.92.0 admits, and the context keeps the submitted container. In the audit, over 140 scenarios of which 26 build a stored state before they change the payload, no changed payload ends with a Python exception, and none of the 8,281 changed payloads compared with 0.92.0 in those 26 states moved between an acceptance and a refusal.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_command_payload_shapes.StudyCommandShapeTests.test_bind_verdict_refuses_a_task_digest_that_is_not_a_text",
+        "test_command_payload_shapes.StudyCommandShapeTests.test_read_batch_refuses_an_item_whose_version_is_not_a_text",
+        "test_command_payload_shapes.StudyCommandShapeTests.test_read_batch_refuses_a_repeated_version_before_it_assesses_the_item",
+        "test_command_payload_shapes.StudyCommandShapeTests.test_sample_refuses_a_collection_that_is_not_a_text",
+        "test_command_payload_shapes.StudyCommandShapeTests.test_an_import_and_an_acquisition_refuse_a_provider_that_is_not_a_text",
+        "test_command_payload_shapes.ReviewCommandShapeTests.test_a_record_is_found_by_its_text_id_only",
+        "test_command_payload_shapes.ReviewCommandShapeTests.test_review_commands_refuse_an_assignment_or_route_that_is_not_a_text",
+        "test_command_payload_shapes.ReviewCommandShapeTests.test_a_review_command_goes_on_with_a_stored_assignment",
+        "test_command_payload_shapes.ReviewCommandShapeTests.test_review_context_refuses_an_evidence_reference_of_another_shape",
+        "test_command_payload_shapes.ReviewCommandShapeTests.test_review_route_refuses_a_configuration_that_is_not_an_object",
+        "test_command_payload_shapes.ReviewCommandShapeTests.test_a_staged_review_run_refuses_an_epoch_or_task_that_is_not_a_text",
+        "test_command_payload_shapes.ReviewCommandShapeTests.test_review_assignment_refuses_a_context_or_an_id_of_another_type",
+        "test_command_payload_shapes.ReviewCommandShapeTests.test_paper_assignment_selectors_and_evidence_of_another_shape_are_refused",
+        "test_command_payload_shapes.FixtureStateShapeTests.test_bind_verdict_refuses_an_assignment_that_is_not_a_text_on_a_bound_task",
+        "test_command_payload_shapes.FixtureStateShapeTests.test_a_staged_child_refuses_a_task_that_is_not_a_text",
+        "test_command_payload_shapes.FixtureStateShapeTests.test_a_terminal_probe_refuses_a_resubmission_with_another_member",
+        "test_command_payload_shapes.FixtureStateShapeTests.test_an_empty_predecessor_is_admitted_and_its_planned_replacement_advances",
+        "test_command_payload_shapes.FixtureStateShapeTests.test_a_focused_adjudication_takes_the_review_id_containers_of_0_92_0",
+        "test_command_payload_shapes.AttemptAndSearchShapeTests.test_a_literature_attempt_refuses_a_reading_id_that_is_not_a_text",
+        "test_command_payload_shapes.AttemptAndSearchShapeTests.test_a_captured_search_refuses_a_disposition_work_that_is_not_a_text",
+        "test_command_payload_shapes.ProblemCommandShapeTests.test_problem_decision_refuses_an_action_that_is_not_a_text",
+        "test_command_payload_shapes.ProblemCommandShapeTests.test_problem_formal_check_refuses_a_closure_digest_that_is_not_a_text",
+        "test_command_payload_shapes.ProblemCommandShapeTests.test_value_review_refuses_an_assignment_that_is_not_a_text_without_another_store_read",
+        "test_command_payload_shapes.ProblemCommandShapeTests.test_problem_openness_refuses_an_assignment_that_is_not_a_text",
+        "test_command_payload_shapes.ProblemCommandShapeTests.test_the_openness_export_refuses_searches_and_ids_that_have_another_shape"
+      ]
+    },
+    {
+      "id": "history-proof-preliminary-replay-changed-store-behaviour",
+      "record": "20261122143013",
+      "class": "store recovery, refusal order and concurrency",
+      "summary": "Advisory replay blocked writable recovery, published the schema error before the snapshot precheck and could follow a continuously growing history.",
+      "expected": "A write after a receipt miss can recover a hot journal. The use transaction owns semantic refusals and authenticates every row after the bounded preliminary prefix.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_history_proof.PreliminaryReplayTests.test_a_missing_request_can_recover_a_hot_journal_before_each_write",
+        "test_history_proof.PreliminaryReplayTests.test_snapshot_precheck_decides_before_an_unsupported_schema",
+        "test_history_proof.PreliminaryReplayTests.test_a_writer_cannot_extend_preliminary_replay_past_its_first_revision",
+        "test_history_proof.ReplayWorkTests.test_the_replay_before_a_snapshot_read_keeps_no_current_value"
+      ]
+    },
+    {
+      "id": "identifier-url-that-does-not-parse-crashes-the-plan",
+      "record": "20261122143013",
+      "class": "Source rules v3 recording of a refused link",
+      "summary": "A bar answer whose evidence link has an identifier URL that urlsplit cannot parse was accepted, and the plan of its head raised ValueError.",
+      "expected": "The identifier check refuses the URL with invalid_identifier; the recording records the refusal and the head is replaced.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_d2_rows_store.StoreRowTests.test_identifier_url_that_does_not_parse_is_refused_by_the_recording"
+      ]
+    },
+    {
+      "id": "math-v1-stored-successor-at-exact-stop",
+      "record": "20261122143013",
+      "class": "math reading successor admission and recovery",
+      "summary": "A legal stored v1 identifier could block its own capacity handoff and the exact stop could offer an unchanged v1 restart.",
+      "expected": "A fresh bounded forecast uses a legal new ID and matching attestation. An exact stop with unchanged same-route v1 fallback keeps the smaller-packet answer and omits the repeated stop.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_math_v2_default.MathV2RequestTests.test_long_first_assignment_uses_released_math_selection",
+        "test_openness_math_successor.MathSuccessorTests.test_exact_stop_of_a_stored_v1_chain_with_a_long_head_plans_v2",
+        "test_openness_math_successor.MathSuccessorTests.test_exact_stop_suppresses_the_same_route_v1_restart"
+      ]
+    },
+    {
+      "id": "math-v2-final-cites-carried-evidence",
+      "record": "20261122143013",
+      "class": "math v2 native review evidence and objection validation",
+      "summary": "A changed search could leave the final without its earlier evidence handles or the date it needed. A malformed objection could be recorded and fail the controller's schema.",
+      "expected": "The measured one-request final names completed evidence units and the date required by the audit. A recorded nonapproval already has the controller's objection shape.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_property_drivers_b_math.MathFinalEvidenceTests.test_math_final_lists_citable_units_and_the_search_date",
+        "test_property_drivers_b_math.MathFinalProperties.test_math_carried_note_preserves_approval_evidence",
+        "test_openness_reading_math_v2_default.MathV2RequestTests.test_math_final_checks_nonapproval_objections_before_recording",
+        "test_openness_reading_math_v2_default.MathV2DuplicateCitationTests.test_equal_fulltext_bytes_have_one_citation_handle",
+        "test_openness_reading_math_v2_default.MathV2RequestTests.test_unadvertised_evidence_handle_cannot_approve_the_final",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_missing_required_citation_can_be_corrected_and_accepted_from_the_plan",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_closure_requires_resolved_openness_and_runs_complete_from_the_plan",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_revise_offers_a_native_new_review_step",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_reject_offers_a_native_new_review_step"
+      ]
+    },
+    {
+      "id": "math-v2-final-input-stop-exports-problem-packet",
+      "record": "20261122143013",
+      "class": "math v2 projection decision",
+      "summary": "A math v2 input stop could export a different review or lose the openness minimum.",
+      "expected": "Both recovery answers attest an exact-subject math packet with an openness minimum, preserve the reviewer and admit a new math v2 chain. The route answer fixes a current minimum or lists the missing searches and opens the minimum choice. The smaller answer leaves openness as a choice. Both exports retain the native subject, claim, coordinates and reviewer, and the store admits both fresh attestations. Row 5 fixes a version 1 minimum only for the claim that the retained digest names in the portable native; otherwise it leaves one openness choice for the exact claim.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_continuity_guard_forms.FormSizeRowTests.test_k8_math_v2_reading_and_final",
+        "test_continuity_guard_forms.FormSizeRowTests.test_k8_math_final_exports_both_answers_after_a_new_search",
+        "test_chain_stop_math_successor.MathSuccessorSubjectTests.test_historical_wrong_claim_minimum_opens_both_public_exports"
+      ]
+    },
+    {
+      "id": "math-v2-final-request-capacity-floor",
+      "record": "20261122143013",
+      "class": "math v2 final admission and capacity recovery",
+      "summary": "The v2 final admitted a paged closure that did not carry the required review evidence. Capacity recovery used the v7 floor statement.",
+      "expected": "A math v2 final takes one request. A packet above that form's admission limit takes the v1 path. A final at the output cap gets one retry and then a math-specific stop before another call.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_property_drivers_b_math.MathFinalProperties.test_math_final_admission_at_the_one_request_boundary",
+        "test_openness_reading_math_v2_default.MathV2RequestTests.test_math_final_output_cap_retries_once_and_stops_on_its_own_floor",
+        "test_openness_reading_math_v2_default.MathV2RequestTests.test_required_citation_boundary_over_one_target",
+        "test_openness_reading_math_v2_default.MathV2RequestTests.test_completed_at_cap_retries_and_selects_the_below_cap_answer",
+        "test_openness_reading_math_v2_default.MathV2RequestTests.test_two_completed_attempts_at_cap_stop_before_another_call"
+      ]
+    },
+    {
+      "id": "math-v2-native-handoff-checked-by-the-controller",
+      "record": "20261122143013",
+      "class": "math v2 native handoff planning",
+      "summary": "A recorded math v2 final planned native commands that the controller refused: acceptance of a hypothesis, acceptance after evidence drift, a cap export with a stale minimum, a successor link of another subject, and a write against the original root from a copy.",
+      "expected": "Each planned native command is checked first by the controller's own check. A refused check ends in a registered stop with its step, and an assignment that claims a handoff is admitted only for the packet that the handoff prescribes.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_a_stored_hypothesis_has_no_acceptance_step",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_different_formulation_with_shared_work_requires_a_fresh_export",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_unresolved_checkpoint_with_empty_later_search_can_record",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_cap_after_a_material_search_takes_the_owner_steps",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_legacy_closure_link_rejects_a_real_checkpoint_packet",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_fresh_handoff_executes_the_check_child_it_returns",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_relocated_accepted_objective_never_targets_the_original",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_unreadable_native_log_cannot_authorize_recording",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_revised_checkpoint_handoff_allows_a_new_subject_and_refused_first_turn"
+      ]
+    },
+    {
+      "id": "native-nonapproval-page-uses-bound-handle",
+      "record": "20261122143013",
+      "class": "native result page assessment",
+      "summary": "A split revise or reject assessment could use the wrong target handle, and the page instructions treated conditional openness fields as required.",
+      "expected": "Use the published target handle and follow the openness fields for the native approval version. Preserve nonapprovals as closing assessments.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_page_answer_pointers.PagePointerTests.test_native_assessment_uses_bound_target_handle",
+        "test_review_page_answer_pointers.PagePointerTests.test_native_page_prompt_describes_conditional_openness_fields"
+      ]
+    },
+    {
+      "id": "paged-adjudication-missing-evidence-is-a-refusal",
+      "record": "20261122143013",
+      "class": "final adjudication page shape",
+      "summary": "An adjudication page without its evidence pointer raised KeyError in the page check.",
+      "expected": "The page produces a review.shape refusal with the missing evidence pointer.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_page_answer_pointers.PagePointerTests.test_missing_adjudication_evidence_is_a_shape_refusal"
+      ]
+    },
+    {
+      "id": "paged-review-answer-pointers-follow-frozen-targets",
+      "record": "20261122143013",
+      "class": "v4 session and v3 parts final-page pointer ownership",
+      "summary": "A later final page could restart a list index, pass its local check and overwrite another page's entry when the harness composed the review.",
+      "expected": "Each binding names the target's full pointers. The page rejects restarted, foreign and descendant pointers and a missing page-owned empty collection before role checks. The replacement repeats the page and carries the expected pointers in its refusal notice.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_page_answer_pointers.PagePointerJourneyTests.test_session_bar_replaces_restarted_page_and_records",
+        "test_review_page_answer_pointers.PagePointerJourneyTests.test_session_slate_replaces_restarted_page_and_records",
+        "test_review_page_answer_pointers.PagePointerJourneyTests.test_session_result_replaces_restarted_page_and_records",
+        "test_review_page_answer_pointers.PagePointerJourneyTests.test_parts_result_replaces_restarted_page_and_records",
+        "test_review_page_answer_pointers.PagePointerJourneyTests.test_parts_slate_replaces_restarted_page_and_records",
+        "test_review_page_answer_pointers.PagePointerTests.test_missing_empty_collection_and_descendant_pointer_are_refused",
+        "test_review_page_answer_pointers.PagePointerTests.test_split_preserves_empty_evidence_on_its_entry"
+      ]
+    },
+    {
+      "id": "paged-review-scientific-identity-collides-with-handle",
+      "record": "20261122143013",
+      "class": "v4 session and v3 parts target identity",
+      "summary": "A scientific candidate or objection ID such as t1 or t5 could capture another page target's transmitted handle and relabel its decision.",
+      "expected": "Resolve a page handle in the frozen wire namespace and an explicit target record by its scientific ID. Preserve both target values through closing.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_page_answer_pointers.PagePointerTests.test_bound_handles_and_explicit_ids_are_distinct_in_pointer_and_decision_rows",
+        "test_review_page_answer_pointers.PagePointerJourneyTests.test_parts_slate_replaces_restarted_page_and_records"
+      ]
+    },
+    {
+      "id": "paged-role-refusal-reports-bound-list-index",
+      "record": "20261122143013",
+      "class": "final-page role refusal location",
+      "summary": "An invalid field of a later list entry appeared at the compacted validation index in the refusal.",
+      "expected": "The refusal gives the full list index of the pointer the reviewer supplied.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_page_answer_pointers.PagePointerTests.test_role_refusal_uses_original_index_of_compacted_entry",
+        "test_review_page_answer_pointers.PagePointerTests.test_role_refusals_identify_single_bad_field"
+      ]
+    },
+    {
+      "id": "paged-study-review-retains-inherited-objection-membership",
+      "record": "20261122143013",
+      "class": "study value review in pages",
+      "summary": "The page check discarded historical-bar objections and the neutral bar check refused a valid inherited objection.",
+      "expected": "Use the final role's inherited objection membership for ownership, page and closing checks, and record a valid study bar repair.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_page_answer_pointers.PagePointerTests.test_study_slate_owns_historical_bar_objections",
+        "test_review_page_answer_pointers.PagePointerTests.test_study_bar_page_uses_inherited_objection_membership",
+        "test_review_page_answer_pointers.PagePointerTests.test_study_readiness_closing_uses_frozen_objection_membership",
+        "test_review_page_answer_pointers.PagePointerJourneyTests.test_bar_repair_in_pages_records_review"
+      ]
+    },
+    {
+      "id": "parts-v3-answered-page-blocks-context-repair",
+      "record": "20261122143013",
+      "class": "history of a paged final in a context repair",
+      "summary": "Repair admission treated an answered page as a recorded final and compared raw closing fields to a recorded composite.",
+      "expected": "The reassessment receives authenticated intermediate page answers and any recorded composed closing.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_continuity_guard_forms.FormFindingTests.test_f3_stop_on_a_closing_page_of_a_series_moves_to_a_repair_that_the_store_accepts",
+        "test_continuity_guard_forms.FormFindingTests.test_recorded_parts_closing_is_delivered_with_its_pages_in_the_repair",
+        "test_continuity_guard_forms.FormRequiredStopTests.test_k7_parts_v3_page_and_closing_floors_execute_every_answer",
+        "test_continuity_guard_forms.ThirdRoundTests.test_request_form_parts_material_is_intermediate_and_terminal_answer_needs_recording"
+      ]
+    },
+    {
+      "id": "parts-v3-read-compaction-counts-as-output-cap",
+      "record": "20261122143013",
+      "class": "retained compaction classification for a parts read",
+      "summary": "A compacted parts-v3 read spent an output-cap allowance.",
+      "expected": "The saved attempt classifies as input_over_limit with detail compacted and its replacement is admitted.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_continuity_guard_forms.FormFindingTests.test_f2_compacted_series_read_counts_as_input_over_limit",
+        "test_continuity_guard_forms.FormSizeRowTests.test_k8_parts_v3_read_and_pages"
+      ]
+    },
+    {
+      "id": "parts-v3-target-table-larger-than-a-frame",
+      "record": "20261122143013",
+      "class": "review capacity",
+      "summary": "The admission of the parts protocol v3 accepted a result review with 5,000 targets without counting the table of the targets, and the first read request of that series was larger than the request bound of its stored plan.",
+      "expected": "The admission counts the table in the frame of every turn. A review whose table does not fit the frame of a turn starts no v3 series: a new series starts in the next protocol of the selection, and the refusal states the size of the table and the largest frame.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3_pages.PagedSeriesTests.test_q7_five_thousand_targets_start_the_series_of_the_next_protocol",
+        "test_review_parts_v3_turn.AdmissionTests.test_result_target_table_larger_than_a_frame_is_refused_on_every_route"
+      ]
+    },
+    {
+      "id": "problem-record-accepts-unpostable-citation",
+      "record": "20261122143013",
+      "class": "post citation validation",
+      "summary": "The record accepted a citation field that the posting command refused after review.",
+      "expected": "The citation metadata and locator commands check the submitted field with the post's field rule and refuse with its code. The reviewed export checks its composed citations with the same rule after the released composition. Evidence writes, selection and composition keep the release behavior.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_citation_rules.CitationExportCompatibilityTests.test_approved_short_registry_title_is_refused_after_composition",
+        "test_problem_post_citation_rules.CitationFieldRuleTests.test_public_validation_preserves_composed_row_order",
+        "test_problem_post_citation_rules.CitationFieldRuleTests.test_utf16_bounds_normalization_and_allowed_locators",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_locator_refuses_a_post_locator_above_the_maximum_length",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_metadata_leaves_an_unchanged_locator_refusal",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_metadata_refuses_a_post_citation_above_the_maximum_length",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_metadata_refuses_a_post_citation_below_the_minimum_length",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_metadata_refuses_a_post_citation_character",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_nul_in_either_metadata_component_uses_the_post_character_code",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_shadowed_locator_checks_its_own_character_length_and_format",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_two_stale_binders_can_be_repaired_in_either_order",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_uncited_metadata_checks_its_own_text_and_accepts_a_valid_correction",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_valid_locator_is_saved_beside_an_invalid_title",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_value_write_keeps_the_released_receipt_beside_a_short_title_and_a_damaged_work"
+      ]
+    },
+    {
+      "id": "retirement-from-another-slot-needs-a-head-cause",
+      "record": "20261122143013",
+      "class": "review continuity",
+      "summary": "A retirement from one review slot made an unrun head in another slot ineligible on the same route, and the repair plan for that head had no citable cause.",
+      "expected": "The plan records a cause for the affected head and puts a probe after that event before reassigning the preserved slot. An ordinary focused adjudicator takes the focused assignment step with its exact review pair and objection.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_retirement_on_another_head_requires_a_retirement_of_this_head",
+        "test_review_capacity_steps.CapacityPublicEntryTests.test_retired_plain_adjudicator_keeps_the_focused_assignment_step",
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_retired_route_handoff_executes_registration_and_nested_probe"
+      ]
+    },
+    {
+      "id": "review-context-check-blocks-replacement-of-discarded-reading-position",
+      "record": "20261122143013",
+      "class": "dead-end",
+      "summary": "An event on a refused reading position forces a new packet even when a bounded replacement would carry only the earlier verified turns.",
+      "expected": "Replacement reads the turns it inherits and the destination route. The replacement can finish the chain when the event names only the superseded position.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_context_findings.ReplacementContextTests.test_refusal_replacement_discards_the_exposed_position_and_records_a_finding",
+        "test_review_context_findings.FailureOperationContextTests.test_capacity_replacement_discards_the_exposed_failed_position"
+      ]
+    },
+    {
+      "id": "review-context-check-hides-legacy-route-decision-and-committed-replay",
+      "record": "20261122143013",
+      "class": "dead-end",
+      "summary": "A failed probe on an original route hides the v5 route decision and the v7 replay of a request whose refusal record did not commit.",
+      "expected": "The serving-route decision remains available for the v5 size stop, and a committed v7 request can replay to record its refusal before taking the context handoff.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_context_findings.FailureOperationContextTests.test_v5_size_stop_keeps_admissible_route_decision_after_unanswered_probe",
+        "test_review_context_findings.FailureOperationContextTests.test_unchecked_answer_replays_committed_request_before_probe"
+      ]
+    },
+    {
+      "id": "review-context-handoff-offers-unbindable-repair",
+      "record": "20261122143013",
+      "class": "dead-end",
+      "summary": "Probe-only contamination advertises a repair with no cause in the slot, and an ordinary adjudicator is offered the staged repair form.",
+      "expected": "The plan offers the named route's probe or bindable retirement, and chooses the admissible role step when a role recovery is required.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_context_findings.ContextStepTests.test_excluded_control_without_event_plans_verifying_probe",
+        "test_review_context_findings.ContextStepTests.test_stale_excluded_control_without_event_retires_the_named_turn",
+        "test_review_context_findings.ContextStepTests.test_retirement_elsewhere_requires_a_cause_in_this_slot",
+        "test_review_context_findings.ContextStepTests.test_ordinary_adjudicator_takes_step_three"
+      ]
+    },
+    {
+      "id": "review-context-legacy-empty-history-drops-exposure-edges",
+      "record": "20261122143013",
+      "class": "admission",
+      "summary": "An empty legacy history link drops refresh-only or refusal-only ancestors from the call context reader.",
+      "expected": "The call context walk ignores the empty optional history link of an unposted store and keeps the other exposure edges.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_context_findings.LegacyExposureTests.test_empty_history_keeps_refresh_only_predecessor_with_event",
+        "test_review_context_findings.LegacyExposureTests.test_empty_history_keeps_refused_predecessor_on_unverified_other_route"
+      ]
+    },
+    {
+      "id": "review-correction-uses-original-route-to-defer-earlier-context-check",
+      "record": "20261122143013",
+      "class": "admission",
+      "summary": "A stale original route can suppress an earlier-turn context diagnosis for a correction on a renewed route.",
+      "expected": "The planner and command use the correction destination's standing and preserve the earlier-turn handoff.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_context_findings.FailureOperationContextTests.test_renewed_correction_applies_standing_of_the_destination"
+      ]
+    },
+    {
+      "id": "review-series-context-refusal-loses-probe-details",
+      "record": "20261122143013",
+      "class": "dead-end",
+      "summary": "Receipt completion expects a top-level route ID that PC3 refusals do not carry and can substitute record-check for a probe.",
+      "expected": "The receipt uses the available complete refusal step or derives its action from the named turn and retains the refused run.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_context_findings.ContextReceiptTests.test_complete_refusal_step_without_top_level_route",
+        "test_review_context_findings.ContextReceiptTests.test_receipt_reconstructs_probe_when_refusals_next_is_run",
+        "test_review_context_findings.ContextReceiptTests.test_queued_unverified_context_uses_the_refusals_probe_step"
+      ]
+    },
+    {
+      "id": "review-status-omits-named-context-turn-on-represented-head",
+      "record": "20261122143013",
+      "class": "diagnostic",
+      "summary": "A prior obligation or a staged binding can hide the context handoff row in status.",
+      "expected": "Status includes one row for the context handoff code and the actual turn, alongside other obligations.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_context_findings.ReplacementContextTests.test_status_names_context_turn_alongside_output_pending",
+        "test_staged_context_exposure.StagedExposureTests.test_s2_s5_predecessor_event_blocks_plan_and_dispatch_and_appears_in_status"
+      ]
+    },
+    {
+      "id": "runtime-missing-handoff-outlives-current-probe",
+      "record": "20261122143013",
+      "class": "runtime failure handoff of a review position",
+      "summary": "A recovered route could leave a head stuck or plan a run that was refused before reservation.",
+      "expected": "A timely later verified probe releases the same head when the read-only dispatch preparation passes. Otherwise the plan gives the specific refusal and operator step.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_continuity_guard_forms.FormFindingTests.test_f4_runtime_handoff_ends_once_the_probe_verifies_the_route",
+        "test_continuity_guard_forms.FormFindingTests.test_runtime_removed_after_probe_keeps_the_install_handoff",
+        "test_continuity_guard_forms.FormFindingTests.test_probe_does_not_make_an_invalid_source_continuation_runnable",
+        "test_continuity_guard_forms.FormOutcomeRowTests.test_g1_runtime_outcomes_execute_their_handoff_steps",
+        "test_continuity_guard_forms.ThirdRoundTests.test_recovered_visual_repair_refuses_the_changed_renderer_before_any_call",
+        "test_continuity_guard_forms.ThirdRoundTests.test_dispatch_and_recovered_planner_walk_the_same_preparation",
+        "test_continuity_guard_forms.FifthRoundTests.test_runtime_scope_drift_refuses_public_plan_and_exact_dispatch"
+      ]
+    },
+    {
+      "id": "session-and-parts-split-counts-parent-failures",
+      "record": "20261122143013",
+      "class": "failure allowance of a paged final",
+      "summary": "Split children could inherit the parent's failures or refusal replacements, while a resumed closing lost its own failure.",
+      "expected": "True splits and new frozen currencies start positions, same-position closings retain their failures, and refusal admission and replay use the position derivation frozen at admission.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_continuity_guard_forms.FormFindingTests.test_f5_page_of_a_split_of_a_session_v4_is_a_new_position",
+        "test_continuity_guard_forms.FormFindingTests.test_split_child_admits_its_first_refusal_replacement",
+        "test_continuity_guard_forms.FormFindingTests.test_resumed_closing_keeps_its_failure_across_condensation",
+        "test_continuity_guard_forms.FormCountingTests.test_g4_page_split_starts_new_positions_without_spending_a_refusal_replacement",
+        "test_continuity_guard_forms.ThirdRoundTests.test_page_of_changed_parts_inventory_admits_its_first_refusal_replacement",
+        "test_continuity_guard_forms.ThirdRoundTests.test_paged_membership_scans_assignment_rows_once_per_evaluation"
+      ]
+    },
+    {
+      "id": "session-v4-held-notes-use-measured-room",
+      "record": "20261122143013",
+      "class": "session v4 held page and closing request notes",
+      "summary": "After a ratio reduction, a held turn advertised notes based on its older material grant. The exact next assignment could not be recorded after using the full note.",
+      "expected": "A held page or closing advertises a notes limit based on the smaller observed planning room. The public next assignment records after a note at that limit.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_requests.SessionRequestTests.test_held_page_and_closing_keep_maximum_notes_at_measured_room"
+      ]
+    },
+    {
+      "id": "session-v4-page-excerpt-allowance-fits-material",
+      "record": "20261122143013",
+      "class": "session v4 page excerpt retention",
+      "summary": "A page could advertise an excerpt allowance larger than its spare material room.",
+      "expected": "A page or closing with any delivery publishes zero excerpt room and refuses a nonempty excerpt list. A carried request-turn excerpt and its source survive the next page and a change of target group.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_requests.SessionRequestTests.test_page_excerpt_creates_a_refusal_record",
+        "test_review_session_v4_requests.SessionRequestTests.test_page_refuses_shared_new_excerpts_and_keeps_request_turn_material",
+        "test_review_session_v4_requests.SessionRequestTests.test_page_and_closing_passage_room_matches_the_form_check",
+        "test_review_session_v4_requests.SessionRequestTests.test_page_has_no_excerpt_room_without_an_eligible_delivery"
+      ]
+    },
+    {
+      "id": "session-v4-page-ratio-fall-after-full-notes-stops-below-floor",
+      "record": "20261122143013",
+      "class": "session v4 page notes after a lower measured ratio",
+      "summary": "An answer that used the full notes room of a page also measured a smaller room. The next assignment was refused with invalid_input from the condensing policy, and the plan named it again.",
+      "expected": "The store refuses that assignment with review_route_capacity_below_floor, which the session preflight turns into a review-stop step. A one-character note in the same state records the next page.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_requests.SessionRequestTests.test_full_notes_with_a_ratio_fall_of_the_same_answer_refuse_the_next_page_below_floor"
+      ]
+    },
+    {
+      "id": "session-v4-paged-request-balance-and-pending-count",
+      "record": "20261122143013",
+      "class": "session v4 page and closing request state",
+      "summary": "The page and closing request form used passage room and open requests from frozen state that the packet did not show.",
+      "expected": "A page or closing packet shows the exact available passage characters and, while requests are open, their pre-delivery count.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_requests.SessionRequestTests.test_page_and_closing_passage_room_matches_the_form_check",
+        "test_review_session_v4_requests.SessionRequestTests.test_page_reports_one_pending_request_through_its_last_part"
+      ]
+    },
+    {
+      "id": "live-run-codex-route-never-verified",
+      "record": "20261122143013",
+      "class": "unaudited native declarations of a new Codex model and a first capacity probe that could not raise the limit",
+      "summary": "Three probes of a gpt-6.2-astra route completed but stayed unverified because the CLI delivered a tool list and a multi-agent role text that the harness had not audited; the probe records did not say why, and a first capacity probe of a model without a prior could only measure its ratio.",
+      "expected": "The audited declarations of the gpt-6.2 models verify, a change of the model listing alone keeps a call verified, each probe record names why it does not verify, and the first capacity probe of a byte-measured Codex route is the character limit of its transport, after which one verified probe admits an assignment that fits.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_capacity_probe.LocalCapacityProbeTests.test_one_capacity_probe_at_the_character_limit_admits_a_route_of_a_model_without_a_prior",
+        "test_review_probe_reasons.ProbeReasonTests.test_an_unaudited_developer_input_is_named_and_verifies_no_capacity",
+        "test_research_codex_transport.CodexNativeDeclarationTests.test_gpt62_rollout_with_its_audited_declarations_verifies",
+        "test_review_call_capture_recovery.CallCaptureRecoveryTests.test_pending_without_capture_remains_unknown_and_reconciliation_records_failure"
+      ]
+    },
+    {
+      "id": "live-run-slate-cited-works-undelivered",
+      "record": "20261122143013",
+      "class": "slate packet without the texts that the candidates cite",
+      "summary": "The slate packet dropped the reading citations of the candidates and delivered no source text, and the slate continued a bar session whose inventory was fixed before two cited works were acquired.",
+      "expected": "A first slate whose candidates cite a work is a session of its own in the slot of the reviewer's bar and delivers the text of each cited work in slate_delivery; a slate without a cited work keeps the form of 0.92.1.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_slate_delivery.SlateDeliveryTests.test_A1_a_cited_work_reaches_a_slate_of_its_own_session",
+        "test_slate_delivery.SlateDeliveryTests.test_A3_the_review_cites_the_delivered_text_and_not_a_text_of_the_bar_session"
+      ]
+    },
+    {
+      "id": "live-run-slate-refresh-over-route-limit",
+      "record": "20261122143013",
+      "class": "slate refresh replaying the bar session and the earlier slate turn",
+      "summary": "The refresh of a slate review after a revised candidate was one more turn of the bar session and was refused with review_route_capacity_below_floor on the route that held the first slate.",
+      "expected": "The refresh of an ordinary slate review is a new chain in its slot without history; its review gives a finding on every earlier objection and supersedes the earlier review.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_slate_refresh_chain.SlateRefreshChainTests.test_B6_incident_a_refresh_fits_the_route_on_which_the_first_slate_fitted",
+        "test_slate_refresh_chain.SlateRefreshChainTests.test_B3_the_refreshed_review_gives_findings_and_supersedes_the_earlier_one",
+        "test_slate_refresh_chain.SlateRefreshPlanTests.test_B9_the_plan_of_a_refresh_that_does_not_fit_is_a_stop_whose_step_the_store_takes",
+        "test_slate_refresh_chain.SlateRefreshPlanTests.test_B8_a_refresh_chain_delivers_a_cited_work_and_its_review_cites_it"
+      ]
+    },
+    {
+      "id": "staged-context-exposure-disagrees-at-plan-and-launch",
+      "record": "20261122143013",
+      "class": "dead-end",
+      "summary": "A staged task refused for contamination can be offered again by the planner, and contamination of its controller exposure can be missed before launch.",
+      "expected": "The controller and tasks share the same exposure. The planner and dispatch agree on the handoff. The reservation and launch claim reject a newly named event, and a refused unlaunched reservation is released. Captured answers can still be accepted.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_staged_context_exposure.StagedExposureTests.test_s1_s5_task_event_blocks_plan_and_dispatch_and_repairs_epoch",
+        "test_staged_context_exposure.StagedExposureTests.test_s2_s5_predecessor_event_blocks_plan_and_dispatch_and_appears_in_status",
+        "test_staged_context_exposure.StagedExposureTests.test_s3_event_after_child_check_blocks_serialized_reservation",
+        "test_staged_context_exposure.StagedExposureTests.test_s3_event_after_reservation_blocks_claim_and_releases_capacity",
+        "test_staged_context_exposure.StagedExposureTests.test_s4_s5_waiting_dispatch_rereads_route_proof",
+        "test_staged_context_exposure.StagedAdjudicatorExposureTests.test_s6_staged_adjudicator_tasks_share_the_controller_exposure"
+      ]
+    },
+    {
+      "id": "v7-below-floor-offers-impossible-smaller-statement",
+      "record": "20261122143013",
+      "class": "problem openness admission and successor stop",
+      "summary": "An admission with zero admissible targets offered or asked about removing neighbours.",
+      "expected": "The question and steps offer only the route journey at zero targets, including an older stored successor.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_continuity_guard_forms.FormFindingTests.test_f6_below_floor_stop_offers_no_smaller_statement_when_none_fits",
+        "test_continuity_guard_forms.FormRequiredStopTests.test_k7_route_below_the_minimum_of_a_final_stops_before_any_call_with_pages_installed",
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_no_successor_stops_with_two_answers_and_an_executable_route"
+      ]
+    },
+    {
+      "id": "v7-chain-takes-calls-after-a-carried-turn-is-contaminated",
+      "record": "20261122143013",
+      "class": "carried selection",
+      "summary": "A bounded chain kept taking calls after a carried turn was contaminated or its origin route lost verified proof. A carried-route handoff could also require futile recovery or retain a different command from its supplied step.",
+      "expected": "Before new work read current state for all selected prefixes. Probe a recoverable origin or take its ordered retirement when it can restore prior proof. Export a fresh packet if an own or carried contamination or a permanently unverified origin requires it. Retain the concrete refusal action after fresh admission, including after a queued wait. The math successor preserves the exact attested scientific target, the chain reviewer and the required fresh attestation. A newly material search makes the minimum a choice, with its search IDs in the handoff. The real controller exports both a current minimum and a still-valid fixed minimum, and the store admits the replacements. Standalone recovery applies the carried check. A later material search changes the concrete minimum prerequisite and its new receipt. Page, closing and combine all export the successor from their public stop. Row 5 fixes a version 1 minimum only for the claim that the retained digest names in the portable native; otherwise it leaves one openness choice for the exact claim.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_chain_content_stop.SeriesCarriedTurnStopTests.test_w1_series_makes_no_call_after_a_contamination_of_a_carried_turn",
+        "test_openness_chain_content_stop.SeriesOtherRouteRecordTests.test_w2_series_waits_for_a_probe_and_then_records_its_finding",
+        "test_openness_chain_content_stop.OtherRouteRecordTests.test_own_contamination_preempts_origin_probe_and_retirement",
+        "test_openness_chain_content_stop.OtherRouteRecordTests.test_stale_route_record_of_a_carried_chain_is_retired_and_the_chain_continues",
+        "test_openness_chain_content_stop.OtherRouteRecordTests.test_stale_route_record_whose_answer_does_not_verify_it_gives_the_export",
+        "test_openness_chain_content_stop.NestedChainTests.test_w9_nested_origin_is_checked_without_a_direct_selection",
+        "test_chain_stop_math_successor.MathSuccessorSubjectTests.test_combine_keeps_the_required_controller_fields_and_fixed_minimum",
+        "test_chain_stop_series_receipts.CarriedRouteReceiptTests.test_retirement_and_renewal_use_the_refusals_concrete_step",
+        "test_chain_stop_series_receipts.CarriedRouteReceiptTests.test_own_contamination_refusal_retains_its_nested_handoff",
+        "test_chain_stop_series_receipts.CarriedRouteReceiptTests.test_queued_call_rechecks_the_origin_and_retains_its_probe_step",
+        "test_chain_stop_math_successor.MathSuccessorSubjectTests.test_carried_stop_opens_minimum_rejected_by_the_controller",
+        "test_chain_stop_math_successor.MathSuccessorSubjectTests.test_carried_math_origin_probe_and_retirement_advance_the_plan",
+        "test_chain_stop_recovered_readiness.RecoveredReadinessTests.test_recovered_bounded_call_matches_fresh_dispatch",
+        "test_chain_stop_series_receipts.MathMinimumReceiptTests.test_second_material_search_gets_a_distinct_retained_export",
+        "test_chain_stop_math_successor.MathSuccessorSubjectTests.test_historical_wrong_claim_minimum_opens_both_public_exports",
+        "test_chain_stop_math_successor.MathSuccessorSubjectTests.test_minimum_is_open_when_only_controller_state_can_establish_the_claim"
+      ]
+    },
+    {
+      "id": "v7-chain-takes-turns-after-its-own-content-changed",
+      "record": "20261122143013",
+      "class": "review-continuity",
+      "summary": "A bounded reading chain kept sending turns after a source bundle or alternate extraction changed its units or their delivery order. Final verification then refused the finding. A math successor could also lose the exact attested subject on a compact final.",
+      "expected": "Compare the exact frozen pre-carried inventory before a further plan, assignment or send. Give an actionable new packet with the same reviewer and the exact attested math target, probing a fixed unverified destination before export. Name every unavailable bound math reading and only the units that were lost. Keep a recorded head done and direct reassessment of its stale finding to a fresh packet. A latest finding that fails verification gives reassessment. A superseded finding identifies the current finding. The driver retains the complete probe on queue wake. Distinct probe bindings have distinct receipts, and replaying the same binding keeps its receipt. Standalone runtime recovery applies the same own-unit check as fresh dispatch and retains the executable refusal. A healthy math-v1 call preview and dispatch check the turn limits without building the unused admission decision.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_chain_content_stop.SuppliedOwnContentStopTests.test_v2_planner_hands_off_when_the_gaps_of_the_minimum_did_not_change",
+        "test_openness_chain_content_stop.SeriesOwnContentStopTests.test_j1_series_stops_and_a_later_chain_carries_the_ready_turns_of_the_stopped_chain",
+        "test_openness_chain_content_stop.InventoryOrderStopTests.test_reordered_equal_units_stop_plan_and_send",
+        "test_openness_chain_content_stop.InventoryOrderStopTests.test_series_stops_after_an_alternate_extraction_reorders_equal_units",
+        "test_openness_chain_content_stop.OwnContentStopTests.test_successor_probes_its_destination_before_the_only_export",
+        "test_openness_chain_content_stop.OwnContentStopTests.test_recorded_stale_finding_points_to_reassessment",
+        "test_chain_stop_math_successor.MathSuccessorSubjectTests.test_compact_final_preserves_attested_subject_in_controller_export",
+        "test_openness_chain_content_stop.MathBindingStopTests.test_math_stop_lists_both_changed_versions",
+        "test_openness_chain_content_stop.MathBindingStopTests.test_math_stop_keeps_the_other_original_of_the_same_version",
+        "test_chain_stop_series_receipts.MathPacketReceiptTests.test_math_refusal_retains_the_review_packet_command_and_root",
+        "test_chain_stop_series_receipts.OwnRouteReceiptTests.test_queued_call_retains_the_own_route_probe_from_its_nested_refusal",
+        "test_chain_stop_series_receipts.OwnRouteReceiptTests.test_probe_targets_have_distinct_receipts_and_repeating_the_target_reuses_it",
+        "test_chain_stop_recovered_readiness.RecoveredReadinessTests.test_recovered_bounded_call_matches_fresh_dispatch",
+        "test_openness_math_successor.MathV1CallPreparationTests.test_healthy_v1_preview_and_dispatch_skip_unused_minimum_validation"
+      ]
+    },
+    {
+      "id": "v7-reading-turn-omitted-notes-cost-and-list-rows",
+      "record": "20261122143013",
+      "class": "notes allowance and list paging in a bounded review",
+      "summary": "The paid record 12 chain omitted the serialized cost of the notes and offered an empty unread list in its prompt. A list can also end in the page delivered with the current turn.",
+      "expected": "A new v7 or math v2 chain reserves and supplies notes_cost and lists in its reading, final, page and closing bindings and adds their two prompt paragraphs. The output check uses the same notes measure and list cursors. A stored chain keeps its original frame, packet and prompt.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_members.NotesCostTests.test_the_stated_use_is_the_number_that_the_check_compares_with_the_bound",
+        "test_openness_reading_v7_members.ListRowsTests.test_the_answer_check_accepts_exactly_the_requests_that_the_member_offers",
+        "test_openness_reading_v7_members.PagedMembersTests.test_a_page_delivering_the_last_page_drops_that_list",
+        "test_openness_reading_v7_members.PagedMembersTests.test_a_page_carrying_only_segments_states_zero_notes_used",
+        "test_openness_reading_v7_members.PagedMembersTests.test_closing_keeps_both_members_and_the_same_notes_refusal_bound",
+        "test_openness_reading_v7_members.MathMembersTests.test_math_v2_reading_uses_the_same_members_and_paragraphs",
+        "test_openness_finding_compatibility.StoredFindingCompatibilityTests.test_final_packet_rebuilds_with_the_saved_bytes_for_both_releases",
+        "test_openness_final_pages.FinalPagesCommandTests.test_a5_q7_nine_targets_record_one_authenticated_composite",
+        "test_openness_page_replacement.PageReplacementTests.test_capacity_split_of_refused_closing_runs_combine_with_the_frozen_notice",
+        "test_openness_page_replacement.ClosingDeliveryTests.test_closing_delivers_a_requested_passage_within_its_material_and_request_bounds",
+        "test_openness_page_replacement.PageReplacementTests.test_refused_closing_freezes_a_bounded_notice_that_its_combine_holds",
+        "test_openness_page_replacement.PageReplacementTests.test_frozen_whole_notice_over_the_reserve_ends_in_the_capacity_decision",
+        "test_openness_reading_v7_members.PagedMembersTests.test_a_closing_over_unread_rows_with_a_delivery_and_a_full_notice_fits_its_bound"
+      ]
+    },
+    {
+      "id": "write-lock-held-for-a-replay-of-the-whole-history",
+      "record": "20261122143013",
+      "class": "concurrency",
+      "summary": "Writes held the SQLite write lock during a full JSON replay of the event history.",
+      "expected": "Authenticate the preliminary prefix inside the use transaction and run full or suffix replay when needed. Retain release verdicts and check that repeating a completed replay in a read transaction is detected.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_history_proof.WorkThatLeavesTheWriteLockTests.test_a_scoped_write_after_the_commit_of_another_writer_replays_only_the_added_event",
+        "test_history_proof.NoLockWhileDecodingTests.test_a_read_decodes_the_history_with_no_transaction_open",
+        "test_history_proof.NoLockWhileDecodingTests.test_a_second_replay_inside_the_transaction_fails_the_phase_assertion",
+        "test_history_proof_bytes.HistoryProofBytesTests.test_mixed_faults_follow_release_order",
+        "test_history_change_refusals.HistoryChangeRefusalTests.test_history_changes_are_refused_as_by_0_91_11"
+      ]
+    },
+    {
+      "id": "postdated-origin-hides-carried-reading",
+      "record": "20261122143013",
+      "class": "carried selection",
+      "summary": "A postdated earlier first assignment could be skipped before its history was checked. Check and publication allowed an empty carry or the superseded origin, and successor planning could request a nonexistent cutoff.",
+      "expected": "Compare authenticated creation to the cutoff, then refuse a matching pre-cutoff origin with a bad stamp, naming the earlier first assignment.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried_integration.StoredSelectionIntegrationTests.test_postdated_origin_refuses_check_assignment_and_successor",
+        "test_openness_carried_integration.StoredSelectionIntegrationTests.test_verification_refuses_a_postdated_origin_of_a_stored_selection",
+        "test_openness_carried.CarriedRefusalTests.test_null_and_string_origin_stamps_give_the_history_refusal"
+      ]
+    },
+    {
+      "id": "selection-only-v2-store-loses-history",
+      "record": "20261122143013",
+      "class": "historical input",
+      "summary": "An unmanaged store with a v2 selection and no reading-chain member lost its historical reader.",
+      "expected": "Retain history for either marker.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_storage.ResearchStorageTests.test_store_with_a_reading_chain_keeps_its_history"
+      ]
+    },
+    {
+      "id": "inventory-runtime-overlay-reader",
+      "record": "20261122143013",
+      "class": "reviewer runtime",
+      "summary": "The session inventory overlay could not answer a route standing read.",
+      "expected": "Pass the runtime reader through to the underlying artifact store.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_installed_runtime_readers.RuntimeOverlayTests.test_route_standing_passes_through_the_inventory_overlay",
+        "test_installed_runtime_readers.RuntimeOverlayTests.test_session_inventory_does_not_read_the_installed_runtime"
+      ]
+    },
+    {
+      "id": "parts-v3-typed-scientific-and-request-answers",
+      "record": "20261122143013",
+      "class": "Parts v3 answer contract",
+      "summary": "A scientific combination could bear on an unassigned target or request a stored card. Malformed shapes could escape the review refusal contract.",
+      "expected": "A combine, check or request answer with a foreign handle or malformed field receives the structured refusal. A valid bearing routes the checked finding.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3.RequestAnswerTests.test_combination_bearing_names_distinct_targets",
+        "test_review_parts_v3.RequestAnswerTests.test_combination_read_names_only_inventory_ranges",
+        "test_review_parts_v3.RequestAnswerTests.test_malformed_answers_get_contract_refusals",
+        "test_review_parts_v3_pages.FinalPlanningTests.test_page_refuses_unhashable_target_and_id_under_shape_contract",
+        "test_review_parts_v3_pages.FinalPlanningTests.test_final_refuses_incomplete_ranges_and_blank_body_selectors"
+      ]
+    },
+    {
+      "id": "parts-v3-requested-blocks-and-original-ranges",
+      "record": "20261122143013",
+      "class": "Parts v3 delivery and replay",
+      "summary": "A valid block or fragment request could fail the next assignment. A partial original could leave the reviewer without a way to see or end the remaining delivery.",
+      "expected": "Deliver the named record. Show the pending range after the delivered part, and let the next answer continue or end that delivery.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3_pages.PagedSeriesTests.test_checked_contradiction_reaches_page_after_condensing_then_records",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_answer_abandons_pending_original_and_next_page_records",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_empty_request_continues_pending_original_twice",
+        "test_review_parts_v3_pages.FinalPlanningTests.test_first_page_after_currency_change_binds_requested_record_before_fold",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_currency_source_request_keeps_page_one_and_optional_source_unrequested",
+        "test_review_parts_v3_pages.FinalPlanningTests.test_explicit_range_of_a_stored_block_is_citable_by_its_printed_handle",
+        "test_review_parts_v3_pages.FinalPlanningTests.test_request_by_the_printed_handle_is_admitted_on_its_first_delivery"
+      ]
+    },
+    {
+      "id": "parts-v3-final-reference-tables-and-page-citations",
+      "record": "20261122143013",
+      "class": "Parts v3 final packet and composite references",
+      "summary": "A final lacked the copied bindings and tables of requestable material. Closing decision rows lost the original citation handles.",
+      "expected": "A final receives its bounded reference data, and closing keeps the page's ordered citation handles and fillable pointers.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3.RecordedSeriesTests.test_result_final_names_bindings_places_sources_and_arguments",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_closing_lists_binding_pointers_and_original_page_citations",
+        "test_review_parts_v3_pages.FinalPlanningTests.test_reference_tables_are_prefixes_within_the_final_material_bound",
+        "test_review_parts_v3_pages.FinalPlanningTests.test_places_include_large_and_nested_lists_of_duplicate_units",
+        "test_review_parts_v3_pages.FinalPlanningTests.test_escaped_slate_page_prices_the_pointer_map_before_delivery",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_page_handle_and_colliding_objection_keep_both_decisions",
+        "test_review_parts_v3_pages.FinalPlanningTests.test_decision_row_skips_oversized_citation_before_later_short_citation"
+      ]
+    },
+    {
+      "id": "parts-v3-single-final-after-inventory-change",
+      "record": "20261122143013",
+      "class": "Stored final page plan and inventory change",
+      "summary": "A late unit after a capacity split could produce a singleton stored final plan but an assigned page shape.",
+      "expected": "The replan emits an ordinary final, preserves its page-plan reference and delivers pending originals.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3_pages.PagedSeriesTests.test_late_unit_replans_split_final_as_one_role_answer",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_ordinary_final_plans_store_accepted_request_and_material_steps"
+      ]
+    },
+    {
+      "id": "record-check-parts-v3-composite-mismatch-identifiers",
+      "record": "20261122143013",
+      "class": "Acceptance record qualification",
+      "summary": "A composite mismatch on a native acceptance left out the link and acceptance identifiers.",
+      "expected": "The refusal details name both identifiers from the stored acceptance link.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_record_check.RecordCheckFollowupTests.test_composite_mismatch_identifies_acceptance_link",
+        "test_review_parts_v3_pages.AdapterPageTests.test_native_command_pages_record_an_acceptance_with_composite_binding"
+      ]
+    },
+    {
+      "id": "parts-v3-turn-prompt-reserve",
+      "record": "20261122143013",
+      "class": "review capacity",
+      "summary": "A parts turn consumed text room that admission did not reserve.",
+      "expected": "The stored frame declares the maximum prompt of each kind and the refusal paragraph reserve. A route below its minimum refuses admission.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3_turn.RecordedTurnTests.test_ta1_ta4_stored_prompt_reserves_and_second_read",
+        "test_review_parts_v3_turn.PromptFloorTests.test_ta2_one_character_below_the_read_floor_refuses"
+      ]
+    },
+    {
+      "id": "parts-v3-turn-packet-prompt",
+      "record": "20261122143013",
+      "class": "review prompt",
+      "summary": "A v3 assignment or replacement inherited an ordinary task’s paragraphs and prompt instructions.",
+      "expected": "Each v3 turn authenticates with the paragraphs selected by its packet and its versioned role text, with the turn instructions last in the canonical text.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3_turn.RecordedTurnTests.test_ta3_single_output_replacement_uses_its_own_packet_paragraphs",
+        "test_review_parts_v3_turn.RecordedTurnTests.test_ta3_ta6_driven_turns_refusal_and_frame_unit",
+        "test_review_parts_v3_turn.TurnPromptTests.test_ta5_each_v3_final_form_puts_its_turn_instructions_last"
+      ]
+    },
+    {
+      "id": "parts-v3-overflow-field-handle",
+      "record": "20261122143013",
+      "class": "review references",
+      "summary": "A frame descriptor showed a path hash instead of the assigned unit handle.",
+      "expected": "A final can request and cite the descriptor’s unit handle and record the review.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3_turn.RecordedTurnTests.test_ta3_ta6_driven_turns_refusal_and_frame_unit"
+      ]
+    },
+    {
+      "id": "parts-v3-read-bearings-and-types",
+      "record": "20261122143013",
+      "class": "review answer contract",
+      "summary": "A card could omit required bearings due to a fixed entry cap, and malformed answer members could raise a Python exception.",
+      "expected": "Each card permits one entry per target bounded by its character allowance, optional unborne entries identify targets without a bearing, and malformed members give stable refusals.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3_turn.ReadAnswerTests.test_ta7_distinct_bearings_and_partial_unborne",
+        "test_review_parts_v3_turn.ReadAnswerTests.test_ta8_malformed_members_are_refused",
+        "test_review_parts_v3_turn.ReadAnswerTests.test_ta9_size_refusals_explain_their_own_rule"
+      ]
+    },
+    {
+      "id": "parts-v3-repair-composition-targets",
+      "record": "20261122143013",
+      "class": "review composition",
+      "summary": "A bar or slate repair admitted with historical targets alone while composition also expected the ordinary role targets.",
+      "expected": "Admission and the page composition rule agree on the complete target order. Recorded v2 repairs retain their adapter target rule.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3_turn.AdmissionTests.test_ta10_admission_takes_composition_targets"
+      ]
+    },
+    {
+      "id": "slate-single-under-character-limit-over-token-limit",
+      "record": "20261122143013",
+      "class": "slate input capacity",
+      "summary": "A new slate's ordinary packet fits the character limit and exceeds the applied token limit.",
+      "expected": "A fresh slate or eligible context repair uses the applied route limit for its start. The slate reaches its verified final in bounded turns.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_slate.SlateSeriesTests.test_a_slate_over_the_token_limit_of_its_route_starts_a_series",
+        "test_review_parts_repair_journey.RepairCapacityTests.test_a_repair_over_the_token_limit_of_its_route_requires_parts"
+      ]
+    },
+    {
+      "id": "fitted-single-result-loses-required-assessment-body",
+      "record": "20261122143013",
+      "class": "packet preservation",
+      "summary": "A fitting ordinary request can elide a required assessment artifact, including after v3 refuses a refresh.",
+      "expected": "Preserve the body in a series or refuse the assignment when no eligible plan remains.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_result_parts_restart.ProblemResultWideRouteTests.test_a_fitted_single_cannot_drop_required_assessment_text",
+        "test_slate_series_start_regressions.ResultStartRegressionTests.test_lossy_refresh_single_stays_ineligible_after_v3_refusal"
+      ]
+    },
+    {
+      "id": "recorded-review-successor-reenters-as-new-parts-series",
+      "record": "20261122143013",
+      "class": "recorded protocol continuity",
+      "summary": "Earlier series and source children were considered as new parts entries. A genuine slate refresh was disqualified by its prior ID.",
+      "expected": "A recorded v1/v2 continuation keeps its protocol. The v1 size restart and output recovery remain available. An ordinary child follows its chain and a genuine refresh can enter a new one.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_result_parts_restart.ProblemResultWideRouteTests.test_a_fitting_v1_successor_keeps_its_protocol_with_v3_first",
+        "test_problem_result_parts_restart.ProblemResultRestartTests.test_a_recorded_v2_successor_keeps_its_protocol_with_v3_first",
+        "test_problem_result_parts_restart.ProblemResultRestartTests.test_refusal_starts_v2_even_when_ordinary_without_replay_would_fit",
+        "test_review_parts_repair_journey.OrdinaryRepairSuccessorTests.test_an_ordinary_repair_successor_keeps_its_form",
+        "test_slate_series_start_regressions.ResultStartRegressionTests.test_ordinary_child_of_refresh_does_not_start_a_series",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_single_slate_refresh_can_start_parts",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_legacy_refresh_starts_parts_with_both_preferences",
+        "test_slate_series_start_regressions.RepairStartRegressionTests.test_selected_source_request_retry_keeps_the_ordinary_repair"
+      ]
+    },
+    {
+      "id": "slate-series-starts-before-forming-bodies-can-be-delivered",
+      "record": "20261122143013",
+      "class": "imported slate series continuity",
+      "summary": "A slate series could spend its first call before noticing a missing PDF, or could change the imported/native inventory on turn two.",
+      "expected": "A required typed or generic binary gets a capture handoff before a call. The continuing slate keeps the recorded native/import projections and a text-import journey reaches a verified final.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_slate.SlateSeriesTests.test_an_imported_binary_body_requires_text_before_the_first_read",
+        "test_review_parts_slate.SlateSeriesTests.test_a_slate_over_the_token_limit_of_its_route_starts_a_series",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_generic_pdf_and_raster_stop_before_the_first_read",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_reference_free_raw_head_retains_its_next_inventory",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_ascii_pdf_stops_even_when_v4_has_room",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_fitting_single_still_requires_a_bound_original",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_missing_late_body_stops_both_forming_projections",
+        "test_slate_series_start_regressions.ReleasedSlateChainTests.test_late_pdf_in_a_released_single_chain_is_captured_before_the_next_turn",
+        "test_slate_series_start_regressions.ReleasedSlateChainTests.test_refresh_of_a_released_recorded_slate_captures_its_pdf_first",
+        "test_slate_series_start_regressions.ReleasedSlateChainTests.test_repair_of_a_released_recorded_slate_captures_its_pdf_first",
+        "test_slate_series_start_regressions.ReleasedSlateChainTests.test_the_fixture_holds_no_local_path"
+      ]
+    },
+    {
+      "id": "refused-v3-repair-enters-unbounded-v2-planner",
+      "record": "20261122143013",
+      "class": "fresh context repair capacity",
+      "summary": "V3 refused a fresh repair, then v2 tried an oversized read. A cap already resolved by a later reviewed attempt also opened this fallback.",
+      "expected": "A fresh repair of a head that is no recorded v3 series, which v3 refuses, is planned by the parts protocol v2 only through the coverage check of the assignment: an oversized read is not recorded, and a read that the route cannot carry or a planner of v2 without room ends in the capacity stop with its answers. A recorded v3 series keeps the refusal of v3 (design D6). A stored v2 repair and an outstanding output recovery keep their earlier paths.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_repair_journey.FreshRepairStartTests.test_a_fresh_repair_refused_by_v3_reaches_v2_only_through_the_coverage_check",
+        "test_slate_series_start_regressions.RepairStartRegressionTests.test_reviewed_cap_retry_repair_reaches_v2_only_through_the_coverage_check",
+        "test_repair_after_v3_refusal.ResultRepairAfterV3RefusalTests.test_a_refusal_of_the_v2_planner_after_v3_is_the_capacity_stop_with_answers",
+        "test_review_capacity_steps.CapacityRepairStepsTests.test_repair_refused_by_the_selected_parts_v3_keeps_the_answers_of_its_capacity_stop",
+        "test_continuity_guard_forms.FormRequiredStopTests.test_k7_parts_v3_page_and_closing_floors_execute_every_answer"
+      ]
+    },
+    {
+      "id": "slate-text-capture-needs-original-and-text-binding",
+      "record": "20261122143013",
+      "class": "forming evidence provenance",
+      "summary": "A generic pin could impersonate an extraction. A stale ID blocked correction, and the slate missed available text outside its ordinary packet.",
+      "expected": "An exact original/text binding supplies the required body. A later declaration serves future chains and a stored series keeps its frozen bytes. A raw oversized import uses the same handoff.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_generic_artifact_at_capture_id_cannot_claim_original",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_capture_replaces_occupied_id_and_selected_text_stays_frozen",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_existing_extracted_text_is_resolved_outside_the_packet",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_raw_large_import_uses_capture_step_then_parts",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_capture_answer_accepts_each_step_with_two_uncaptured_bodies"
+      ]
+    },
+    {
+      "id": "slate-capacity-stop-loses-serving-route",
+      "record": "20261122143013",
+      "class": "serving route discovery",
+      "summary": "The capture stop hid a route that could record a fitting single. Discovery could feed a projected result read into a new planner.",
+      "expected": "Preserve the capture answer, trial verified routes from logical input or a bound turn, and name routes that fit. Discovery trials the exact public payload for first entries, running slate series and problem reviews.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_slate_series_start_regressions.ResultStartRegressionTests.test_route_discovery_does_not_replan_projected_result_read",
+        "test_review_parts_slate.SlateSeriesTests.test_route_discovery_offers_local_parts_for_an_oversized_slate",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_capture_stop_with_legacy_parent_never_offers_an_illegal_route",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_fresh_capture_does_not_offer_a_route_that_fails_the_session_floor",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_parts_floor_offers_the_fitting_single_from_exact_assignment",
+        "test_slate_series_start_regressions.SlateStartRegressionTests.test_a_slate_above_a_fixed_character_limit_stops_without_a_probe_answer"
+      ]
+    },
+    {
+      "id": "session-v4-pointed-request-refusal",
+      "record": "20261122143013",
+      "class": "Session v4 request refusal and replacement",
+      "summary": "A refused request gave the replacement the whole answer, without the failing field and its compared values. Cursor refusals gave the v7 answer form.",
+      "expected": "The replacement receives the session check, the failing pointer, the answer fragment and registered details. A stub corrects the request from those values and records its final.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_requests.SessionRequestTests.test_reviewer_corrects_a_refused_request_from_the_replacement_notice",
+        "test_review_session_v4_requests.SessionRequestTests.test_list_cursor_uses_session_contract_and_preserves_cursor_details"
+      ]
+    },
+    {
+      "id": "session-v4-abstract-handle",
+      "record": "20261122143013",
+      "class": "Session v4 abstract citation",
+      "summary": "A problem or study bar cited a delivered abstract by handle and the source-link check required full text.",
+      "expected": "Whole unit, part and excerpt handles of the abstract record its artifact descriptor. A span fails before recording.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_requests.SessionRequestTests.test_problem_bar_records_an_abstract_by_its_unit_or_part_handle",
+        "test_review_session_v4_requests.SessionRequestTests.test_problem_bar_records_an_abstract_by_its_excerpt_handle",
+        "test_review_session_v4_requests.SessionRequestTests.test_abstract_span_is_refused_as_an_invalid_handle",
+        "test_review_session_v4_requests.SessionRequestTests.test_study_bar_records_an_abstract_by_its_handle"
+      ]
+    },
+    {
+      "id": "session-v4-request-completion-and-bounds",
+      "record": "20261122143013",
+      "class": "Session v4 delivery closure and list serialization",
+      "summary": "A request for an uncaptured full text kept producing empty turns. Oversized rows could be silently dropped and duplicate cursors could enter the queue.",
+      "expected": "Unavailable rows close the pending request in request and page turns. An oversized row and a competing list request receive pointed refusals.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_requests.SessionRequestTests.test_unavailable_source_request_closes_before_recorded_final",
+        "test_review_session_v4_requests.SessionRequestTests.test_unavailable_source_request_leaves_the_same_page_ready_to_answer",
+        "test_review_session_v4_requests.SessionRequestTests.test_route_measured_request_row_over_its_limit_is_refused",
+        "test_review_session_v4_requests.SessionRequestTests.test_duplicate_list_requests_are_refused_before_they_can_queue",
+        "test_review_session_v4_requests.SessionRequestTests.test_three_escape_heavy_inventory_pages_are_served_in_v3_and_v4",
+        "test_review_session_v4_requests.SessionRequestTests.test_every_page_answer_previews_the_next_capacity_and_takes_the_stop",
+        "test_review_session_v4_requests.SessionRequestTests.test_planner_previews_reuse_authenticated_history"
+      ]
+    },
+    {
+      "id": "session-v4-request-room-and-field-identity",
+      "record": "20261122143013",
+      "class": "Session v4 packet allowances and identifiers",
+      "summary": "The passage limit had to be inferred from frozen state. A frame row lacked the field pointer and a result page lacked the objection id.",
+      "expected": "The request packet shows the same combined passage limit the validator uses. Frame deliveries state the escaped pointer. Target rows retain distinct ids within the measured bound.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_requests.SessionRequestTests.test_packet_passage_room_matches_the_form_checks_combined_limit",
+        "test_review_session_v4_requests.SessionRequestTests.test_frame_delivery_names_the_escaped_field_pointer",
+        "test_review_session_v4_requests.SessionRequestTests.test_result_page_target_names_the_objection_id"
+      ]
+    },
+    {
+      "id": "session-v4-planned-assignment-identity",
+      "record": "20261122143013",
+      "class": "Session v4 assignment planning and authentication",
+      "summary": "A maximum-length root produced an unwritable successor. A scientific refusal consumed its position through the wrong replacement context, and normalized identity spelling could produce a stored turn that failed authentication.",
+      "expected": "Planned successor and refresh ids fit the writer, the notice-bearing replacement retains the failure, and the capacity replacement authenticates with its parent's exact identity.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_requests.SessionRequestTests.test_planned_successors_and_refresh_of_a_maximum_length_root_are_writable",
+        "test_review_session_v4_requests.SessionRequestTests.test_scientific_refusal_requires_the_notice_path_and_a_bounded_id",
+        "test_review_session_v4_requests.SessionRequestTests.test_planned_children_share_parent_identity_and_only_one_capacity_child"
+      ]
+    },
+    {
+      "id": "session-v4-stored-turn-operands",
+      "record": "20261122143013",
+      "class": "Session v4 stored-turn authentication",
+      "summary": "A missing chain or predecessor reference could escape as a Python exception and make review-series lose the stored-turn diagnosis.",
+      "expected": "Absent operands produce the stored-turn invocation error and integrity failures keep their original artifact diagnosis. The check also covers a missing and a mismatched capacity_plan_kind.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_requests.SessionRequestTests.test_missing_page_binding_operands_keep_the_stored_turn_diagnosis",
+        "test_review_session_v4_requests.SessionRequestTests.test_missing_request_root_or_replacement_origin_is_unverified",
+        "test_review_session_v4_requests.SessionRequestTests.test_public_page_binding_checks_assignments_routes_and_reference_members"
+      ]
+    },
+    {
+      "id": "session-v4-selected-composite-recording",
+      "record": "20261122143013",
+      "class": "Session v4 public continuation",
+      "summary": "The closing turn's raw fields were offered as the payload of value-review even when a selected composite held the scientific answer.",
+      "expected": "The exact public recording action selects the authenticated closing composite and preserves the reading prerequisites. The composite is validated once in the write.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_requests.SessionRequestTests.test_closing_request_records_the_exact_composite_plan",
+        "test_review_session_v4_requests.SessionRequestTests.test_public_request_progress_product"
+      ]
+    },
+    {
+      "id": "session-v4-failed-turn-capacity-stop",
+      "record": "20261122143013",
+      "class": "Session v4 public continuation",
+      "summary": "A page answer at the output cap failed its turn, the replacement had no room under the pinned plan, and the plan printed a route step that the store refused.",
+      "expected": "The failed turn takes the same writable after-turn stop as its ordinary sibling, and the stop states the pinned limit.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_requests.SessionRequestTests.test_capped_page_answer_takes_the_same_writable_stop_as_its_ordinary_sibling"
+      ]
+    },
+    {
+      "id": "parts-v3-paged-closing-recording-step",
+      "record": "20261122143013",
+      "class": "Parts v3 public continuation",
+      "summary": "The planner offered the fields of the selected closing turn of a final in pages as the payload of value-review or review-adjudication; the store refused it and the plan did not change.",
+      "expected": "The recording step carries the authenticated closing composite, the store records it, and the next plan is done.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3_pages.PagedSeriesTests.test_forty_targets_reach_a_recorded_review",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_checked_contradiction_reaches_page_after_condensing_then_records",
+        "test_review_parts_v3_pages.AdapterPageTests.test_adjudicator_pages_record_the_disposition"
+      ]
+    },
+    {
+      "id": "live-run-ended-at-a-slate-without-a-selection",
+      "record": "20261122143013",
+      "class": "no next search step after a slate that selects nothing",
+      "summary": "After two slate reviews refused the candidates, the record held a slate with an empty selection and a report, next gave problem_no_post, and the run ended without a post.",
+      "expected": "With a current slate that selects nothing and no post, next names the next search step, each named step is accepted, and a record without a post names the record in which the search continues.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_search.SearchAfterRefusalTests.test_next_names_the_first_way_after_a_slate_that_selects_nothing",
+        "test_problem_search.SearchAfterRefusalTests.test_each_named_step_is_accepted_until_the_search_leaves_the_record"
+      ]
+    },
+    {
+      "id": "r093-st-f2",
+      "record": "20261122143013",
+      "class": "export stop of a citation that its registry step refuses",
+      "summary": "An export refusal of a citation of a DOI or arXiv work named problem-citation-metadata, which refuses such a work.",
+      "expected": "An export refused for a citation names the cited version in details.version_id; for a work that problem-citation-metadata does not take, the refusal carries details.refusal and details.decision (record-check, status) in place of the registry step problem-citation-metadata.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_citation_rules.CitationExportCompatibilityTests.test_registry_citation_stop_names_a_step_that_the_store_takes"
+      ]
+    },
+    {
+      "id": "r093-review-math",
+      "record": "20261122143013",
+      "class": "math v2 stops and capacity steps of the merged tree",
+      "summary": "Math v2 stops after an answer made review-series raise and offered record-check; a capped head looped on a printed step naming itself; the route class condition stated a refusal that the store does not give.",
+      "expected": "review-series ends at the stale or blocked stop of a math v2 chain, a stale stop after a refused final answers with its export, a series after a cap answer names the successor, a stop step that names another chain runs that chain, and a v7 final at its output cap states no route class condition.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_series_ends_at_the_stale_stop_after_a_recorded_approval",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_series_ends_at_the_blocked_stop_of_an_approved_hypothesis",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_stale_stop_after_a_refused_final_answers_with_its_export",
+        "tests.test_reading_math_v2_controller.MathRequestControllerTests.test_series_after_a_cap_answer_names_the_successor",
+        "test_series_ending.SeriesEndingTests.test_stop_step_that_names_another_chain_runs_that_chain",
+        "test_continuity_guard_stage3.Stage3MatrixTests.test_v7_final_at_its_output_cap_states_no_route_class_condition"
+      ]
+    },
+    {
+      "id": "final-pages-charge-expanded-citations-by-reference",
+      "record": "20261122143013",
+      "class": "T8 B1 final page and closing size",
+      "summary": "A legal page answer with four handle citations exceeded its field bound after reference expansion.",
+      "expected": "An evidence-array object costs 80 characters after expansion. The page and closing limits still charge all other JSON and enforce their schema limits.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_page_text_over_the_fields_limit_is_refused",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_math_evidence_digests_keep_their_json_size"
+      ]
+    },
+    {
+      "id": "final-pages-measure-expanded-answer",
+      "record": "20261122143013",
+      "class": "T8 B1 final page and closing size",
+      "summary": "A fixed per-object charge admitted oversized references and opaque JSON and refused legal compact data.",
+      "expected": "Each page and closing limit uses exact compact JSON of the expanded turn, with a size refusal before evidence availability can hide it.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_study_page_charges_literal_source_and_execution_references",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_parts_block_entries_handle_is_charged_at_its_expanded_size",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_page_text_over_the_fields_limit_is_refused",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_parts_native_closing_counts_opaque_evidence_at_the_full_answer_limit",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_v7_coverage_counts_ordinary_objects_at_its_own_limit",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_v7_page_counts_opaque_coverage_at_the_joint_limit",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_session_page_refuses_repeated_written_links_over_its_bound",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_session_closing_enforces_its_expanded_answer_bound",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_oversized_page_is_refused_even_if_a_cited_unit_never_arrived"
+      ]
+    },
+    {
+      "id": "paged-answer-check-failure-records-a-refusal",
+      "record": "20261122143013",
+      "class": "T8 captured paged answer progress",
+      "summary": "A session v4 closing whose evidence link made the URL parser raise ValueError aborted the finish transaction; every exact resume raised again and the plan named the same resume.",
+      "expected": "A value failure inside a paged check or composition is a review.shape refusal at the submitted field when it is known. The exact resume records the attempt and its refusal, the replacement records, and the plan moves on.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_captured_closing_with_an_unreadable_link_records_a_replacement",
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_paged_checks_refuse_an_answer_on_which_they_fail",
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_closing_turn_request_on_which_its_check_fails_is_refused"
+      ]
+    },
+    {
+      "id": "paged-size-notice-keeps-parts-v2-replacement-bytes",
+      "record": "20261122143013",
+      "class": "T8 released refusal compatibility",
+      "summary": "A global notice allowlist copied a requested character count that the released parts-v2 replacement had hashed.",
+      "expected": "The released passage refusal records its diagnosis and produces the same replacement packet and prompt as 0.92.0. The recorded replacement origin authenticates.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_released_parts_v2_passage_refusal_keeps_replacement_bytes"
+      ]
+    },
+    {
+      "id": "review-parts-v3-empty-closing-request-finishes-capture",
+      "record": "20261122143013",
+      "class": "T8 captured parts closing progress",
+      "summary": "An attributed refusal during classification was unattributed in the earlier closing preparation. The captured request stayed pending.",
+      "expected": "The exact resume records a shape refusal for both empty request arrays. The replacement records and its plan is a fresh run.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_captured_parts_v3_closing_empty_request_records_a_replacement"
+      ]
+    },
+    {
+      "id": "session-v4-captured-closing-refusal-finishes",
+      "record": "20261122143013",
+      "class": "T8 captured session closing progress",
+      "summary": "A captured closing reference to a source body with zero delivered parts left the same review-run pending at the planner.",
+      "expected": "Resuming the exact captured request records a refusal and an executable replacement. The oversized reason fails its serialized-string limit. The in-bound reason reaches the delivery refusal.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_captured_closing_above_string_limit_records_its_refusal",
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_captured_closing_within_string_limit_records_delivery_refusal"
+      ]
+    },
+    {
+      "id": "session-v4-long-closing-pointer-keeps-the-notice-bound",
+      "record": "20261122143013",
+      "class": "T8 captured session closing progress",
+      "summary": "The owner check of a closing named an unknown 6,101-character pointer raw, so the replacement notice exceeded its entry bound and the chain ended in a handoff.",
+      "expected": "The owner refusal names the submitted field within the notice bound, with the digest of the full pointer, and the replacement records.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_long_unknown_closing_pointer_records_a_usable_replacement"
+      ]
+    },
+    {
+      "id": "session-v4-malformed-closing-pointer-finishes-capture",
+      "record": "20261122143013",
+      "class": "T8 captured session closing progress",
+      "summary": "Projecting an invalid evidence array pointer interrupted attempt recording and repeated the captured reviewer request.",
+      "expected": "The exact resume records a shape refusal at the submitted closing field. The replacement records and the planner advances to a different request.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_captured_closing_pointer_conflict_records_a_replacement"
+      ]
+    },
+    {
+      "id": "session-v4-page-check-failure-refuses-the-page",
+      "record": "20261122143013",
+      "class": "T8 captured paged answer progress",
+      "summary": "A session v4 page whose evidence check raised was classified as no failure and accepted; every closing after it then raised in its finish transaction.",
+      "expected": "The page is refused at its field, its replacement and the following pages record, and the closing records its composite. Page pointers take the checked projection of the closing fields.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_page_with_an_unreadable_link_is_refused_and_the_closing_records",
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_page_link_failure_is_refused_and_page_pointers_are_checked"
+      ]
+    },
+    {
+      "id": "session-v4-page-fixture-restores-partial-setup",
+      "record": "20261122143013",
+      "class": "T8 regression fixture isolation",
+      "summary": "A failure after the fixture replaced the claims module leaked that replacement to the shard",
+      "expected": "Shared setup registers the inner cleanup before setup begins, so a failure after the claims-module swap restores the original module.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionAdmissionTests.test_partial_session_setup_restores_the_inner_fixture"
+      ]
+    },
+    {
+      "id": "session-v4-page-validates-requested-source-part",
+      "record": "20261122143013",
+      "class": "T8 G1 delivered page evidence",
+      "summary": "The frozen logical packet lacked a requested source body, so artifact_missing interrupted page validation even for an exact delivered part.",
+      "expected": "The page validates the delivered citation and records the composed review. An oversized answer citing the same part records a refusal at the page.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_page_validates_the_delivered_part_and_records_the_review",
+        "test_review_session_v4_page_checks.SessionPageMeasureTests.test_oversized_page_with_delivered_citation_records_a_refusal"
+      ]
+    },
+    {
+      "id": "session-v4-scoped-support-takes-next-rule-set",
+      "record": "20261122143013",
+      "class": "T8 S1 scoped study result admission",
+      "summary": "A scoped study result could enter session v4 although its paged form had no owner for the support target or the extra readiness checks.",
+      "expected": "Admission stops with scoped_support_contract and the next rule set is available. An unscoped support contract is admitted as before.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionAdmissionTests.test_scoped_study_result_stops_session_v4_admission",
+        "test_review_session_v4_page_checks.SessionAdmissionTests.test_unscoped_study_result_is_admitted_to_session_v4"
+      ]
+    },
+    {
+      "id": "session-v4-turn-text-follows-registered-paragraphs",
+      "record": "20261122143013",
+      "class": "T8 O1 recorded turn prompt order",
+      "summary": "The selected slate-forming paragraph followed the session answer grammar and asked for a request field the session refuses.",
+      "expected": "The request instructions follow all selected paragraphs, including the refusal paragraph on a replacement. Both recorded turns authenticate.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionAdmissionTests.test_slate_forming_paragraph_precedes_the_request_text_and_the_turn_verifies"
+      ]
+    },
+    {
+      "id": "merged-session-page-citation-rules",
+      "record": "20261122143013",
+      "class": "page check skips record-dependent rules",
+      "summary": "A page answer that cited a delivered abstract by a source link passed its page check; the composed answer was refused three times at the place of that page and the slot was used up.",
+      "expected": "The rules of the citations that read the records run at each page, and the page is refused at its own place.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_page_checks.SessionPageRefusalTests.test_page_citing_a_delivered_abstract_by_a_source_link_is_refused_at_the_page",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_page_citing_an_unrequested_unit_is_refused_at_the_page",
+        "test_openness_final_pages.UnreadPagesTests.test_page_citing_the_unread_set_is_refused_at_the_page"
+      ]
+    },
+    {
+      "id": "merged-session-floor-decision",
+      "record": "20261122143013",
+      "class": "plan names a refused run",
+      "summary": "A v4 page capped at its floor got a handoff to another reviewer: the identical run that the failure planner named was refused because the capped answer was whole.",
+      "expected": "The plan is the decision of the capacity recovery, and the store takes each of its steps.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_capacity_stops.SessionFloorDecisionTests.test_page_floor_through_plan_next_ends_with_the_decision_of_its_recovery"
+      ]
+    },
+    {
+      "id": "merged-session-v5-stop-answers",
+      "record": "20261122143013",
+      "class": "capacity stop without an answer",
+      "summary": "The stop of rule V5 for a new session v4 chain on a record that no route serves gave no answer: its then list was empty.",
+      "expected": "Without a serving route the stop answers with a probe of the route at the input floor and with another route at the output floor, and the store takes each step.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_capacity_stops.SessionBelowFloorAnswersTests.test_input_floor_stop_on_the_only_route_answers_with_a_probe_that_the_store_takes",
+        "test_review_session_v4_capacity_stops.SessionBelowFloorAnswersTests.test_output_floor_stop_on_the_only_route_answers_with_another_route_that_the_store_takes"
+      ]
+    },
+    {
+      "id": "merged-session-adapter-page-citations",
+      "record": "20261122143013",
+      "class": "page check skips record-dependent rules",
+      "summary": "A verification or adjudicator page of parts v3 that cited an item its series did not receive, or a record without its digest, passed its page check; the composed answer was refused at the closing. A page citing bytes that its packet did not carry was accepted with no check.",
+      "expected": "The citation checks of the composed check of each role run at each page, and the page is refused at its own place.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3_pages.AdapterPageTests.test_verification_page_citing_an_undelivered_source_is_refused_at_the_page",
+        "test_review_parts_v3_pages.AdapterPageTests.test_adjudicator_page_citing_an_undelivered_record_is_refused_at_the_page",
+        "test_review_parts_v3_pages.AdapterPageTests.test_adjudicator_page_citing_a_record_without_its_digest_is_refused_at_the_page"
+      ]
+    },
+    {
+      "id": "selection-refresh-plan-asks-store",
+      "record": "20261122143013",
+      "class": "plan names a refused step",
+      "summary": "With the parts protocol v3 selected, the plan of an ordinary slate head named its refresh, which the store refused at the floor of the slate series; the store's stop had no probe answer.",
+      "expected": "The plan runs the store's admission of the refresh as a trial and, where it refuses, is the store's stop with its answers; a floor stop offers the probe of the route where a probe can verify the room of the floor.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_slate_refresh_chain.SlateRefreshPlanTests.test_B9_the_plan_of_a_refresh_that_does_not_fit_is_a_stop_whose_step_the_store_takes",
+        "test_slate_refresh_chain.SlateRefreshPlanTests.test_B10_with_parts_v3_the_plan_of_a_refresh_is_the_stop_of_the_store_and_each_answer_is_taken"
+      ]
+    },
+    {
+      "id": "selection-recorded-v3-repair-stop-answers",
+      "record": "20261122143013",
+      "class": "stop without an answer",
+      "summary": "The context repair of a recorded v3 series on a route below its floor was refused with the admission's diagnostics alone: no answer and no step.",
+      "expected": "The refusal is the capacity stop with the answers that keep the parts protocol v3 (the probe of the route, each serving route on which v3 accepts the repair), or coverage when none exists.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_capacity_steps.CapacityPublicEntryTests.test_admitted_parts_adjudicator_retry_contains_only_public_context",
+        "test_review_capacity_steps.CapacityPublicEntryTests.test_a_recorded_v3_adjudicator_repair_below_its_floor_keeps_v3_on_each_answer"
       ]
     }
   ]

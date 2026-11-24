@@ -1089,12 +1089,22 @@ responses of the bound searches, the extracted full texts of the originals that
 the bound readings pin, and the bound search and reading records, each record as
 its exact JSON text. On a text route (`claude_cli_v1` with an input limit of
 1,300,000 characters, `codex_cli_v1` and `codex_cli_framed_v1` with 1,048,576)
-the packet stays a single turn only when those units together are at most
-120,000 characters and the fitted request carries each of them complete within
-the limit. On a route without a local input limit the packet stays a single
-turn. In every other case `review-assignment` starts a reading chain under
-the protocol `exactory-openness-reading-math-v1`, the math form of the chain
-that a problem openness review uses. It records `reading_chain:
+`review-assignment` first asks the admission of the protocol
+`exactory-openness-reading-math-v2` (since 0.93.0). A packet that it admits
+is a reading chain under math v2, whatever its size: the chain has a stored
+capacity plan, takes over the reading turns of earlier chains of the same
+reviewer that still verify, and takes its final in one request. A packet that
+math v2 refuses stays a single turn only when those units together are at
+most 120,000 characters and the fitted request carries each of them complete
+within the limit; in every other case it starts a reading chain under the
+protocol `exactory-openness-reading-math-v1`, the math form of the chain that
+a problem openness review uses. On a route without a local input limit the
+packet stays a single turn. The receipt of the assignment states the choice
+in `protocol_selection`. The rest of this paragraph describes the chain under
+math v1; the
+[CLI reference](../../docs/research-cli.md#problem-creation) states what a
+chain under math v2 holds.
+It records `reading_chain:
 {first_assignment_id, turn}` on the assignment, which becomes reading turn 1,
 and builds that turn. Each reading turn delivers at most 120,000 characters of
 new unit text, whole units or consecutive parts of a longer body, in this order:
@@ -1263,8 +1273,9 @@ call when its estimate of the final input is above the limit, with the same
 code and `estimate: true` in the details, unless the owner's instruction to
 continue is recorded. Each such refusal is a decision stop: follow the
 choices and the steps that `details.decision` offers. A refusal of the first
-assignment offers only to wait for the protocol reading-math-v2, which this
-release does not hold, or to run over a packet that binds less material.
+assignment is a refusal under math v1, which a packet reaches only after math
+v2 refused it. It offers to wait for a release whose math v2 admits the
+packet, or to run over a packet that binds less material.
 Where the decision offers to continue this chain to its final turn, record
 that answer with `review-context` and the reason
 `reading_chain_continue_to_final`. That instruction waives the estimate stop
@@ -1274,6 +1285,9 @@ native output of the final turn unchanged. Its `attestation_id` names the
 first turn, the assignment id chosen before the export. `accept` and
 `complete` follow the chain from that turn to its terminal turn and verify
 every turn.
+For a chain under math v2, `details.step` of the handoff holds the command
+with the payload that the controller checked, and the closure review ends
+with `native_review_completion_required` (command `search complete`).
 
 A packet without an openness minimum that does not fit one input of a text
 route with a local input limit is delivered as a series of fresh-input turns
@@ -1825,10 +1839,15 @@ scientific evidence without making current common preparation a currency gate.
 Recorded version 1 closures replay unchanged.
 
 The closure review is its own observed review. Export the closure subject as a
-`result` packet with the complete current `OpennessMinimum`, run it (with
-`review-series` as a reading chain when the packet exceeds a single turn; its
-handoff `native_review_acceptance_required` names `search accept` only), and
-submit the output of its final turn with `search complete`. A checkpoint review
+`result` packet with the complete current `OpennessMinimum`, run it with
+`review-series` where it is a reading chain, and submit the output of its
+final turn with `search complete`. Under math v1 the packet is a chain when it
+exceeds a single turn, and the handoff `native_review_acceptance_required`
+names `search accept` only: submit with `search complete` all the same. Under
+math v2 the handoff of a closure review is
+`native_review_completion_required`, and its `details.step` holds `search
+complete` with the payload that the controller checked.
+A checkpoint review
 cannot stand in for
 it: the closure binds the exact subject digest of the closure subject. A closure
 whose review came from a chain also stores `reading_turns`. `complete` derives

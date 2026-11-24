@@ -19,6 +19,10 @@ from review_request_builder_fixtures import use_emulated_request_builders
 
 class RequestReuseTests(ResultPartsCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.records = self.case.read_records()
         self.assignment = self.records['review_assignment']['bar-first']
@@ -166,8 +170,8 @@ class RequestReuseTests(ResultPartsCase):
         from research_harness import research_decisions as decisions
         from test_research_problem_reviews import ProblemReviewTests
         fixture = ProblemReviewTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.supporting = fixture.artifacts.put(b'A captured field standard.', 'text/plain')
         record_codex_route(fixture)
         assignment = fixture.assign('bar', 'first', **fixture.deliver_supporting('first'))

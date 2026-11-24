@@ -17,6 +17,10 @@ from research_harness.output_views import render_all
 
 class PostedHeadPlanningTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = ResultPartsCase()
         self.addCleanup(self.fixture.doCleanups)
         self.fixture.setUp()
@@ -125,7 +129,11 @@ class PostedHeadPlanningTests(unittest.TestCase):
                 unposted = copy.deepcopy(records)
                 unposted.pop('problem_post')
                 before = self.plan(unposted)
-                self.assertEqual(before['state'], 'run')
+                # The plan asks the admission of its run. For a bar record whose subject is not a problem, the prompt
+                # built above is not the canonical prompt of its packet; review-run refuses it, so the plan stops.
+                refused = role == 'bar' and subject.get('kind') != 'problem'
+                self.assertEqual((before['state'], before.get('code')),
+                                 ('stop', 'review_prompt_mismatch') if refused else ('run', None))
                 if role == 'bar' and subject.get('kind') in (None, 'problem'):
                     self.assertEqual(self.plan(records)['state'], 'done')
                 else:

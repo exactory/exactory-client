@@ -210,7 +210,8 @@ def _complete_ending_step(store, row):
     if step['command'] == 'record-check':
         step.update(chooses=[], prerequisites=[])
     if step['command'] == 'review-series':
-        step['arguments']['--assignment'] = row['head_id']
+        # A step that names another chain in payload.assignment_id runs that chain; every other one runs this head.
+        step['arguments']['--assignment'] = step['payload'].get('assignment_id', row['head_id'])
     if row['state'] == 'stop':
         if step['command'] == 'gate-auto-pass' or not details.get('decision'):
             details['decision'] = dict(owner_decides='How should this ending of the series be answered?',
@@ -226,7 +227,7 @@ def _complete_ending_step(store, row):
                 else:
                     arguments.setdefault('--workspace', str(store.root))
                 if choice.get('command') == 'review-series':
-                    choice['arguments']['--assignment'] = row['head_id']
+                    choice['arguments']['--assignment'] = choice.get('payload', {}).get('assignment_id', row['head_id'])
                 if is_ending_step:
                     choice.update(copy.deepcopy(step))
 
@@ -241,14 +242,18 @@ def _bind_ending_receipt(row, identifier, revision):
 
 
 def _identify_ending(row):
-    action = row.get('details', {}).get('refused_action')
+    details = row.get('details', {})
+    action = details.get('refused_action')
     # Earlier planner receipts describe plan_next, without an executable payload.
     identity = (None if action is None else copy.deepcopy(action) if 'payload' not in action else
                 [action['command'], action['state'], _identify_action(action)])
-    result = [row['head_id'], row.get('progress'), row.get('code'), row['state'],
-              row.get('details', {}).get('step', {}).get('command'), identity]
+    step = details.get('step', {})
+    # A gate-auto-pass gets its own receipt ID as an argument after the receipt is identified.
+    recovery = ('gate-auto-pass' if step.get('command') == 'gate-auto-pass' else
+                [step, details.get('steps'), details.get('decision')])
+    result = [row['head_id'], row.get('progress'), row.get('code'), row['state'], recovery, identity]
     if row.get('code') == 'review_chain_stopped':
-        result.append(row.get('details', {}).get('stop_id') or row.get('stop_id'))
+        result.append(details.get('stop_id') or row.get('stop_id'))
     return result
 
 
@@ -293,6 +298,33 @@ def _end_series(store, plan, *, error=None, exit_code, output, capacity_records=
         row['details'].pop('refused_action', None)
     else:
         row['details']['refused_action'] = copy.deepcopy(refused_action)
+    refusal_details = (error.details or {}) if error is not None else {}
+    action_details = refusal_details
+    step = action_details.get('step')
+    next_plan = refusal_details.get('next')
+    if (step is None and isinstance(next_plan, dict) and next_plan.get('state') in ('handoff', 'stop')):
+        action_details = next_plan.get('details', {})
+        step = action_details.get('step')
+    has_refusal_step = (row['state'] in ('handoff', 'stop') and code not in HARNESS_DEFECT_CODES
+                        and isinstance(step, dict) and isinstance(step.get('command'), str) and step['command']
+                        and isinstance(step.get('payload'), dict) and isinstance(step.get('chooses'), list)
+                        and isinstance(step.get('prerequisites'), list))
+    if has_refusal_step:
+        if action_details is not refusal_details:
+            row['state'] = next_plan['state']
+        for key in ('decision', 'steps'):
+            if key in action_details:
+                row['details'][key] = copy.deepcopy(action_details[key])
+        row['command'] = step['command']
+        row.pop('payload', None)
+        row['details']['step'] = copy.deepcopy(step)
+        if 'next' in refusal_details:
+            row['details']['next'] = copy.deepcopy(refusal_details['next'])
+        else:
+            row['details'].pop('next', None)
+    elif (code in ('review_context_unverified', 'review_context_contaminated')
+          and 'turn' in refusal_details and isinstance(next_plan, dict)):
+        row['details']['next'] = copy.deepcopy(next_plan)
     had_step = 'step' in row['details']
     _complete_ending_step(store, row)
     intended_step = copy.deepcopy(row['details'].get('step', {}))
@@ -310,7 +342,8 @@ def _end_series(store, plan, *, error=None, exit_code, output, capacity_records=
     records = observed['records'] if observed is not None else (capacity_records or {})
     if observed is not None:
         row.setdefault('revision', observed['revision'])
-    if code and row['state'] in ('handoff', 'stop'):
+    # A complete refusal action has already been planned, possibly under a different code in next.
+    if code and row['state'] in ('handoff', 'stop') and not has_refusal_step:
         try:
             from .review_plan_steps import complete_plan
             from .evaluation import Evaluation

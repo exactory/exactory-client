@@ -21,6 +21,10 @@ from test_review_composition import make_fixture, observe, terminal_for
 
 class EffectiveConsumerTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.artifacts = ArtifactStore(Path(directory.name))
@@ -95,8 +99,8 @@ class EffectiveConsumerTests(unittest.TestCase):
         from research_harness import review_composition as composition
         from test_research_problem_reviews import ProblemReviewTests
         case = ProblemReviewTests(methodName='runTest')
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         self.addCleanup(case.tearDown)
         case.observe_bar_reviews()
         payload = case.observe('result', 'first', record=False)

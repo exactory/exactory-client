@@ -29,14 +29,17 @@ import test_visual_context_repair as fixtures
 READ_INSTALLED_PROFILE, RENDER_WITH_INSTALLED = review_pdf_pages.profile, review_pdf_pages.render_bytes
 
 # The record kinds of new reviewer work, and the functions that write them. A function of COMPARING compares the
-# installed renderer itself, before it writes. Each other writer writes a replacement: record_assignment reaches it
-# through the named call, after its comparison of the replaced assignment.
+# installed renderer itself, before it writes. Each other writer writes a replacement: the preparation of an
+# assignment reaches it through the named call, after its comparison of the replaced assignment. That preparation is
+# _prepare_assignment, which record_assignment and preview_parts_successor call.
 NEW_WORK_KINDS = ('review_assignment', 'review_invocation', 'review_task_dispatch',
                   'review_output_correction_invocation')
-RECORD_ASSIGNMENT = ('review_protocol', 'record_assignment')
-COMPARING = {RECORD_ASSIGNMENT, ('review_protocol', 'invoke_assignment'),
+ASSIGNMENT_WRITER = ('review_protocol', '_prepare_assignment')
+COMPARING = {ASSIGNMENT_WRITER,
              ('review_staged_protocol', 'prepare_child'), ('review_staged_protocol', 'invoke_task'),
              ('review_output_correction', 'invoke_correction'), ('review_session_v4', 'prepare_session_assignment')}
+PREPARED_WRITER = ('review_protocol', 'invoke_assignment')
+PREPARATION = ('review_protocol', 'prepare_assignment_call')
 REPLACEMENT_WRITERS = {
     ('review_refusal_replacement', 'prepare_replacement'): 'prepare_refusal_replacement',
     ('openness_reading_v7', 'prepare_refusal_assignment'): 'prepare_refusal_replacement',
@@ -145,7 +148,7 @@ class RecordedProfileTests(unittest.TestCase):
             with self.subTest(changed=label), self.assertRaises(ResearchError) as refused:
                 review_visual_sources.validate_manifest(Evaluation.of(self.records, self.artifacts), changed)
             self.assertEqual(refused.exception.code, 'review_visual_source_mismatch')
-            self.assertEqual(str(refused.exception), 'The recorded page image must keep its descriptor and its dimensions')
+            self.assertIsNone(refused.exception.details)
 
     def test_recorded_profile_keeps_the_fixed_members_of_the_protocol(self):
         recorded = copy.deepcopy(self.manifest)
@@ -192,6 +195,12 @@ class RecordedProfileTests(unittest.TestCase):
 class NewWorkTests(unittest.TestCase):
     """After a renderer update the stored records verify and a judgement on a stored answer is recorded; no new
     reviewer work starts on them."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     REFUSAL = ('review_visual_source_mismatch', 'Use the exact native PDF render profile')
 
@@ -394,7 +403,7 @@ class NewWorkWriterTests(unittest.TestCase):
                     elif name == 'require_installed_renderer':
                         comparisons.setdefault(owner, []).append(child.lineno)
                     else:
-                        calls.setdefault(owner, {}).setdefault(name, []).append(child.lineno)
+                        calls.setdefault(owner, {}).setdefault(name, []).append((child.lineno, inner))
                 read_calls(child, owner, inner)
 
         for path in sorted(Path(research_harness.__file__).parent.glob('*.py')):
@@ -402,9 +411,9 @@ class NewWorkWriterTests(unittest.TestCase):
                 # A function or a class of the module owns every call below it, also in a nested function.
                 owner = (path.stem, getattr(node, 'name', None))
                 read_calls(node, owner, owner[1])
-        self.assertEqual(set(writes), COMPARING | set(REPLACEMENT_WRITERS))
+        self.assertEqual(set(writes), COMPARING | set(REPLACEMENT_WRITERS) | {PREPARED_WRITER})
         self.assertEqual(variable, VARIABLE_KIND_WRITERS)
-        self.assertEqual(set(comparisons), COMPARING)
+        self.assertEqual(set(comparisons), COMPARING | {PREPARATION})
         for owner in COMPARING:
             # The first comparison of a function stands before each of its writes.
             first = min(comparisons[owner])
@@ -413,7 +422,12 @@ class NewWorkWriterTests(unittest.TestCase):
                     self.assertLess(first, line, owner)
         for writer, call in REPLACEMENT_WRITERS.items():
             # The comparison of the replaced assignment stands before the call that leads to the writer.
-            self.assertLess(min(comparisons[RECORD_ASSIGNMENT]), min(calls[RECORD_ASSIGNMENT][call]), writer)
+            self.assertLess(min(comparisons[ASSIGNMENT_WRITER]), min(line for line, _ in calls[ASSIGNMENT_WRITER][call]),
+                            writer)
+        for line, function in writes[PREPARED_WRITER]:
+            preceding = [call_line for call_line, inner in calls[PREPARED_WRITER][PREPARATION[1]]
+                         if inner == function and call_line < line]
+            self.assertTrue(preceding, (PREPARED_WRITER, function, line))
 
 
 if __name__ == '__main__':

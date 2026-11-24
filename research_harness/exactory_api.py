@@ -7,8 +7,12 @@ because problem-statement and problem-value apply the rules of the post to a tex
 post command sends it.
 """
 
+import ipaddress
 import os
 import re
+from urllib.parse import unquote
+
+from .errors import ResearchError
 
 _DEFAULT_API_URL = "https://www.exactory.ai"
 # Every id the application hands out (problems, verifications) is a UUID.
@@ -30,6 +34,40 @@ POST_TEXT_BOUNDS = {"title": (8, 200), "statement": (50, 20000), "statement_deta
 _NON_PLAIN_TEXT_CHARACTER_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f\ud800-\udfff]")
 # The one line of a problem statement that divides the statement, shown in a box, from its details.
 _STATEMENT_DETAILS_SEPARATOR_RE = re.compile(r"^[ \t]*---[ \t]*$", re.MULTILINE)
+
+
+_POST_CITATION_TEXT_BOUNDS = (10, 1000)
+_POST_CITATION_LOCATOR_MAX = 500
+# The messages of the refusals of a citation field and of a citation list of a post.
+CITATION_CHARACTER_MSG = (
+    'The field that details.field names holds a character that a post does not take: details.character, at '
+    'details.line and details.column of the field. Remove the character. details.index, where present, numbers '
+    'the citation from 1, and details.step, where present, is the step that records the corrected field.')
+CITATION_LENGTH_MSG = (
+    'The field that details.field names has details.characters characters, counted in UTF-16 units, and a post '
+    'takes details.minimum to details.maximum. Give a field within these limits. details.index, where present, '
+    'numbers the citation from 1, and details.step, where present, is the step that records the corrected field.')
+CITATION_LOCATOR_FORMAT_MSG = (
+    'The locator is no DOI, no arXiv id and no https URL. Give one of the three. details.index, where present, '
+    'numbers the citation from 1, and details.step, where present, is the step that records the corrected '
+    'locator.')
+CITATIONS_SHAPE_MSG = ('The citations are not an array of objects. Give a JSON array whose entries are objects with '
+                       'the members citation and locator.')
+CITATIONS_COUNT_MSG = ('The list holds details.count citations, and a post takes details.minimum to details.maximum. '
+                       'Give a list within these limits.')
+CITATION_UNKNOWN_KEY_MSG = ('The citation that details.index numbers, from 1, holds members other than citation and '
+                            'locator; details.unexpected_fields lists them. Give exactly citation and locator.')
+CITATION_FIELD_TYPE_MSG = ('In the citation that details.index numbers, from 1, citation or locator is missing or is '
+                           'no string. Give both as strings.')
+# DOI_LOCATOR uses JavaScript's \S in the server schema; Python's \S treats U+0085 differently.
+_DOI_LOCATOR_RE = re.compile(r"10\.[0-9]{4,9}/[^" + re.escape(JAVASCRIPT_TRIM_CHARACTERS) + r"]+")
+# Mirrors the server's locator refinement: a new-format id (2301.00001), an
+# old-style id (hep-th/9901001), and the arXiv: prefix are all accepted. The patterns
+# use [0-9], not \d, as the link patterns below explain.
+_ARXIV_LOCATOR_RE = re.compile(
+    r"(?:arxiv:)?(?:[0-9]{4}\.[0-9]{4,5}|[a-z-]+(?:\.[a-z]{2})?/[0-9]{7})(?:v[0-9]+)?",
+    re.IGNORECASE,
+)
 
 
 def read_api_base_url() -> str:
@@ -79,3 +117,92 @@ def find_post_text_violation(field: str, text: str):
     if minimum <= characters <= maximum:
         return None
     return {"rule": "length", "characters": characters, "minimum": minimum, "maximum": maximum}
+
+
+def _is_citation_locator(locator: str) -> bool:
+    """A locator an agent can resolve: a DOI, an arXiv id, or an https URL."""
+    return bool(_DOI_LOCATOR_RE.fullmatch(locator)
+                or _ARXIV_LOCATOR_RE.fullmatch(locator)
+                or (locator.startswith("https://") and _is_https_url(locator)))
+
+
+def _is_https_url(value: str) -> bool:
+    """Refuse the https URLs that the server's URL.canParse (the WHATWG URL parser) certainly
+    refuses: an empty host, an unclosed or invalid IPv6 literal, a forbidden host code point, or an
+    invalid port. International and numeric hosts are left to the server, which refuses an invalid
+    one with a 422, so this check never refuses a URL that the server accepts. The locator is posted
+    as given."""
+    # WHATWG removes ASCII tabs and newlines, reads a backslash as a slash, and ends the authority
+    # at the first slash, backslash, question mark, or number sign.
+    parsed = re.sub(r"[\t\n\r]", "", value)
+    authority = re.split(r"[/\\?#]", parsed[len("https:"):].lstrip("/\\"), maxsplit=1)[0]
+    host_port = authority.rpartition("@")[2]
+    if host_port.startswith("["):
+        host, closing, tail = host_port[1:].partition("]")
+        # ipaddress accepts a zone id after %, and WHATWG does not.
+        if not closing or "%" in host or (tail and not tail.startswith(":")):
+            return False
+        try:
+            ipaddress.IPv6Address(host)
+        except ValueError:
+            return False
+        port = tail[1:]
+    else:
+        host, _, port = host_port.partition(":")
+        try:
+            host = unquote(host, errors="strict")
+        except UnicodeDecodeError:
+            return False
+        if not host or re.search(r"[\x00-\x20\x7f%#/:<>?@\[\]\\^|]", host):
+            return False
+    return not port or bool(re.fullmatch(r"[0-9]+", port) and int(port) <= 65535)
+
+
+def validate_post_citation_field(field: str, value: str, **context) -> str:
+    """Validate a citation or locator string at a write boundary and return its wire spelling."""
+    if field == "locator":
+        bounds = (0, _POST_CITATION_LOCATOR_MAX)
+        character_code = "problem_citation_locator_character"
+        length_code = "problem_citation_locator_length"
+    else:
+        bounds = _POST_CITATION_TEXT_BOUNDS
+        character_code = "problem_citation_text_character"
+        length_code = "problem_citation_text_length"
+    value = normalize_plain_text_line_breaks(value)
+    found = find_non_plain_text_character(value)
+    if found is not None:
+        character, line, column = found
+        raise ResearchError(character_code, CITATION_CHARACTER_MSG,
+                            dict(context, field=field, character=f"U+{ord(character):04X}", line=line, column=column))
+    value = value.strip(JAVASCRIPT_TRIM_CHARACTERS)
+    units = count_utf16_units(value)
+    minimum, maximum = bounds
+    if not minimum <= units <= maximum:
+        raise ResearchError(length_code, CITATION_LENGTH_MSG,
+                            dict(context, field=field, characters=units, minimum=minimum, maximum=maximum))
+    if field == "locator" and not _is_citation_locator(value):
+        raise ResearchError("problem_citation_locator_format", CITATION_LOCATOR_FORMAT_MSG,
+                            dict(context, field=field))
+    return value
+
+
+def validate_post_citations(entries) -> list:
+    """Validate the complete citation list of an outgoing post."""
+    from .problem_evidence import POST_CITATION_LIMIT
+    if not isinstance(entries, list) or not all(isinstance(entry, dict) for entry in entries):
+        raise ResearchError("problem_citations_shape", CITATIONS_SHAPE_MSG)
+    if not 1 <= len(entries) <= POST_CITATION_LIMIT:
+        raise ResearchError("problem_citations_count", CITATIONS_COUNT_MSG,
+                            {"count": len(entries), "minimum": 1, "maximum": POST_CITATION_LIMIT})
+    parsed = []
+    for index, entry in enumerate(entries, start=1):
+        unknown_keys = sorted(set(entry) - {"citation", "locator"})
+        if unknown_keys:
+            raise ResearchError("problem_citation_unknown_key", CITATION_UNKNOWN_KEY_MSG,
+                                {"index": index, "unexpected_fields": unknown_keys})
+        citation, locator = entry.get("citation"), entry.get("locator")
+        if not isinstance(citation, str) or not isinstance(locator, str):
+            raise ResearchError("problem_citation_field_type", CITATION_FIELD_TYPE_MSG, {"index": index})
+        parsed.append({"citation": validate_post_citation_field("citation", citation, index=index),
+                       "locator": validate_post_citation_field("locator", locator, index=index)})
+    return parsed

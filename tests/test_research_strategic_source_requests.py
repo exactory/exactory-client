@@ -53,6 +53,10 @@ class SlateSourceRequestTests(StrategicSourceHelpers, StrategyCase):
     metadata = LiteratureCase.metadata
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.sequence = 0
         self.setup_dossier()
@@ -152,6 +156,10 @@ class ResultSourceRequestTests(StrategicSourceHelpers, DevelopmentCase):
         return value
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.prepared_candidate()
         self.execution_payload = self.store.snapshot()["records"]["execution"]["execution-run-1"]["payload"]

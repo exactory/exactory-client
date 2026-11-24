@@ -19,6 +19,10 @@ from test_review_output_profile import build_request
 
 class ReleaseGuardTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = failure_fixtures.FailureClassTests()
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
@@ -30,8 +34,8 @@ class ReleaseGuardTests(unittest.TestCase):
         from research_harness import review_protocol as protocol, review_transport as transport
         fixture = session_fixtures.ContinuationTests()
         case = problem_fixtures.ProblemReviewTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         build_response = case.build_provider_response
         def respond(output):
             response = build_response(output)

@@ -20,6 +20,13 @@ from research_harness.reading import record_reading
 
 
 class UnboundPacketCaptureTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import openness_reading
+        released = patch.object(openness_reading, 'NEW_MATH_CHAIN_PROTOCOLS', (openness_reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     open_case = binding_fixtures.OpennessCaptureBindingTests.open_case
     choose_capture = binding_fixtures.OpennessCaptureBindingTests.choose_capture
     complete_chain = binding_fixtures.OpennessCaptureBindingTests.complete_chain

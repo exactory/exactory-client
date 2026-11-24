@@ -229,8 +229,72 @@ class CommonPromptVersionTests(unittest.TestCase):
                     assignment = build_assignment(role, altered, problem=problem, repair=repair, context=context)
                     self.assertFalse(protocol._prompt_matches(assignment))
 
+    def test_common_version_five_renders_no_source_requests_contract_and_no_source_rules(self):
+        """Decision 1 and row S22 of the second writer pass: the base of a v4 session turn and of a parts v3 turn."""
+        for role in ("bar", "slate", "result"):
+            for orchestration in (PROBLEM, None):
+                with self.subTest(role=role, orchestration=orchestration):
+                    installed = protocol.canonical_prompt(role, orchestration=orchestration)["text"]
+                    turn = protocol.canonical_prompt(role, orchestration=orchestration,
+                                                     common_version=protocol.TURN_COMMON_VERSION)
+                    self.assertEqual(turn["parameters"]["common_version"], protocol.TURN_COMMON_VERSION)
+                    self.assertIn(bar_sources.PROMPT, installed)
+                    self.assertNotIn(bar_sources.PROMPT, turn["text"])
+                    self.assertNotIn(protocol._SOURCE_REQUESTS_SENTENCE, turn["text"])
+                    if orchestration == PROBLEM:
+                        self.assertIn(protocol._SOURCE_REQUESTS_SENTENCE, installed)
+                        response = protocol._PROBLEM_RESPONSES_V5[role].replace("ROLE", role).replace(
+                            protocol._EVIDENCE_GRAMMAR_END, protocol._EVIDENCE_GRAMMAR_END + protocol.EVIDENCE_DEPTH_SENTENCE)
+                        self.assertIn(response, turn["text"])
+        self.assertNotIn("continues your earlier bar", protocol._PROBLEM_BAR_RESPONSE_V5)
+
+    def test_a_session_base_takes_the_common_version_five_alone(self):
+        from research_harness import review_session_v4 as session
+        descriptor, base = session.build_base_prompt("bar", PROBLEM)
+        self.assertEqual(descriptor["parameters"]["common_version"], protocol.TURN_COMMON_VERSION)
+        self.assertEqual(base, protocol.canonical_prompt("bar", orchestration=PROBLEM, excerpts=False,
+                                                         common_version=protocol.TURN_COMMON_VERSION))
+        with self.assertRaises(ResearchError) as refused:
+            session.build_base_prompt("bar", PROBLEM, common_version=protocol.COMMON_VERSION)
+        self.assertEqual(refused.exception.code, "invalid_review_prompt_version")
+
+    def test_a_problem_bar_turn_of_version_five_holds_no_inventory_sentence_and_installed_forms_keep_theirs(self):
+        """Addendum 2 of package S: the bar role text under the common version 5; the installed role texts stay."""
+        from research_harness import review_session_v4 as session
+        inventory = "holds an inventory of the sources the author read"
+        installed = protocol._PROBLEM_PROMPTS["bar"]
+        self.assertEqual(installed.count(inventory), 1)
+        self.assertNotIn(inventory, protocol._PROBLEM_BAR_PROMPT_V5)
+        self.assertIn("The sources that the author read reach you as the text below states",
+                      protocol._PROBLEM_BAR_PROMPT_V5)
+        for kind in ("request", "final", "page", "closing", "combine"):
+            with self.subTest(kind=kind):
+                turn = session.build_turn_prompt("bar", kind, {}, orchestration=PROBLEM)["text"]
+                self.assertIn(protocol._PROBLEM_BAR_PROMPT_V5, turn)
+                self.assertNotIn(inventory, turn)
+        five = protocol.TURN_COMMON_VERSION
+        for version, table in ((None, protocol._PROBLEM_PROMPTS_V5), (3, protocol._PROBLEM_PROMPTS_BEFORE_A7_V5)):
+            options = {} if version is None else dict(version=version)
+            with self.subTest(version=version):
+                self.assertIn(table["bar"], protocol.canonical_prompt(
+                    "bar", orchestration=PROBLEM, common_version=five, **options)["text"])
+                self.assertNotIn(inventory, table["bar"])
+        self.assertEqual(protocol._PROBLEM_PROMPTS_BEFORE_A7_V5["bar"],
+                         protocol._PROBLEM_BAR_PROMPT_V5.replace(protocol._PROBLEM_BAR_REFUTATION, ""))
+        for role in ("slate", "result"):
+            with self.subTest(role=role):
+                self.assertIn(protocol._PROBLEM_PROMPTS[role], protocol.canonical_prompt(
+                    role, orchestration=PROBLEM, common_version=five)["text"])
+        for version, text in ((None, installed), (3, protocol._PROBLEM_PROMPTS_BEFORE_A7["bar"]),
+                              (1, protocol._PROBLEM_PROMPTS_V1["bar"])):
+            options = {} if version is None else dict(version=version)
+            with self.subTest(installed_version=version):
+                rendered = protocol.canonical_prompt("bar", orchestration=PROBLEM, **options)["text"]
+                self.assertIn(text, rendered)
+                self.assertNotIn(protocol._PROBLEM_BAR_PROMPT_V5, rendered)
+
     def test_an_unknown_common_version_is_refused_at_rendering(self):
-        for value in (0, 5, True, "3"):
+        for value in (0, 6, True, "3"):
             with self.subTest(value=value):
                 with self.assertRaises(ResearchError) as refused:
                     protocol.canonical_prompt("bar", common_version=value)

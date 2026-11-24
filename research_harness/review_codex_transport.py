@@ -20,40 +20,23 @@ from pathlib import Path
 
 from .errors import ResearchError
 from .evidence import digest
+from .review_codex_declarations import (
+    DELIVERED_INSTRUCTIONS_ID, LISTING_FREE_DECLARATION_SETS, NATIVE_DECLARATION_SETS, NATIVE_DECLARATIONS,
+    NATIVE_DECLARATIONS_0162, NATIVE_DECLARATIONS_0167, NATIVE_ENVIRONMENTS, NATIVE_TOOL_DECLARATIONS_0167,
+    remove_model_listing)
 
 ADAPTER = 'codex_cli_v1'
-# These complete normalized declarations were inspected on Codex 0.159.2 with
-# configuration and rules disabled. A new declaration or platform stays
-# unverified until its full input contract has been audited and tested.
-NATIVE_DECLARATIONS = (
-    'dfc8dfcb5cdb5a5382ea269f65f676cfb16dcde606c2c222beedb90c17505402',
-    '47091490938505958b0c22ff42db6fd79b272a2af6923166f4c2cc53c4fe0df4',
-    '6ded806e3cdbb35599ecaf8742574bc5274908472b1729090010c404c2151e8e',
-)
-# Codex 0.162.1 (audited 2026-10-20 on the rollout of probe-codex-astra, thread
-# 01a15ae2-2d7d-7070-a9ac-8cc9931e4c7c): the three developer messages are the
-# <skills_instructions> list of the .system skills with <collaboration_mode>, the
-# <multi_agent_role> text and the <multi_agent_mode> text; no project, user or
-# plugin context appears in them.
-NATIVE_DECLARATIONS_0162 = (
-    '696b6c75d877084ce308423c72f77f2e8cdb93a2f4ac9ede6e1c3379e7ea8bab',
-    '3edd51083129388f52e881435e93e4b981e00c5ee3d62ab5d32e22c428fd504b',
-    '6ded806e3cdbb35599ecaf8742574bc5274908472b1729090010c404c2151e8e',
-)
-# Codex 0.167.0 (audited 2026-11-10 on the rollouts of two result reviews, threads
-# 01a1c54c-e346-7f90-bcc4-e7e59cc36993 and 01a1c54c-e339-7ee2-8231-dd666c828603):
-# the rollout first records the model's tool list as an additional_tools item (the
-# functions, clock and collaboration namespaces; no MCP, plugin, app, memory or user
-# tool), then the review instructions themselves as a developer message, then the
-# three 0.162.1 declarations unchanged. The tool list is the same in both rollouts
-# and holds no path; it changes when user configuration is loaded, so it is pinned
-# by digest. The instructions message is accepted only when its text is exactly the
-# request's instructions.
-NATIVE_TOOL_DECLARATIONS_0167 = 'a066e4e81a2d3e62b1ac3cd628a56afce8ff553b858fa78cb294ea87bfcfe68d'
-DELIVERED_INSTRUCTIONS_ID = 'request.instructions'
-NATIVE_DECLARATIONS_0167 = (NATIVE_TOOL_DECLARATIONS_0167, DELIVERED_INSTRUCTIONS_ID) + NATIVE_DECLARATIONS_0162
-NATIVE_DECLARATION_SETS = {NATIVE_DECLARATIONS, NATIVE_DECLARATIONS_0162, NATIVE_DECLARATIONS_0167}
-NATIVE_ENVIRONMENTS = {'722c613b0eff734b92f076c866ff2eb55f6298c54180d9d414868d070a6c3ae8'}
+# The reasoning efforts that a Codex route can name. A route record without the member ran at DEFAULT_EFFORT,
+# which every Codex route of a release before 0.93.0 did, so the default never changes.
+EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max')
+DEFAULT_EFFORT = 'high'
+MAX_TIMEOUT_SECONDS = 3600
+ROUTE_MEMBERS_ERR_MSG = ('The configuration of a Codex route holds max_output_tokens and timeout_seconds, and it can '
+                         'hold effort. Supply the two required members. Remove every other member.')
+EFFORT_ERR_MSG = ('The effort is not one of ' + ', '.join(EFFORTS) + '. Set effort to one of these values. Without '
+                  'the member, the route runs at ' + DEFAULT_EFFORT + '.')
+TIMEOUT_ERR_MSG = ('The execution timeout is not a positive number of at most ' + str(MAX_TIMEOUT_SECONDS)
+                   + ' seconds. Set timeout_seconds to such a number.')
 CONTROLS = (
     'project_doc_max_bytes=0', 'developer_instructions=""',
     'features.memories=false', 'features.external_agent_memory_import=false',
@@ -63,7 +46,7 @@ CONTROLS = (
     'features.js_repl=false', 'features.js_repl_tools_only=false',
     'features.browser_use=false', 'features.computer_use=false',
     'features.skip_host_skill_discovery=true', 'features.skill_search=false',
-    'web_search="disabled"', 'mcp_servers={}', 'model_reasoning_effort="high"',
+    'web_search="disabled"', 'mcp_servers={}',
 )
 TERMINATION_GRACE_SECONDS = 1.0
 STDERR_TAIL_LINES = 20
@@ -139,16 +122,22 @@ def runtime():
             'output_limit': 'checked-after-generation', 'wall_limit': 'owned-process-group-timeout'}
 
 
+def read_route_effort(route):
+    return route['configuration'].get('effort', DEFAULT_EFFORT)
+
+
 def validate_route(route):
     if route['adapter'] != ADAPTER or route['endpoint'] != 'codex://local':
         raise ResearchError('invalid_review_route', 'Use codex_cli_v1 at codex://local')
     config = route['configuration']
-    if set(config) != {'max_output_tokens', 'timeout_seconds'}:
-        raise ResearchError('invalid_review_route', 'Configure max_output_tokens and timeout_seconds')
+    if set(config) - {'effort'} != {'max_output_tokens', 'timeout_seconds'}:
+        raise ResearchError('invalid_review_route', ROUTE_MEMBERS_ERR_MSG)
+    if 'effort' in config and config['effort'] not in EFFORTS:
+        raise ResearchError('invalid_review_route', EFFORT_ERR_MSG)
     if type(config['max_output_tokens']) is not int or config['max_output_tokens'] < 1:
         raise ResearchError('invalid_review_route', 'The observed output-token bound must be positive')
-    if type(config['timeout_seconds']) not in (int, float) or not 0 < config['timeout_seconds'] <= 600:
-        raise ResearchError('invalid_review_route', 'The execution timeout must be positive and at most 600 seconds')
+    if type(config['timeout_seconds']) not in (int, float) or not 0 < config['timeout_seconds'] <= MAX_TIMEOUT_SECONDS:
+        raise ResearchError('invalid_review_route', TIMEOUT_ERR_MSG)
 
 
 def packet_text(request):
@@ -183,6 +172,7 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls):
     meta = [event['payload'] for event in events if event.get('type') == 'session_meta']
     expected = packet_text(request)
     issues, users, developer_digests, environment_digests, outputs = [], [], [], [], []
+    listing_free_digests = []
     packet_seen = False
     if (len(meta) != 1 or meta[0].get('id') != thread_id or meta[0].get('source') != 'exec'
             or meta[0].get('base_instructions', {}).get('text') != request['instructions']
@@ -203,6 +193,8 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls):
             if packet_seen:
                 issues.append('late_developer_input')
             developer_digests.append(_native_digest(json.dumps(item['tools'], sort_keys=True), directory))
+            listing_free_digests.append(_native_digest(json.dumps(remove_model_listing(item['tools']), sort_keys=True),
+                                                       directory))
             continue
         if item.get('type') not in ('message', 'reasoning'):
             issues.append('unknown_or_tool_input')
@@ -223,6 +215,7 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls):
                 issues.append('late_developer_input')
             developer_digests.append(DELIVERED_INSTRUCTIONS_ID if text == request['instructions']
                                      else _native_digest(text, directory))
+            listing_free_digests.append(developer_digests[-1])
         if item.get('role') == 'assistant':
             if not packet_seen:
                 issues.append('inherited_assistant_history')
@@ -236,7 +229,8 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls):
             else:
                 users.append(text)
                 packet_seen = text == expected
-    if tuple(developer_digests) not in NATIVE_DECLARATION_SETS:
+    if (tuple(developer_digests) not in NATIVE_DECLARATION_SETS
+            and tuple(listing_free_digests) not in LISTING_FREE_DECLARATION_SETS):
         issues.append('unknown_developer_input')
     if len(environment_digests) > 1:
         issues.append('repeated_environment_input')
@@ -279,7 +273,8 @@ def send_request(route, request, credential=None):
         command = [shutil.which('codex'), 'exec', '--ignore-user-config', '--ignore-rules',
                    '--skip-git-repo-check', '--json', '--color', 'never', '-s', 'read-only',
                    '-m', route['model']]
-        for value in CONTROLS + ('model_instructions_file=' + json.dumps(str(instructions)),):
+        for value in CONTROLS + ('model_reasoning_effort=' + json.dumps(read_route_effort(route)),
+                                 'model_instructions_file=' + json.dumps(str(instructions))):
             command.extend(('-c', value))
         command.append('-')
         result = _run_owned(command, packet=packet, directory=directory, environment=environment,

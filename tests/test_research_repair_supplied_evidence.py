@@ -1,5 +1,6 @@
 """A fresh repair retains actual prior attachments without widening excerpts."""
 
+from unittest.mock import patch
 import base64
 import json
 
@@ -26,6 +27,10 @@ class RepairSuppliedEvidenceTests(StrategyCase):
     repair = repair_fixtures.RepairSourcePendingTests.repair
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.sequence = 0
         self.setup_dossier()

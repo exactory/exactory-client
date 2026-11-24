@@ -31,7 +31,9 @@ or stop at it, and the public section on what a resolution would change. A
 statement has one subject class, the class of its record, and the record names each further
 area that its statements concern, so that the reviewers state and apply the standard of each
 area ("Further areas"). An exploration that formed statements ends with a report of every form
-and of how each ended ("The end of an exploration").
+and of how each ended ("The end of an exploration"). When the reviews refuse every candidate,
+the search goes on by recorded search steps until a problem is posted ("The search after a slate
+that selects nothing").
 
 Work like a researcher, not like a form filler. A candidate question is worth posing for what the
 field would gain from an answer, shown with sources read in full, computations whose scope is
@@ -118,7 +120,7 @@ reviews that count now in `final/reviews/<role>/` (`bar`, `slate`, `result`,
 `adjudicator`); the selected statement and the latest record of each other kind
 in `final/problem/` (`statements/`, `slates/`, `attempts/`, `openness/`,
 `values/`, `assessments/`, `formal-checks/`, `decisions/`, `posts/`, `reports/`,
-and every further area in `areas/`); the problem
+`search-steps/`, `search-origins/`, and every further area in `areas/`); the problem
 export in `final/problem/exports/`; the delivered solver attempts and closures in
 `final/math/deliveries/`; and the results that the attack's controller relies on
 in `final/math/attack/`. `final/history/` has the same layout and holds the
@@ -156,9 +158,12 @@ the copies that its tools wrote, for example `reviews/outputs/`, to
 ## Exploration
 
 An exploration is one research workspace opened on an area and a field question. It holds every
-search, reading, population record, probe, forming record and candidate of the exploration, and
-the slate that closes it. It has a budget, and it has a legitimate outcome in which nothing is
-posted.
+search, reading, population record, probe, forming record and candidate of the exploration. It
+also holds its slates and the search steps that follow a slate that selects nothing. It has a
+budget. A run is the work that one request starts, in one record or in several records that each
+name the next. A run ends when a problem is posted. An exploration can end without a post. The
+run then continues in the next exploration ("The search after a slate that selects nothing",
+below).
 
 1. Open the record in a new workspace. Write `{slug, area, field, authors}` to `init.json`:
    `area` is one `math.*` subject class, `field` describes the field and the question explored
@@ -374,10 +379,11 @@ Once the record holds a forming call, `exactory-research status` reports `formin
 forms, by_standing, by_disposition, without_outcome, outcomes}`. Give every form an outcome
 before the exploration ends; `without_outcome` counts the forms that have none.
 
-When the evidence does not support any candidate, end the exploration without a post: record a
-slate with an empty selection and a nonempty `reason`, and keep the negative findings in the
-record. A clean no is a result of the exploration, not a failure of it. "The end of an
-exploration", below, says when an exploration has ended and how its report records the end.
+When the evidence does not support any candidate, record a slate with an empty selection and a
+nonempty `reason`. Keep the negative findings in the record. Such a slate is a result of the
+exploration. It does not end the run: the search goes on from it ("The search after a slate that
+selects nothing", below). "The end of an exploration", below, says when an exploration has ended
+and how its report records the end.
 
 One record holds the exploration. A bar or slate objection binds the candidates of its own record,
 and it reaches another record only through `exactory-research problem-objections-carry` ("Carry a
@@ -662,10 +668,149 @@ read [Retired starts](../../docs/retired-starts.md). It holds the procedure of e
 rules of its kinds, what the harness accepts in such a record, and how a new record takes up
 one of its candidates.
 
+### The search after a slate that selects nothing
+
+A run ends when a problem is posted. When the reviews refuse every candidate, the search goes
+on, and every threshold of "The rubric" stays as it is. The search becomes wider in three ways
+only. It obtains more evidence, it forms other statements from the places of the field, and then
+it takes another field question. No step of the search widens a statement, lowers a threshold or
+changes a principle of "Exploration".
+
+The harness names the next step. When the current slate selects nothing and the record holds no
+post, `exactory-research next` has the code `problem_search_step_required`. Its full report
+holds what the refusal taught the record:
+
+- `deferred` and `rejected` hold the dispositions of the slate, with the `evidence_needed` or
+  the reason of each candidate.
+- `objections` holds each objection of the slate reviews that the slate cites, with its
+  candidates and its `resolution_condition`.
+- `ways` holds the five ways of the search in their order. Each way has `applicable` and the
+  steps that already follow this slate.
+- `next` holds the search step to record now, as `{command, payload, chooses}`.
+
+Read them before you choose.
+
+A search step is the decision of what the search does next. Record it with `exactory-research
+problem-search-step` before you do its work. The payload is `{id, slate_id, way, candidate_ids,
+learned, evidence, plan, passed_over, successor_workspace, other_leads}`.
+[Search steps](../../docs/research-cli.md#search-steps) in the CLI reference gives every member,
+limit and refusal.
+
+- `slate_id` names the latest slate, which selects nothing.
+- `way` is one of the five ways.
+- `learned` says what the record learned that decides this step: what the slate reviews found,
+  and what each earlier step found. `evidence` cites the records behind it, for example a slate
+  review, a search, a reading, a form outcome, a probe or an accepted result. A step that
+  follows another step after the same slate cites at least one record of the work of that step
+  (`problem_search_evidence_missing` otherwise). The harness checks the date where a record
+  states one: a cited record whose revision is not later than that step does not count. A
+  reading, a search, a source and an artifact state no revision, so cite one of them only when
+  the work of that step made it.
+- `plan` says what the step does and which product ends it.
+- `passed_over` gives `{way, reason}` for each earlier way of the order that applies and has no
+  step after this slate (`problem_search_way_passed_over` otherwise). A reason is a fact of the
+  record, for example the searches that already looked for the evidence.
+- `candidate_ids`, `successor_workspace` and `other_leads` belong to single ways, below. Where a
+  way does not use one, send an empty list or null.
+
+The five ways, in their order. The order goes from the evidence that the record holds to the way
+that leaves the record:
+
+1. `raise_deferred` applies when the slate defers a candidate. The step obtains the evidence
+   that the slate names in `evidence_needed`. `candidate_ids` names the deferred candidates that
+   it works on. Run the search for a place with the three questions of "Candidates and the
+   slate", step 1. Read each work that it finds in full. As another route, establish with a
+   bounded solver objective the relation that ties the statement to an item that a work states.
+   The product is a revised candidate that cites the new evidence.
+2. `pose_stated_item` applies always. The step poses an item that a source states, needs or
+   stops at, in the terms of that source. Go through the passages that you noted in the full
+   readings: what a work states as open, what it assumes or says is sufficient, and where its
+   argument stops. Go through the nearest problems that the bars name, and the items that a
+   slate review names as missing from the slate. A printed conjecture or question that the
+   record only copies restates a known question, and "The rubric" refuses it. Pose the missing
+   step, the hypothesis, the exact form of a question that a work asks in words, or a reduction
+   that the record proves. Where the refused statement is a stronger form of the new candidate,
+   keep it as the stronger alternative.
+3. `study_refutation` applies when a form of the record has the standing `refuted`. When a work
+   refutes a conjecture of the field, first record that conjecture as a form. Give the form the
+   outcome `refuted`, with the full reading as evidence. The step forms a question about what
+   the refutation shows. The question can concern the mechanism or the structure of the
+   counterexamples, or how far and how strongly the statement fails. It can concern the results
+   that fall with the statement, or the statement that replaces it under the three conditions of
+   "Exploration". A question whose purpose is to find where the refuted statement still holds
+   stays excluded.
+4. `attack_stated_question` applies always. The step attacks a question that a work states with
+   a bounded math-solver objective ("Objectives beside the attempt"). The step at which the
+   attack stops is a candidate with a place when an accepted reduction ties it to the stated
+   question. Its source kind is `own_record`.
+5. `next_exploration` applies always. The step opens the next exploration on another field
+   question ("The next exploration", below).
+
+Take the way that `next` names: the first way of the order that applies and has no step after
+the current slate. To take a later way, give the reason for each way that you pass over.
+
+After you record the step, `next` has the code `problem_search_step_open`. Do the work of the
+step. Record each new or revised candidate, obtain the slate review that "Candidates and the
+slate" requires, and record a new slate. A slate that selects a candidate returns the record to
+the path to a post. A slate that selects nothing is followed by the next search step. When the
+step ends without a candidate, record the next step. Its `learned` says what the ended step
+found, and its `evidence` cites the records of that work.
+
+When the result reviews refuse a selected candidate, record the `withdraw` decision ("Reviews
+and the decision", step 9). When the record then holds no post, record a new slate at once,
+before any report. In it, defer the withdrawn candidate with the evidence that raises it, or
+reject it with the reason. When that slate selects nothing, the search goes on as this section
+states, and the report waits until the exploration ends ("The end of an exploration").
+
+The next exploration. Take the way `next_exploration` when each other way that applies has a
+step after the current slate or a reason in `passed_over`. Then do these steps in turn:
+
+1. Choose the next field question from what the run learned. Use the reasons of the refusals and
+   the `other_leads` of the earlier explorations (`search` in `exactory-research status`). Also
+   use the lines and the nearest problems that the bars name, and the works that the readings
+   found at the edge of this field. Prefer a field question with a place: a work that you read
+   states an exact open item, needs a missing step or says where its argument stops. Stay inside
+   the direction of the request while it holds a field question that the run did not explore.
+   When it holds none, take the nearest field question outside it, and say so in `plan` and in
+   your summary.
+2. Open the new record with steps 1 to 4 of "Exploration". The next exploration has another
+   field question. A record that takes up the same field question, or a candidate of this
+   record, is a sibling record and needs the carry ("Carry a reviewed candidate to another
+   record").
+3. In this record, record the search step with the way `next_exploration`. `successor_workspace`
+   is the absolute path of the new workspace. `plan` names the field question of the next
+   exploration, the reason for it and the field questions that you compared with it.
+   `other_leads` lists each other field question that the run noted and did not explore, as
+   `{field, reason}`. Include the leads of earlier explorations that are still open. `next` in
+   this record then has the code `problem_search_continued` and gives the new workspace.
+4. In this record, record the report ("The end of an exploration").
+5. In the new record, run `exactory-research problem-search-origin` with `{id, source_workspace,
+   source_revision}`: a new id, the absolute path of the workspace of this record, and its
+   current revision. The command reads this record and does not write it. Before step 3 is
+   recorded, it refuses with `problem_search_origin_unlinked`. It keeps in the new record what
+   this exploration learned: the field question, the latest slate with its dispositions and
+   reasons, and the objections of its slate reviews. It also keeps the forms whose standing
+   rests on evidence, the search steps, the open leads and the report. It keeps one short row
+   for each earlier exploration of the run. `exactory-research status` in the new record shows
+   all of this under `search`, and the output folders show it in
+   `final/problem/search-origins/`.
+6. In the new record, read `search` before you form the first candidate. Pose no statement that
+   the run already refused, unless new evidence meets the recorded objection.
+
+The run ends when a problem of the run is posted. Until then, each slate that selects nothing is
+followed by a search step, in this record or in the next one. A stop that only the user can
+pass, for example `review_budget_exhausted`, does not end the run. Report it as
+[Stops and overrides](../../docs/research-workflow.md#stops-and-overrides) describes. The
+recorded search steps let a later session continue from `exactory-research next`.
+
 ### The end of an exploration
 
-An exploration has ended when its current slate selects nothing, or when every candidate that
-the current slate selects has ended in one of three ways:
+An exploration has ended in one of two cases. In the first case, its current slate selects
+nothing, and the record holds a post or the search continues in another record. The search
+continues in another record when the latest search step after that slate has the way
+`next_exploration` ("The search after a slate that selects nothing"). A slate that selects
+nothing does not end the exploration by itself. In the second case, every candidate that the
+current slate selects has ended in one of three ways:
 
 - It is posted: `problem-posted` or `problem-post-external` records a post of a statement that
   formulates the candidate ("Compose and post a problem").
@@ -678,6 +823,11 @@ the current slate selects has ended in one of three ways:
 A later slate decides its candidates again. A withdrawal or a transfer that was recorded before
 the latest slate ends nothing, and a slate that selects a candidate again reopens the
 exploration.
+
+In a record without a post, a withdrawal is followed at once by a new slate that defers or
+rejects the withdrawn candidate ("The search after a slate that selects nothing"). Record that
+slate before the report, also while `status` shows the advisory `problem_report_due`: the
+withdrawal does not end the run.
 
 Record how the exploration ended with `exactory-research problem-report`. The payload is
 `{id, reopen_when}`: a new report id, and the finding that would make the exploration worth
@@ -698,6 +848,9 @@ The report holds:
   passed, failed and unresolved;
 - every candidate with its disposition on the latest slate and its ending, and every
   withdrawal;
+- every search step with its way, what the record had learned, its plan, the candidates that
+  were recorded during it and what ended it;
+- the origin of the search, when the record continues an earlier exploration;
 - every statement with two entries that are kept apart: its publication (`not posted`, `posted
   through the gate` or `posted outside the gate`) and, for each post, its classification at
   the post;
@@ -745,19 +898,20 @@ with the form ids). A record that holds no forming call and no retired start has
 report, and you can record one for it.
 
 The report records its `cutoff`, the revision at which it was computed, and the digest of the
-records that it read. It is stale once a record of a kind that it read is added or changed
-after the cutoff: a forming call, an outcome, a forming import, a transfer, a further area, a
-candidate, a slate, a statement, an attempt, a delivered solver snapshot, a value record, a
-decision, a post or its time statement, a fact after a post, a review, an adjudication, a
-review assignment or a reviewer call, a plan, a run, an assessment, a probe, a budget, or a
-charge to the resource accounts. `status` then carries the advisory `problem_report_stale`
-with the id of the report. Record a new report under a new id; an id is used once
-(`record_conflict`). Record the report as the last record of the exploration, and record it
-again after work that follows it, for example after a fact that arrives after a post.
+records that it read. It is stale once a record of a kind that it read is added or changed after
+the cutoff: a forming call, an outcome, a forming import, a transfer, a search step, a search
+origin, a further area, a candidate, a slate, a statement, an attempt, a delivered solver
+snapshot, a value record, a decision, a post or its time statement, a fact after a post, a
+review, an adjudication, a review assignment or a reviewer call, a plan, a run, an assessment, a
+probe, a budget, or a charge to the resource accounts. `status` then carries the advisory
+`problem_report_stale` with the id of the report. Record a new report under a new id; an id is
+used once (`record_conflict`). Record the report as the last record of the exploration, and
+record it again after work that follows it, for example after a fact that arrives after a post.
 
 The output folders show the current report in `final/problem/reports/` and each earlier
 report in `final/history/problem/reports/`. In your summary to the user, give the outcome, the
-number of forms by standing, and for each posted statement its classification at the post.
+number of forms by standing, and for each posted statement its classification at the post. When
+the search continues in another record, give the workspace of that record.
 
 ## Candidates and the slate
 
@@ -777,10 +931,12 @@ significance.
    the natural question and the works that study it; the step of that question at which the
    candidate arises; and its place, which is the work that states it, needs it or stops at it,
    or the results that it only continues. Cite the full readings of those works in
-   `source.evidence`. When no work that you read states the candidate, needs it or stops at it,
-   run one bounded search before the selection, with three questions: who states it as open,
-   who assumes it or says that it would suffice, and who stops at it. Read each work that the
-   search finds in full.
+   `source.evidence`. A new slate review receives the text of each work that a current candidate
+   cites there by a reading of this record or by a source link, and no other work unless it asks
+   for one. Cite every work on which the statement, the reference or the observation rests. When
+   no work that you read states the candidate, needs it or stops at it, run one bounded search
+   before the selection, with three questions: who states it as open, who assumes it or says that
+   it would suffice, and who stops at it. Read each work that the search finds in full.
 2. Grade `potential` as `{significance: {B1, B2}, priority, readiness}` with the levels of the
    rubric in "Value and the rubric" and a readiness verdict `pass` or `fail`. Grade what the
    question would be if it holds up; the slate and the attempt test whether it does. For a
@@ -797,19 +953,29 @@ significance.
    candidate is shown to a reviewer. Register and test each route with `review-route` and
    `review-probe`: in a Claude Code session a `claude_cli_v1` route at `claude://local`, which
    runs the Claude Code CLI itself as an isolated reviewer on the owner's subscription; in a
-   Codex session a `codex_cli_v1` route. Two reviewers are two routes with distinct models or
-   reviewer ids. Assign each bar with `review-assignment`, role `bar` and `dossier_id: null`;
-   the harness uses the template `exactory-problem-review-v5/bar`. A record without a
-   recorded capacity policy runs one reviewer call at a time. `next` gives the bar
-   assignment as a step under `problem_bar_pending`. When its payload holds `scheduler`,
-   keep that member in the first bar assignment: the two bars then run at the same time on
-   their two routes ([the CLI reference](../../docs/research-cli.md#staged-problem-reviews),
-   "Capacity"). Run the assignment with
-   `review-run` and record the observed bar with `value-review`. The bars fix what levels 2 and 3
-   of significance and priority mean in this field before the candidates can shape the answer.
-   When the record names further areas, the bar prompt carries the areas paragraph
-   (`exactory-problem-areas-v1`), and each bar states the standard of each area separately
-   ("Further areas" in "Exploration").
+   Codex session a `codex_cli_v1` route. The `configuration` of a Codex route can name the
+   reasoning effort of its calls in `effort`: `low`, `medium`, `high`, `xhigh` or `max`. Without
+   the member the route runs at `high`. After each `review-probe`, read `unverified_reasons` in
+   its receipt. An empty list means that the probe verified the route. With an entry that starts
+   with `context:`, or with `control_mismatch`, `excluded_control` or `unclassified`, the route
+   takes no review, also when the receipt shows `status: "completed"`. Do not assign a review on
+   such a route. Do not run a capacity probe to remove an entry that starts with `context:`. The
+   size of a probe does not change such an entry. Record the entry as a harness observation.
+   Then use another route. When the only entry is `call_incomplete`, read `error` and
+   `provider_diagnostic` of the probe. When a capacity probe was refused for its size, run
+   `review-assignment` with `--check` and take the smaller `review-probe` that its capacity stop
+   lists. After any other incomplete call, run `review-probe` again. Two reviewers are two
+   routes with distinct models or reviewer ids. Assign each bar with `review-assignment`, role
+   `bar` and `dossier_id: null`; the harness uses the template `exactory-problem-review-v5/bar`.
+   A record without a recorded capacity policy runs one reviewer call at a time. `next` gives
+   the bar assignment as a step under `problem_bar_pending`. When its payload holds `scheduler`,
+   keep that member in the first bar assignment: the two bars then run at the same time on their
+   two routes ([the CLI reference](../../docs/research-cli.md#staged-problem-reviews),
+   "Capacity"). Run the assignment with `review-run` and record the observed bar with
+   `value-review`. The bars fix what levels 2 and 3 of significance and priority mean in this
+   field before the candidates can shape the answer. When the record names further areas, the
+   bar prompt carries the areas paragraph (`exactory-problem-areas-v1`), and each bar states the
+   standard of each area separately ("Further areas" in "Exploration").
 5. When `problem-slate` returns `problem_bar_calibration_required`, the named bar was recorded
    on the version 1 prompt, or it was given before a further area was recorded; the second
    case carries `area_ids`. Assign the bar again to the same reviewer with an empty `context`;
@@ -840,7 +1006,13 @@ significance.
    or a candidate's standing rests on a judgment you cannot make yourself. Assign it with
    `review-assignment`, role `slate` and `dossier_id: null`, to one of the
    two bar reviewers; the harness builds the packet from the current candidates and the two
-   bars and uses the template `exactory-problem-review-v5/slate`. Run it with `review-run` and
+   bars and uses the template `exactory-problem-review-v5/slate`. When a current candidate cites
+   a work, by a reading or by a source link, the slate review is a session of its own in the slot
+   of the reviewer's bar. Its packet delivers the two bars, the candidates and the text of each
+   cited work (`slate_delivery.cited_works`), and its prompt carries the delivery paragraph
+   (`exactory-problem-slate-delivery-v1`). The packet delivers no probe output and no file of the
+   workspace. Write into the `observation` what the reviewer needs from a proof sketch, a table or
+   a probe. Run it with `review-run` and
    record it with `value-review`. A slate review's objection names the candidates it concerns;
    such an objection follows the candidate into the result reviews and the post gate of this
    record until it is resolved with evidence or found not upheld. When the candidate moves to
@@ -858,17 +1030,22 @@ significance.
    principle as the reason, whatever its potential grades: no evidence can raise it. Name both
    bars in `bar_review_ids`. When slate reviews were recorded, put their ids in `review_ids` (at
    most two, from distinct reviewers); otherwise leave `review_ids` empty. Write the
-   `comparison`, and a `reason` when nothing is selected.
+   `comparison`, and a `reason` when nothing is selected. A slate that selects nothing is
+   followed by a search step ("The search after a slate that selects nothing" in "Exploration").
 9. Select only a candidate whose potential reaches `max(B1, B2) >= 2` with readiness `pass`.
    Defer a candidate at level 1 with the evidence that would raise it, and reconsider it when
    that evidence is recorded. For a candidate that only continues results, that evidence is a
    work that states it, needs it or stops at it: name the search for such a work in
-   `evidence_needed`.
+   `evidence_needed`. The search step `raise_deferred` takes the `evidence_needed` of a deferred
+   candidate as its target.
 10. When a new or revised candidate is recorded, the slate is stale (`problem_slate_stale`):
     record a new slate that disposes of every current candidate. When the candidates or the bars
-    change after a slate review, assign the slate review again to the same reviewer before you
-    cite it; the harness refreshes it in the same session and slot, and the refreshed review
-    gives a finding on every objection its earlier review stated.
+    change after a slate review, assign the slate review again to the same reviewer with an empty
+    `context` before you cite it. The harness refreshes it as a new session in the same slot. The
+    packet holds the current candidates, the text of each cited work and the earlier review, and
+    the request holds no turn of an earlier session. The refreshed review gives a finding on every
+    objection that its earlier review stated, and it takes the place of that review. A slate review
+    that a context repair recorded is refreshed in its own session, as before.
 
 For each selected candidate of the record's class, take the following steps in turn. Post each
 one that meets the bar. For a selected candidate of another class, follow "Carry a reviewed
@@ -1450,16 +1627,19 @@ each of these refusals.
      `review_context_contaminated` and the member `details.turn` when the review records
      give no verified context for a turn of the chain. No reviewer call starts. Read
      `details.message` and take `details.step`; in a refusal of `review-run`, take the step
-     of the plan under `details.next`. When the step is `review-probe`, probe the named
-     route record and run `review-series` on the same head again. The chain then continues.
-     When the step is `review-context`, the named route record takes no probe: the step
-     retires it, with the owner's instruction as evidence, and `review-series` on the same
-     head names what follows. When the step is `export`, a contamination event names a turn
-     of the chain, or the latest probe of its route record found a control of an excluded
-     source (`details.turn.events` is then empty). Export a new packet and assign it. The
-     stopped chain starts no further reviewer call. When `details.turn.events` is empty, a
-     probe that verifies the named route record also ends the state, and the chain
-     continues.
+     of the plan under `details.next`. The step follows `details.turn.events`. When it is
+     empty, the route record of the turn lacks a probe that verifies it, or its latest probe
+     found a control of an excluded source. The step is then `review-probe`: probe the named
+     route record and run `review-series` on the same head again. A probe that verifies the
+     record ends the state, and the chain continues. When that route record pins another
+     reviewer runtime than the installed one, it takes no probe, and the step is
+     `review-context`: it retires the record on the named turn, with the owner's instruction
+     as evidence, and `review-series` on the same head names what follows. When
+     `details.turn.events` names a contamination event, or that route record pins another
+     runtime and is retired already, no probe ends the state, and the step is `export`:
+     export a new packet and assign it. The stopped chain starts no further reviewer call.
+     For a turn that the chain carries from an earlier chain, the command ends with
+     `openness_carried_turn_unverified` in place of these two codes (step 6b).
    - The reading record has a third allowance, `allowances.record`, which bounds what the
      chain keeps of the reviewer's excerpts and passages. `allowances.record.not_retained`
      counts the entries that it could not keep. Report these counts with the finding.
@@ -1476,6 +1656,21 @@ each of these refusals.
      reviewer returns the finding, it can ask for passages again, and `review-series` runs
      the turns that deliver them. The final answer is the finding of step 6a; a ground cites
      notes, gaps and arguments by handle (`refs`).
+   - Since 0.93.0 a final that one request does not hold is taken in pages: page turns that
+     assess the targets of their page, condensing turns where entries do not fit, and one
+     closing turn that states the outcome. `review-series` assigns and runs them like every
+     other turn, and it records the finding that the harness composes from their answers.
+     Run it after each stop or handoff and take the step that it plans, until the closing
+     turn has its answer. The receipt of a turn states the form under
+     `reading_chain_admission.final_form`. When a content record changed after the first
+     assignment so that a unit of the chain differs, the command ends with the handoff
+     `openness_packet_outdated`, whose `details.units` lists the units that differ: take
+     `details.step`, and then the steps of its `then` in their order. The new chain carries
+     the reading turns that still verify. When the review records no longer give a verified
+     context for a reading turn that the chain carries from an earlier chain, the command
+     ends with `openness_carried_turn_unverified`: `details.turns` names each earlier chain
+     with its `recovery` (`probe`, `retire` or `export`), and `details.step` is the step to
+     take.
    - Keep the `reviewer_id`, the author and the route of the earlier chain when you export
      again for the same statement and formulations. The harness looks at every earlier
      chain of the record with the same reviewer, author, statement, formulations and route
@@ -1554,8 +1749,10 @@ each of these refusals.
      (`review_input_too_large` or `review_chain_projection_over_limit`), a turn position
      that is exhausted (`review_slot_exhausted` or
      `review_refusal_notice_metadata_too_large`), and a v7 chain whose denser measured
-     ratio leaves its final, with the allowances that the chain has granted, without room
-     in one request (`review_chain_projection_over_limit` with `details.ratio`). When a new
+     ratio leaves its final without room: a final in one request with the allowances that
+     the chain has granted, or, where the final can run in pages, its smallest turn
+     (`review_chain_projection_over_limit` with `details.ratio`).
+     When a new
      chain is admitted, the command ends with the handoff `export`, which states that chain:
      `details.successor.protocol`, `details.successor.carried_readings` for a v7 chain or
      `details.successor.planned_reading_turns` for a v6 chain that reads again, and
@@ -1616,7 +1813,17 @@ each of these refusals.
    where a command repairs one, and `grounds`, the grounds that the reviewer stated, each
    with `next`, the step that its kind asks of you:
    - `reviewer_gap`: the evidence lacks something beyond the gaps of the forecast. Repair it
-     with `search`, `fulltext` or `import-fulltext`, and `read`, then export.
+     with `search`, `fulltext` or `import-fulltext`, and `read`, then export. A finding under
+     the finding rules version 2 names the gap: the ground holds `formulation`, `need`,
+     `unsettled`, `basis` and one of `work` and `search`. For `work`, acquire the full text
+     of the work that `work.title` and `work.identifiers` name, read it in full, and bind the
+     reading in the new minimum. When no open copy exists, the owner saves the text and you
+     import it with `import-fulltext` and its `origin`; without a text the gap stays, and the
+     finding stays `unresolved`. For `search`, run a search of the formulation that
+     `formulation` names with a query that holds `search.missing_term`, record it with
+     `search`, and bind it. When the named work or term does not bear on that formulation,
+     record the judgment with its reason in the search record of the formulation
+     (`dispositions`, `resolved`), so that the next packet shows it in its finding index.
    - `source_settles`: a decisive work that the packet read in full proves or refutes the
      statement. Repair the gaps, then export with that work as `settling_work_id`, or record
      a new statement.
@@ -2280,15 +2487,18 @@ the statement, or that its named nearest alternatives allow as well. A passed te
 of "A run as a test of the statement", is experimental support within its scope and is no
 pattern.
 
-When significance stays at level 1 because no place counts, there are three ways to go on.
-Revise, when evidence can still repair it: run the search for a place ("Candidates and the
-slate", step 1), read the works in full and enter the place, or establish the relation that
-ties the statement to a stated item with a bounded objective. Pose another statement, when the
-works state a nearer item: their own open question, the missing step, the hypothesis, or the
-weaker alternative whose consequence they ask for. Record that item as a new candidate, and
-keep the present statement as its stronger alternative. Withdraw, when the searches end without
-a place that counts, and name in the `reopen_when` of the report the finding that reopens the
-exploration: a work that states the statement, needs it or stops at it.
+When significance stays at level 1 because no place counts, defer the candidate with the
+evidence that raises it. The search then goes on ("The search after a slate that selects
+nothing" in "Exploration"), and its first two ways answer this shortfall. Under
+`raise_deferred`, run the search for a place ("Candidates and the slate", step 1), read the
+works in full and enter the place. As another route, establish with a bounded objective the
+relation that ties the statement to a stated item. Under `pose_stated_item`, pose the nearer
+item that the works state: the missing step, the hypothesis, the exact form of their own open
+question, or the weaker alternative whose consequence they ask for. Record that item as a new
+candidate, and keep the present statement as its stronger alternative. When the searches end
+without a place that counts, the candidate stays deferred, and the next search step takes the
+next way. The `reopen_when` of the report names the finding that reopens the exploration: a work
+that states the statement, needs it or stops at it.
 
 Among admissible candidates, class `E-F` is preferred, then the higher significance level, then
 the higher priority level. A reasoned departure for significance is permitted and recorded. The
@@ -2370,7 +2580,27 @@ accounts with the parts that the harness derives, and the records that their ent
    is unchanged: the assurance
    `problem_value` covers the accounts, and the grades and evidence texts of A3, significance,
    priority, accessibility, calibration and A7 carry the reviewer's judgments. Run the
-   assignment with `review-run` and record the observed review with `value-review`. When the result packet does not fit one input of the route, or its fitted
+   assignment with `review-run` and record the observed review with `value-review`.
+   Since 0.93.0 a new bar, slate or result review can run as a session under the source rules
+   `exactory-independent-review-sources-v4`, and a new series can run under
+   `exactory-review-parts-v3`; the receipt of `review-assignment` names what was chosen
+   (`session_admission`, `review_parts.protocol`). Run either with `review-series`, as below.
+   A session delivers the required units of the packet over its first turns, and its final,
+   like the final of a series under parts v3, can take page turns and a closing turn. Three
+   things differ for you. First, a new review on a route below the capacity floor of the
+   rules v4 is refused with `review_route_capacity_below_floor` and `details.reason:
+   "session_below_floor"` before any call: report the stop, and when the owner authorizes an
+   answer of `details.then`, take its steps. Second, a review that such a session recorded
+   is refreshed as a new chain in its slot: assign the same role to the same reviewer with
+   an empty `context`, or take the payload that `review-series` plans for the recorded
+   head, and do not name the recorded final as `prior_assignment_id`. Third, a slate review
+   that does not fit one request is a series under parts v3, and a slate whose forming
+   records reference a body that is not text stops before its first call for a capture of
+   a text form: store the text with the `artifact` step that the stop names, and assign
+   again. The
+   [CLI reference](../../docs/research-cli.md#sessions-under-the-source-rules-v4) states the
+   turns, the checks and the stops of a session.
+   When the result packet does not fit one input of the route, or its fitted
    request would withhold an evidence body, the harness delivers the review as a series of
    fresh-input turns (`exactory-review-parts-v2`): read turns that card the evidence, combine and
    check turns when needed, possibly more than one of each, followed by final turns, each a new
@@ -2628,9 +2858,12 @@ accounts with the parts that the harness derives, and the records that their ent
 10. When the current minimum and the observed review pair pass, record `post`.
 11. Run `exactory-research gate post`. When it reports ready, continue with "Compose and post a
     problem".
-12. When every candidate that the current slate selects is posted, withdrawn or taken up in
-    another record, the exploration has ended: record its report ("The end of an exploration"
-    in "Exploration").
+12. When the record holds no post and a selected candidate is withdrawn, the run goes on: record
+    at once a new slate that defers or rejects the withdrawn candidate, then the search step
+    that follows it ("The search after a slate that selects nothing" in "Exploration").
+    Otherwise, when every candidate that the current slate selects is posted, withdrawn or taken
+    up in another record, the exploration has ended: record its report ("The end of an
+    exploration" in "Exploration").
 
 ## Compose and post a problem
 
@@ -2939,3 +3172,7 @@ Optional at creation: `--paper <arxiv-id-or-doi>` (repeat, at most 10) and
 - Do not cite a work in the public text that the record did not read and use; the citation check
   and the reviewers both see it.
 - Do not post a problem with a citation locator you did not check.
+- Do not end a run at a slate that selects nothing. Record the search step that `next` names,
+  and go on until a problem is posted.
+- Do not widen a statement, raise a potential grade without new evidence or pose a refused
+  statement again to pass a slate. No threshold of "The rubric" changes during the search.

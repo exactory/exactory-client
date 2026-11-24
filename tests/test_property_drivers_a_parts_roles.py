@@ -21,6 +21,7 @@ class RoleProperties(driver.PartsDriver, unittest.TestCase):
     def use_fixture(self, fixture):
         self.addCleanup(fixture.doCleanups)
         fixture.setUp()
+        self.select_parts_v3()
         return fixture
 
     def pin_read_profile(self):

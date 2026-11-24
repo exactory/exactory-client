@@ -209,9 +209,7 @@ def validate_series_evidence(records, artifacts, assignment_id, candidate_refere
 
 def validate_verification_final(records, artifacts, assignment, output, *, attempt=None):
     """Check the ordinary verdict's three source-linked checks without selecting this turn."""
-    from .research_decisions import (find_review_undelivered_references,
-                                     read_review_citation_delivery)
-    from .review_refusal import validate_evidence_contract
+    from .research_decisions import read_review_citation_delivery
     from .verification import validate_verdict_body
     from .workspace import strict_json
 
@@ -233,13 +231,8 @@ def validate_verification_final(records, artifacts, assignment, output, *, attem
         if not isinstance(check['evidence'], list):
             raise ResearchError('invalid_value_review',
                                 'Verification evidence is an array of source links')
-        references = [dict(kind='source', link=link) for link in check['evidence']]
-        with describe_error_at('/checks/' + str(index) + '/evidence'):
-            validate_evidence_contract(records, artifacts, references, packets=packets, forms_notice=False)
-        if find_review_undelivered_references(records, artifacts, references, delivery,
-                                            require_complete_artifacts=True):
-            raise ResearchError('review_evidence_undelivered',
-                                'Cite only source content delivered by this series')
+        _validate_verification_evidence(records, artifacts, check['evidence'], packets, delivery,
+                                        path='/checks/' + str(index) + '/evidence')
         if check['dimension'] == 'soundness' and not any(link['version_id'] == target['id']
                                                        for link in check['evidence']):
             raise ResearchError('invalid_value_review',
@@ -247,6 +240,34 @@ def validate_verification_final(records, artifacts, assignment, output, *, attem
     if seen != set(VERIFICATION_CHECKS):
         raise ResearchError('invalid_value_review',
                             'Assess soundness, novelty and impact exactly once each')
+
+
+def _validate_verification_evidence(records, artifacts, links, packets, delivery, *, path):
+    """Check the source links of one verification check against the records: each link reads at its locator in the
+    delivered bytes, and each one cites content that this series delivered."""
+    from .research_decisions import find_review_undelivered_references
+    from .review_refusal import validate_evidence_contract
+    references = [dict(kind='source', link=link) for link in links]
+    with describe_error_at(path):
+        validate_evidence_contract(records, artifacts, references, packets=packets, forms_notice=False)
+    if find_review_undelivered_references(records, artifacts, references, delivery,
+                                          require_complete_artifacts=True):
+        raise ResearchError('review_evidence_undelivered',
+                            'Cite only source content delivered by this series')
+
+
+def validate_verification_page(records, artifacts, assignment, output, *, attempt):
+    """Run on each evidence field of a page answer the checks of validate_verification_final that read the records,
+    so that the page is refused at its own place."""
+    from .research_decisions import read_review_citation_delivery
+    from .review_composition import list_page_evidence
+    from .review_refusal import contract_check
+    packets = parts.collect_contract_packets(records, artifacts, assignment)
+    delivery = read_review_citation_delivery(records, artifacts, assignment, attempt=attempt)
+    with contract_check('verification.parts'):
+        for _, path, links in list_page_evidence(output):
+            with describe_error_at(path):
+                _validate_verification_evidence(records, artifacts, links, packets, delivery, path=path)
 
 
 def validate_readiness_final(records, artifacts, assignment, output, *, attempt=None):
@@ -258,10 +279,12 @@ VERIFICATION_ADAPTER = dict(
     applies=applies_verification, enumerate_units=list_verification_units,
     targets=list_verification_targets, series_key=compute_verification_key,
     citations=list_verification_citations, validate_final=validate_verification_final,
-    final_prompt=prompts.FINAL_VERIFICATION, source_requests=False)
+    final_prompt=prompts.FINAL_VERIFICATION,
+    final_prompt_v3=prompts.FINAL_VERIFICATION_V3, source_requests=False)
 
 READINESS_ADAPTER = dict(
     applies=applies_readiness, enumerate_units=list_readiness_units,
     targets=list_readiness_targets, series_key=compute_readiness_key,
     citations=list_readiness_citations, validate_final=validate_readiness_final,
-    final_prompt=prompts.FINAL_READINESS, source_requests=True)
+    final_prompt=prompts.FINAL_READINESS,
+    final_prompt_v3=prompts.FINAL_READINESS_V3, source_requests=True)

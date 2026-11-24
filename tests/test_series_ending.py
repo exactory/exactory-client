@@ -28,9 +28,13 @@ def read_answers(plan):
 
 class SeriesEndingTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = fixtures.ContinuationTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
         self.plan = self.fixture.plan()
         self.snapshot = self.case.store.snapshot()
@@ -373,6 +377,19 @@ class SeriesEndingTests(unittest.TestCase):
             command='search review-packet', root=str(self.case.root / 'controller'))))
         review_series._complete_ending_step(self.case.store, native)
         self.assertEqual(native['details']['step']['arguments'], {'--attack-root': str(self.case.root / 'controller')})
+
+    def test_stop_step_that_names_another_chain_runs_that_chain(self):
+        """Review M-F2: a review-series step of a stop that names another chain in payload.assignment_id runs that
+        chain, in details.step and in its answer; a review-series step without one runs the head."""
+        step = dict(command='review-series', payload=dict(assignment_id='successor'), chooses=[])
+        row = dict(state='stop', head_id='bar-first', details=dict(step=copy.deepcopy(step), decision=dict(
+            owner_decides='Which chain goes on?', then=[dict(answer='Go on', steps=[
+                copy.deepcopy(step), dict(command='review-series')])])))
+        review_series._complete_ending_step(self.case.store, row)
+        self.assertEqual(row['details']['step']['arguments']['--assignment'], 'successor')
+        named, head = row['details']['decision']['then'][0]['steps']
+        self.assertEqual((named['arguments']['--assignment'], head['arguments']['--assignment']),
+                         ('successor', 'bar-first'))
 
     def test_failed_step_reading_uses_executable_fallback_and_then_resumes_the_head(self):
         with patch.object(review_series, '_read_plan', return_value=(self.snapshot, self.plan)), \
@@ -1095,8 +1112,8 @@ class SeriesEndingTests(unittest.TestCase):
     def end_over_pending_delivery(self):
         """End a bar session whose three requested full texts exceed the input of its route."""
         forecast = forecast_fixtures.SessionForecastTests()
-        forecast.setUp()
         self.addCleanup(forecast.doCleanups)
+        forecast.setUp()
         requested = forecast.request_texts([180000, 180000, 180000])
         lines = []
         self.assertEqual(self.run_series(forecast.case.store, forecast.assignment['id'], emit=lines.append), 3)

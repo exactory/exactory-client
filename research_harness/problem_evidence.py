@@ -508,6 +508,28 @@ def collect_readings(records):
             if identifier in identifiers or digest(row) in digests]
 
 
+def find_required_locator_url(work):
+    """The only URL that problem-citation-locator takes for work: the URL of a URL work, None for another work."""
+    return work["id"][4:] if work["id"].startswith("url:") else None
+
+
+def has_correctable_locator(records, reading):
+    """Whether a locator that problem-citation-locator takes for this reading, and that passes the post field rule,
+    is the locator of its citation: the work has no DOI, no arXiv id and no HTTPS unit URL, which come first."""
+    from .exactory_api import validate_post_citation_field
+    work = records["work"][reading["version_id"]]
+    bundle = records.get("source_bundle", {}).get(reading.get("bundle_id"))
+    if find_citation_locator(work, (bundle or {}).get("units", [])) is not None:
+        return False
+    required = find_required_locator_url(work)
+    try:
+        if required is not None:
+            validate_post_citation_field("locator", required)
+    except ResearchError:
+        return False
+    return True
+
+
 def validate_citation_locator(records, artifacts, value):
     """Authenticate a location against its exact reading and retained HTTP original."""
     code = "problem_citation_locator_unbound"
@@ -533,7 +555,7 @@ def validate_citation_locator(records, artifacts, value):
             or source.get("status") != "captured" or source.get("response_complete") is not True
             or source.get("origin_verified") is not True
             or (source.get("response") or {}).get("sha256") != value["original_sha256"]
-            or (work["id"].startswith("url:") and work["id"][4:] != value["url"])
+            or find_required_locator_url(work) not in (None, value["url"])
             or not any(capture.get("source_id") == value["source_id"]
                        and (capture.get("original") or {}).get("sha256") == value["original_sha256"]
                        for capture in work.get("fulltexts", []))):
@@ -547,11 +569,33 @@ def validate_citation_locator(records, artifacts, value):
     return provenance
 
 
+def validate_citation_write_field(field, value, scope):
+    """Apply the post field rule and identify the command that corrects it."""
+    from .exactory_api import validate_post_citation_field
+    try:
+        validate_post_citation_field(field, value)
+    except ResearchError as error:
+        if field == "locator":
+            command = "problem-citation-locator"
+            keys = ("version_id", "reading_id")
+            chooses = ["id", "original_sha256", "url", "source_id"]
+        else:
+            command = "problem-citation-metadata"
+            keys = ("version_id",)
+            chooses = ["id", "title", "authors", "evidence"]
+        payload = {key: scope[key] for key in keys if isinstance(scope.get(key), str)}
+        error.details["step"] = dict(command=command, payload=payload, chooses=chooses, prerequisites=[])
+        raise
+
+
 def record_citation_locator(store, payload, *, expected_revision, request_id):
     """Append location metadata without replacing a reading or its bundle."""
     artifacts = store.build_artifact_store()
 
     def prepare(records, value):
+        url = value.get("url")
+        if isinstance(url, str) and url.strip():
+            validate_citation_write_field("locator", url, value)
         provenance = validate_citation_locator(records, artifacts, value)
         saved = records.get("citation_locator", {}).get(value["id"])
         record = dict(value, **provenance,

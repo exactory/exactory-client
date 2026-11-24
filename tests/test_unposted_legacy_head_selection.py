@@ -1,5 +1,6 @@
 """Unposted legacy metadata preserves the released continuation selection."""
 
+from unittest.mock import patch
 import copy
 import unittest
 
@@ -9,6 +10,10 @@ import test_review_continuation as continuation_fixtures
 
 class LegacyUnpostedHeadSelectionTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = continuation_fixtures.ContinuationTests()
         self.addCleanup(self.fixture.doCleanups)
         self.fixture.setUp()
@@ -31,9 +36,16 @@ class LegacyUnpostedHeadSelectionTests(unittest.TestCase):
             with self.subTest(metadata=name):
                 self.assertNotIn('problem_post', records)
                 plan = self.fixture.plan(records)
+                self.assertEqual(plan['head_id'], 'bar-first')
+                if name == 'history':
+                    # The plan asks the admission of its run. review-run refuses this head before any call (its
+                    # earlier scientific history is not verified), so the plan stops where release 0.92.1 planned
+                    # the refused run.
+                    self.assertEqual((plan['state'], plan.get('code'), plan.get('command')),
+                                     ('stop', 'invalid_review_context', None), plan)
+                    continue
                 self.assertEqual((plan['state'], plan.get('command')),
                                  ('run', 'review-run'), plan)
-                self.assertEqual(plan['head_id'], 'bar-first')
                 self.assertEqual(plan['payload'], dict(
                     id='bar-first-run-1', assignment_id='bar-first'))
 

@@ -1,3 +1,4 @@
+from unittest.mock import patch
 import copy
 import unittest
 from research_harness import review_parts as parts
@@ -5,6 +6,13 @@ from review_parts_fixtures import PartsResultCase
 
 
 class SeriesTests(PartsResultCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_authenticated_series_and_tampered_receipt_or_packet(self):
         self.oversized()
         turns,final=self.finish_series()

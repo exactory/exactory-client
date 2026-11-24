@@ -32,7 +32,7 @@ from datetime import date, datetime
 from urllib.parse import quote, urlencode
 
 from .errors import ResearchError
-from .identities import family_id, normalize_identifier, version_of
+from .identities import IdentifierURLParseError, family_id, normalize_identifier, version_of
 
 
 _MAX_JSON_DEPTH = 128
@@ -118,6 +118,8 @@ def _references(returned, reported):
 def _reference(ordinal, raw, identifier):
     try:
         target = normalize_identifier(identifier) if identifier else None
+    except IdentifierURLParseError:
+        raise
     except ResearchError:
         target = None
     return {"ordinal": ordinal, "target": target, "raw": raw, "kind": "unknown"}
@@ -278,7 +280,7 @@ class Arxiv:
             page.returned_count = len(entries)
             if len(entries) > page_size:
                 raise ValueError()
-        except (ET.ParseError, ValueError, TypeError) as error:
+        except (ET.ParseError, ValueError, TypeError, IdentifierURLParseError) as error:
             raise ResearchError("invalid_response", "arXiv returned invalid Atom pagination metadata") from error
         for index, node in enumerate(entries):
             try:

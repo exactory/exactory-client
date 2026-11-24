@@ -169,14 +169,6 @@
           "entry"
         ]
       },
-      "execution_pending": {
-        "research_harness/development.py:_assess#1": [
-          "entry"
-        ],
-        "research_harness/development.py:_compose_candidate#1": [
-          "entry"
-        ]
-      },
       "expected_outcome_unresolved": {
         "research_harness/development.py:_assess#1": [
           "entry"

@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from research_harness import review_protocol as protocol
+from research_harness.bar_sources import PROTOCOL_V3
 from research_harness import review_context_repair as repair
 from research_harness import review_excerpts, review_problem_parts, review_parts
 from research_harness.evidence import digest
@@ -143,21 +144,110 @@ class HistoricalParagraphTests(unittest.TestCase):
 
 
 class OptionalParagraphTests(unittest.TestCase):
+    def test_unread_closing_uses_the_finding_index_and_accepts_the_stored_version(self):
+        from research_harness.openness_reading import PROTOCOL_V7
+        old = paragraphs.UNREAD_FINAL_PARAGRAPH_VERSION
+        new = 'exactory-openness-unread-closing-v1'
+        for stage, indexed in itertools.product(('final', 'closing'), (False, True)):
+            with self.subTest(stage=stage, indexed=indexed):
+                binding = dict(unread={})
+                if stage == 'closing':
+                    binding['closing'] = {}
+                packet = dict(reading_final=binding)
+                if indexed:
+                    packet['finding_index'] = {}
+                options = dict(reading_stage=stage, reading_protocol=PROTOCOL_V7, finding_version=2 if indexed else 1)
+                selected = paragraphs.select_prompt_parameters('native_math', packet)
+                expected = new if stage == 'closing' and indexed else old
+                self.assertEqual(selected[paragraphs.PARAMETER], [expected])
+                stored = protocol.canonical_prompt('native_math', problem_paragraphs=[old], **options)
+                self.assertTrue(paragraphs.matches_packet_paragraphs(stored, 'native_math', packet))
+                if expected == new:
+                    rendered = protocol.canonical_prompt('native_math', **options, **selected)
+                    base = protocol.canonical_prompt('native_math', **options)
+                    self.assertEqual(rendered['template_id'], base['template_id'])
+                    self.assertLess(len(rendered['text']) - len(base['text']), 800)
+                    self.assertEqual(paragraphs.strip_prompt_paragraphs(rendered, 'native_math'), base)
+
+    def test_replacement_selects_unread_text_from_the_new_turn(self):
+        old = paragraphs.UNREAD_FINAL_PARAGRAPH_VERSION
+        new = paragraphs.UNREAD_CLOSING_PARAGRAPH_VERSION
+        whole = paragraphs.REFUSAL_PARAGRAPH_VERSIONS['whole']
+        closing = dict(finding_index={}, reading_final=dict(closing={}, unread={}), output_refusal=dict(form='whole'))
+        prior = dict(parameters={paragraphs.PARAMETER: [old, whole]})
+        self.assertEqual(paragraphs.select_prompt_parameters('native_math', closing, prior_prompt=prior),
+                         {paragraphs.PARAMETER: [new, whole]})
+
+        prior = dict(parameters={paragraphs.PARAMETER: [new, whole]})
+        final = dict(finding_index={}, reading_final=dict(unread={}), output_refusal=closing['output_refusal'])
+        self.assertEqual(paragraphs.select_prompt_parameters('native_math', final, prior_prompt=prior),
+                         {paragraphs.PARAMETER: [old, whole]})
+        combine = dict(finding_index={}, reading_combine={}, output_refusal=closing['output_refusal'])
+        self.assertEqual(paragraphs.select_prompt_parameters('native_math', combine, prior_prompt=prior),
+                         {paragraphs.PARAMETER: [whole]})
+
+    def test_finding_units_version_follows_the_frame_members_of_the_chain(self):
+        from research_harness.openness_reading import PROTOCOL_V7
+        old = 'exactory-openness-finding-units-v1'
+        new = 'exactory-openness-finding-units-v2'
+        notes = paragraphs.NOTES_COST_PARAGRAPH_VERSION
+        options = dict(reading_stage='reading', reading_protocol=PROTOCOL_V7)
+        base = protocol.canonical_prompt('native_math', **options)
+        # A reading packet of a chain that release 0.92 recorded holds no notes_cost and keeps version 1.
+        stored = dict(reading_turn=dict(finding_units=2))
+        self.assertEqual(paragraphs.select_prompt_parameters('native_math', stored), {paragraphs.PARAMETER: [old]})
+        prompt = protocol.canonical_prompt('native_math', problem_paragraphs=[old], **options)
+        self.assertEqual(prompt['text'], base['text'] + paragraphs.FINDING_UNITS_PROMPT)
+        self.assertEqual(prompt['template_id'], base['template_id'])
+        # The frame members of 0.93.0 give a reading packet notes_cost, and that chain reads version 2.
+        current = dict(reading_turn=dict(finding_units=2, notes_cost={}))
+        prior = dict(parameters={paragraphs.PARAMETER: [old, notes]})
+        for earlier in (None, prior):
+            with self.subTest(prior=earlier is not None):
+                self.assertEqual(paragraphs.select_prompt_parameters('native_math', current, prior_prompt=earlier),
+                                 {paragraphs.PARAMETER: [new, notes]})
+        rendered = protocol.canonical_prompt('native_math', problem_paragraphs=[new, notes], **options)
+        self.assertEqual(rendered['text'],
+                         base['text'] + paragraphs.FINDING_UNITS_PROMPT_V2 + paragraphs.NOTES_COST_PROMPT)
+        self.assertEqual(rendered['template_id'], base['template_id'])
+        self.assertEqual(paragraphs.strip_prompt_paragraphs(rendered, 'native_math'), base)
+
+    def test_replacement_prefers_the_prior_version_of_an_applicable_family(self):
+        old = 'exactory-problem-slate-forming-v1'
+        new = 'exactory-problem-slate-forming-v2'
+        prior = dict(parameters={paragraphs.PARAMETER: [old]})
+        packet = build_packet('slate', forming=True, places=True)
+        packet['source_rules'] = PROTOCOL_V3
+        places = 'exactory-problem-slate-places-v1'
+        self.assertEqual(paragraphs.select_prompt_parameters('slate', packet),
+                         {paragraphs.PARAMETER: [new, places]})
+        self.assertEqual(paragraphs.select_prompt_parameters('slate', packet, prior_prompt=prior),
+                         {paragraphs.PARAMETER: [old, places]})
+
     def test_writer_placeholders_have_pinned_bytes_and_one_home(self):
         expected = {
             'exactory-problem-accounts-v1': 'c2e3eb3807d4ff247ad26a6abf716b02a58188968080195afeba16354c3a686d',
             'exactory-problem-account-probes-v1': '81d4dbbf210e62b453a5535425be6553924f69e41fe1929fd1b483eed8373b5f',
             'exactory-problem-changes-if-resolved-v1': '4d688cdffbe965d3533aeecdc89dd6e04f4d28b463ecd49e9e678fc0ccad104a',
             'exactory-problem-slate-places-v1': '234fce931e8378f342c0d6af6de942aa7f560cef00b645ab3efc00accb2e4d70',
+            'exactory-problem-slate-delivery-v1': '6cc18ef126fd0ff2155ad1cdbaec42ebe4def3ed36dffb2698e481a138ec0160',
             'exactory-problem-slate-forming-v2': '13c788192070b3fa9d16cf8abf3ab36a81d381f248a7a7333c3f69648aa9849d',
             'exactory-problem-slate-forming-v1': 'e14ff7ce5d6f1a0bd2d03b1f2fd7f45c596e14902eea5083dd7bc66d78f78d2b',
+            'exactory-problem-slate-forming-v3': 'e9b8ec9455d5f4fceafd2b0f85fa1395e1871db0f7a11c80adf8f7c178c133fc',
+            'exactory-problem-slate-places-v2': '67aaf39a9316ac33b07322d13f7fbcd6f4ae0e5fdd67495ee16b355223835353',
+            'exactory-problem-areas-v2': '3eaa9c797360181e76dea95d64770d1c2fda88c98bec2d0692ab9c7970177d0a',
+            'exactory-problem-refresh-chain-v1': 'b21d129056cdcfb9f9d3dbea3cab28c63185c88260b9cd209c89bf73bd1280d8',
             'exactory-problem-replacement-v1': '92d8d0ace0a5c7dbd61d340f2fe6e6c5f93760ca1b7764853b7217f1dbbd12c0',
             'exactory-problem-areas-v1': 'e9a1aa5a8fa12579bbaff0cc1902f1f012c6bb7e872c02dff25131afab93da05',
             'exactory-review-delivery-notice-v1': '56dea5b68d33ecb400797772300180198ecafafa1bd1b2b77fb1ba4053284825',
             'exactory-route-capacity-notice-v1': '236975ce56b6cd564d0cb30faa61eaedff10fb2a4570c2b8b460538e4850bf98',
             'exactory-review-output-refusal-whole-v1': 'a88f7b5fbe7e14971371e9e7b6956202ccb49a2a207e74d8946502884e8d0b75',
             'exactory-openness-unread-final-v1': 'e6c89ffba735d8f0b45f6cd274dde987ae0c96fa7a1073a431d08b20aaebf58d',
+            'exactory-openness-unread-closing-v1': '9f1cd4a800bc862c3efb76d00c0a25403bc0910757d345c4494d33a40ffcbef5',
             'exactory-openness-finding-units-v1': '86c4abd60011b201e223c82b9f2af6e7c00682311f31c2e7880ea4f6afe56e48',
+            'exactory-openness-finding-units-v2': '58802564948837d98b4f5a97311c150e198feebdae605fd8335b7cd56316a4af',
+            'exactory-openness-notes-cost-v1': '18e527365a4e9e096195d7f25e69ca0bd0977c397ac0997c99fc5ed08c4fe1f3',
+            'exactory-openness-list-rows-v1': 'eb8bcad695a1bb273841e83d6b3594be9bf0b43336f3095fb93b2aa367b729e2',
             'exactory-review-output-refusal-bounded-v1': '61d96ac0b67b91f1890d4c5c8216fc7e995b85859e1afeaf744f2dedafa4db65'}
         actual = {version: hashlib.sha256(text.encode()).hexdigest()
                   for paragraph in paragraphs.PARAGRAPHS[1:] for version, text in paragraph.versions}
@@ -462,7 +552,55 @@ class OptionalParagraphTests(unittest.TestCase):
             self.assertEqual(profile['context_characters'], len(prompt['text']))
 
 
+class TurnFormVersionTests(unittest.TestCase):
+    """Rows S22 and P11 of the second writer pass: a paragraph version can serve one form of turn, and a turn selects
+    the last version that serves its form. An installed form selects what it selected before."""
+
+    def select(self, packet, **options):
+        return paragraphs.select_prompt_parameters(packet['role'], packet, **options).get(paragraphs.PARAMETER, [])
+
+    def test_a_session_of_the_rules_v4_selects_the_new_slate_forming_and_areas_versions(self):
+        from research_harness import review_session_v4 as session
+        slate = dict(build_packet('slate', forming=True), source_rules=PROTOCOL_V3)
+        result = build_packet('result', areas=True)
+        self.assertEqual(self.select(slate), ['exactory-problem-slate-forming-v2'])
+        self.assertEqual(self.select(dict(slate, source_rules=None)), ['exactory-problem-slate-forming-v1'])
+        self.assertEqual(self.select(slate, session_rules=session.PROTOCOL), ['exactory-problem-slate-forming-v3'])
+        self.assertEqual(self.select(result), ['exactory-problem-areas-v1'])
+        self.assertEqual(self.select(result, session_rules=session.PROTOCOL), ['exactory-problem-areas-v2'])
+
+    def test_a_refresh_outside_a_session_of_the_rules_v4_selects_the_refresh_chain_paragraph(self):
+        from research_harness import review_session_v4 as session
+        refresh = dict(build_packet('bar'), problem_refresh=dict(assignment_id='earlier'))
+        self.assertEqual(self.select(refresh), ['exactory-problem-refresh-chain-v1'])
+        prompt = render_packet(refresh)
+        self.assertTrue(prompt['text'].endswith(paragraphs.REFRESH_CHAIN_PROMPT))
+        self.assertTrue(prompt['template_id'].endswith('/refresh-chain-v1'))
+        self.assertEqual(self.select(dict(refresh, continuation={})), [])
+        self.assertEqual(self.select(refresh, session_rules=session.PROTOCOL), [])
+
+    def test_a_series_of_the_parts_protocol_v3_selects_slate_places_by_the_kind_of_its_turn(self):
+        from research_harness.review_parts_v3 import PROTOCOL as V3
+        slate = build_packet('slate', places=True)
+        self.assertEqual(self.select(slate), [paragraphs.SLATE_PLACES_PROTOCOL])
+        for kind, form, expected in (('final', None, ['exactory-problem-slate-places-v2']),
+                                     ('final', 'page', ['exactory-problem-slate-places-v2']),
+                                     ('final', 'closing', ['exactory-problem-slate-places-v2']),
+                                     ('final', 'combine', []), ('read', None, []), ('combine', None, []),
+                                     ('check', None, [])):
+            header = dict(protocol=V3, kind=kind, **(dict(final_form=form) if form else {}))
+            with self.subTest(kind=kind, form=form):
+                self.assertEqual(self.select(dict(slate, review_parts=header)), expected)
+
+
 class ParagraphPathTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_assignment_selects_accounts_and_replacement_from_its_delivered_value(self):
         self.case.expected['value']['accounts'] = dict(answer='A supported answer.', replacement=dict(statement='Earlier form.'))
         assignment = self.assign('ordinary-with-accounts')
@@ -524,6 +662,10 @@ class CurrentParagraphPathTests(ParagraphPathTests):
     use_parts_v2 = True
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         from research_harness import review_route_capacity
         from test_review_output_profile import build_row
@@ -571,6 +713,13 @@ class CurrentParagraphPathTests(ParagraphPathTests):
 
 
 class StagedParagraphPathTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     staged_entry = True
 
     def test_staged_controller_and_child_keep_accounts_without_repeating_value(self):

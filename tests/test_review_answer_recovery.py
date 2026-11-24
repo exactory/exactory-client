@@ -259,6 +259,10 @@ class RecoveryObservationTests(LiteratureCase):
 
 class RecoveryContractTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = correction_fixtures.CorrectionTests()
         self.addCleanup(self.case.doCleanups)
         self.case.setUp()
@@ -340,6 +344,13 @@ class RecoveryContractTests(unittest.TestCase):
 
 
 class RecoveryStagedTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_worker_recovers_accepts_and_preserves_capture_binding(self):
         from research_harness import operations, review_worker, review_staged_protocol
         from research_harness.review_state_evaluation import _fingerprint_selection
@@ -416,6 +427,13 @@ class RecoveryStagedTests(unittest.TestCase):
 
 
 class RecoveryPartTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_two_recovered_part_refusals_are_recorded_automatically(self):
         from codex_route_fixtures import bind_codex_response, build_codex_response
         case = staged_fixtures.ResultPartsCase()

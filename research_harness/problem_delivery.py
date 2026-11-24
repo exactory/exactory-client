@@ -1,5 +1,6 @@
 """Post gate, decisions and deterministic record-authoritative delivery."""
 
+import copy
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -640,7 +641,7 @@ def prepare_decision(records, artifacts, value, revision, *, source_guards=None)
     fields(value, ("id", "action", "review_ids", "bar_review_ids", "reason"))
     text(value["id"], "Problem decision ID")
     text(value["reason"], "Problem decision reason")
-    if value["action"] not in {"post", "revise", "withdraw"}:
+    if not isinstance(value["action"], str) or value["action"] not in {"post", "revise", "withdraw"}:
         raise ResearchError("invalid_input", "Problem decision action must be post, revise or withdraw")
     strings(value["review_ids"], "Problem result review IDs")
     strings(value["bar_review_ids"], "Problem bar review IDs")
@@ -773,11 +774,36 @@ def has_exported_files(directory, files):
 def export_problem(store, destination=None):
     """Write the reviewed parts into destination, by default final/problem/exports/<export digest>/ of the workspace
     root. A destination that already holds exactly these files is returned as it is."""
+    from .exactory_api import validate_post_citation_field
     from .gates import require_ready
     records = store.snapshot()["records"]
     artifacts = Evaluation.of(records, ArtifactStore(store.root))
     require_ready(assess_post(records, artifacts), "post")
     files, manifest = build_projection(records, artifacts, use_registry=True)
+    for index, citation in enumerate(json.loads(files["citations.json"]), start=1):
+        try:
+            validate_post_citation_field("citation", citation["citation"], index=index)
+            validate_post_citation_field("locator", citation["locator"], index=index)
+        except ResearchError as error:
+            # The refusal names the cited version. problem-citation-metadata corrects the text of a citation only for
+            # a work that it admits; for another work the stop is that of the command's own refusal.
+            # problem-citation-locator corrects the locator only where its record is the locator of the citation;
+            # for another work the stop is the decision of a refusal that names its cause, whose steps read the record.
+            from .problem_citation_metadata import require_citation_metadata_work
+            from .problem_evidence import collect_readings, has_correctable_locator, select_citation_readings
+            from .stop_classes import STOP_GROUPS, describe_terminal
+            reading = select_citation_readings(records, collect_readings(records))[index - 1]
+            error.details["version_id"] = reading["version_id"]
+            if error.details["field"] == "citation":
+                try:
+                    require_citation_metadata_work(records, reading["version_id"])
+                except ResearchError as refusal:
+                    error.details.update(refusal=refusal.as_dict(),
+                                         decision=describe_terminal(refusal.code)["details"]["decision"])
+            elif not has_correctable_locator(records, reading):
+                decision = {key: value for key, value in STOP_GROUPS["named_cause"]["next"].items() if key != "kind"}
+                error.details["decision"] = copy.deepcopy(decision)
+            raise
     return write_problem_export(store, records, files, manifest, destination)
 
 

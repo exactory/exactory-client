@@ -38,6 +38,13 @@ def record_external_post(case, statement_id='statement-1'):
 
 
 class PostedReviewTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def make_case(self, case_type):
         case = case_type()
         self.addCleanup(case.doCleanups)
@@ -721,6 +728,13 @@ class PostedReviewTests(ResultPartsCase):
 
 
 class AdvisoryProjectionTests(checks.CheckCommandMixin, terminal.delivery.ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     post_current_statement = terminal.PostedProblemTests.post_current_statement
 
     def test_passed_post_refuses_assignments_in_both_modes_without_workspace_writes(self):

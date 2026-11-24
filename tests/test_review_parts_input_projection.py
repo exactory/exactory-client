@@ -1,5 +1,6 @@
 """Native and verification parts share the actual-input authentication boundary."""
 
+from unittest.mock import patch
 import copy
 import json
 import unittest
@@ -16,6 +17,13 @@ from review_parts_fixtures import make_output
 
 
 class PartsInputProjectionTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import review_parts
+        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare_case(self, role):
         fixture = (native_fixtures.NativePartsTests if role == 'native_math'
                    else study_fixtures.VerificationPartsTests)

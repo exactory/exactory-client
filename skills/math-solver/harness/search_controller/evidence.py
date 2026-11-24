@@ -135,21 +135,32 @@ def freeze_execution_inputs(root, node, spec, content, foundation=None):
     return content.put_blob(frozen)
 
 
-def import_inputs(root, inputs, content, *, state=None, common_workspace=None):
+def import_inputs(root, inputs, content, *, state=None, common_workspace=None, allow_common_artifacts=False):
     seen = set()
     bindings, loaded = [], []
     for item in s.records(inputs):
-        s.closed(item, "path digest kind")
+        common_input = allow_common_artifacts and "common_artifact" in item
+        s.closed(item, "common_artifact digest kind" if common_input else "path digest kind")
         s.choice(item["kind"], {"artifact", "blob"})
         s.digest_string(item["digest"])
-        path = safe_path(root, item["path"])
         key = (item["kind"], item["digest"])
         s.require(key not in seen, "Input is duplicated")
         seen.add(key)
-        try:
-            raw = path.read_bytes()
-        except OSError as error:
-            raise SearchError("missing_evidence", "Cannot read input", {"path": item["path"]}) from error
+        if common_input:
+            from research_harness.artifacts import ArtifactStore
+            from research_harness.errors import ResearchError
+            s.require(common_workspace is not None, "Common input lacks its native review workspace")
+            try:
+                raw = ArtifactStore(common_workspace).read(item["common_artifact"])
+            except ResearchError as error:
+                raise SearchError("missing_evidence", "Cannot read the common artifact of an input",
+                                  {"common_artifact": item["common_artifact"], "cause": error.code}) from error
+        else:
+            path = safe_path(root, item["path"])
+            try:
+                raw = path.read_bytes()
+            except OSError as error:
+                raise SearchError("missing_evidence", "Cannot read input", {"path": item["path"]}) from error
         if item["kind"] == "blob":
             value = _strict_json(raw, "invalid_input")
             s.require(s.digest(value) == item["digest"], "Input digest differs", "digest_mismatch")

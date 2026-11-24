@@ -519,6 +519,13 @@ class FailureClassTests(unittest.TestCase):
 
 
 class LegacyRuntimeFailureTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_parts_v1_result_turn_seven_without_observed_at_runs(self):
         self.oversized(count=12, characters=24000)
         with patch.object(protocol.review_problem_parts, 'PART_UNIT_CHARACTERS', 30000):
@@ -544,6 +551,13 @@ class LegacyRuntimeFailureTests(ResultPartsCase):
 
 
 class OutputReplacementTests(PartsResultCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_other_read_handler_refusal_keeps_the_output_cap_stop(self):
         self.oversized(count=12, characters=10000, room=80000)
         assignment = self.assign()
@@ -623,6 +637,13 @@ class OutputReplacementTests(PartsResultCase):
 
 
 class RepairReplacementTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare_overflow(self, characters=0):
         import test_review_parts_repair_journey as journeys
         from strategy_fixtures import StrategyCase
@@ -741,11 +762,18 @@ class V7SizeRecoveryTests(unittest.TestCase):
 
 
 class ScientificRecoveryTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_first_refusal_after_provider_failure_executes_authenticated_replacement(self):
         from test_review_refusal_replacement import RefusalReplacementTests
         fixture = RefusalReplacementTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         context = fixture.case.deliver_supporting('first')
         assignment = fixture.case.assign('bar', 'first', identifier='initial', **context)
         with patch.object(protocol.transport, 'send_request', side_effect=OSError('Synthetic provider failure')):

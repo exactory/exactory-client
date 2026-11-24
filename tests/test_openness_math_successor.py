@@ -7,14 +7,18 @@ import json
 import unittest
 from unittest.mock import patch
 
+import test_openness_carried_math as math_v1_fixtures
 import test_reading_forecast as forecasts
+import test_research_problem_openness_minimum as minimum_fixtures
 from test_openness_reading_math_v2 import MathV2Support
-from research_harness import openness_reading as reading, openness_reading_v7 as v7, openness_successor as successor
+from research_harness import openness_minimum, openness_reading as reading, openness_reading_v7 as v7
+from research_harness import openness_successor as successor
 from research_harness import review_protocol as protocol, review_route_capacity as capacity
 from research_harness.check_mode import check_mutation
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.problem_openness import serialize_record
+from research_harness.review_continuation import plan_next
 
 MATH_V2 = reading.MATH_PROTOCOL_V2
 
@@ -60,8 +64,9 @@ class MathSuccessorTests(MathV2Support):
         [step] = decision['then'][0]['steps']
         packet = json.loads(self.artifacts.read(native))
         self.assertEqual((step['id'], step['command'], step['reviewer_id']), (5, 'search review-packet', 'openness-reviewer'))
-        self.assertEqual(step['payload'], dict(kind='result', subject=packet['subject'], claim_digest=packet['claim_digest'],
-                                               openness=packet['scientific_context']['openness_minimum']))
+        self.assertEqual(step['payload'], dict(kind='result', subject=packet['subject'], claim_digest=packet['claim_digest']))
+        # This converted problem packet omits the math controller's digest-bound claim.
+        self.assertIn('openness', step['chooses'])
         self.assertEqual([value.get('check', False) for value in step['then']], [True, False])
         # The controller's review-packet command builds the successor packet; this fixture attests it.
         packet['reviewer']['attestation_id'] = 'review-assignment:successor'
@@ -93,7 +98,8 @@ class MathSuccessorTests(MathV2Support):
             self.assign('math-2', native, 'math-1')
         self.assertFalse(caught.exception.details.get('estimate', False))
         answers = list_answers(caught.exception.details['decision'])
-        self.assertEqual(answers, [successor.MATH_SUCCESSOR_ANSWER, reading.SMALLER_PACKET_ANSWER])
+        self.assertEqual(caught.exception.details['successor']['protocol'], reading.MATH_PROTOCOL)
+        self.assertEqual(answers, [reading.SMALLER_PACKET_ANSWER])
 
     def test_a25_capacity_decision_of_a_v1_turn_without_a_smaller_task_names_the_successor(self):
         native = self.build_math_packet()
@@ -124,7 +130,50 @@ class MathSuccessorTests(MathV2Support):
         self.assertNotIn('carried_readings', admitted)
         self.assertEqual(handoff['state'], 'stop')
         self.assertEqual(handoff['details']['successor']['protocol'], reading.MATH_PROTOCOL)
-        self.assertEqual(list_answers(handoff['details']['decision'])[0], successor.MATH_SUCCESSOR_ANSWER)
+        self.assertEqual(list_answers(handoff['details']['decision']), [reading.SMALLER_PACKET_ANSWER])
+
+    def test_exact_stop_of_a_stored_v1_chain_with_a_long_head_plans_v2(self):
+        native = self.build_math_packet()
+        head = 'z' * 121
+        identifiers = ('math-1', 'math-2', head)
+        with patch.object(reading, 'NEW_MATH_CHAIN_PROTOCOLS', (reading.MATH_PROTOCOL,)):
+            for index, identifier in enumerate(identifiers):
+                self.assign(identifier, native, identifiers[index - 1] if index else None)
+                self.invoke(identifier, self.build_reading_response(self.read_packet(identifier),
+                    excerpts=forecasts.MathForecastTests.build_diagnostics(self, index + 1)))
+        self.limit_input(150000)
+        from research_harness.review_continuation import plan_next
+        with patch.object(v7, 'MATH_V2_FINAL_FORMS', ('request',)):
+            result = plan_next(self.store.snapshot()['records'], self.artifacts, head)
+        self.assertEqual((result['state'], result['code']), ('stop', reading.PROJECTION_STOP))
+        self.assertEqual(result['details']['successor']['protocol'], MATH_V2)
+        self.assertEqual([turn['origin']['assignment_id']
+                          for chain in result['details']['successor']['carried_readings']['chains']
+                          for turn in chain['turns']], list(identifiers))
+        with self.assertRaises(ResearchError) as caught:
+            self.assign('math-final', native, head)
+        self.assertEqual(caught.exception.code, reading.PROJECTION_STOP)
+        self.assertEqual(caught.exception.details['successor']['protocol'], MATH_V2)
+
+    def test_exact_stop_suppresses_the_same_route_v1_restart(self):
+        native = self.build_covered_packet(9, 'math-1')
+        self.limit_input(150000)
+        prior = None
+        with patch.object(v7, 'MATH_V2_FINAL_FORMS', ('request',)):
+            with self.assertRaises(ResearchError) as caught:
+                for number in range(1, 5):
+                    identifier = 'math-%d' % number
+                    self.assign(identifier, native, prior)
+                    self.assertEqual(reading.find_protocol(self.read_packet(identifier)), reading.MATH_PROTOCOL)
+                    self.invoke(identifier, self.build_reading_response(self.read_packet(identifier),
+                        excerpts=forecasts.MathForecastTests.build_diagnostics(self, number)))
+                    prior = identifier
+        self.assertIsNotNone(prior)
+        self.assertEqual(caught.exception.code, reading.PROJECTION_STOP)
+        details = caught.exception.details
+        self.assertFalse(details.get('estimate', False))
+        self.assertEqual(details['successor']['protocol'], reading.MATH_PROTOCOL)
+        self.assertEqual(list_answers(details['decision']), [reading.SMALLER_PACKET_ANSWER])
 
     def test_a25_v1_turn_keeps_the_character_admission_of_its_transport(self):
         native = self.build_math_packet()
@@ -140,8 +189,8 @@ class MathSuccessorTests(MathV2Support):
         self.limit_input(1000)
         handoff = successor.describe_input_handoff(records, self.artifacts, first)
         self.assertEqual(handoff['state'], 'stop')
-        self.assertEqual(list_answers(handoff['details']['decision']),
-                         [successor.MATH_SUCCESSOR_ANSWER, reading.SMALLER_PACKET_ANSWER])
+        self.assertEqual(handoff['details']['successor']['protocol'], reading.MATH_PROTOCOL)
+        self.assertEqual(list_answers(handoff['details']['decision']), [reading.SMALLER_PACKET_ANSWER])
 
     def test_a25_route_assessment_lists_the_math_chain_as_served_once_v2_is_in_the_order(self):
         from research_harness import cli
@@ -183,6 +232,9 @@ class MathEstimateStopTests(forecasts.FinalPreflightCase):
         return packet
 
     def test_finding5_estimate_stop_keeps_continue_and_the_continued_chain_ends_under_v1(self):
+        released = patch.object(reading, 'NEW_MATH_CHAIN_PROTOCOLS', (reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         self.limit_input(self.input_limit)
         native = self.export_math()
         for number in (1, 2):
@@ -225,6 +277,66 @@ class MathEstimateStopTests(forecasts.FinalPreflightCase):
             records = self.store.snapshot()['records']
             self.assertTrue(reading.verify_chain(records, self.artifacts, records['review_assignment'][current]))
         self.assertEqual({key: digest(records['review_assignment'][key]) for key in stored}, stored)
+
+
+class MathV1CallPreparationTests(math_v1_fixtures.MathCarriedCase):
+    text_sizes = (135000,)
+
+    def test_healthy_v1_preview_and_dispatch_skip_unused_minimum_validation(self):
+        from continuity_forms_fixtures import prepare_unit_fixture
+        from test_chain_stop_math_successor import MathSuccessorSubjectTests
+
+        fixture = prepare_unit_fixture(self, MathSuccessorSubjectTests, 'runTest')
+        controller, claim = fixture.start_controller(self)
+        minimum = fixture.build_minimum(self, 'read-1')
+        exported = controller.command('review-packet', dict(kind='result', subject=dict(claim=claim),
+            claim_digest=digest(claim), inputs=[], reviewer=fixture.build_reviewer('first'),
+            openness=minimum), None, None)
+        with patch.object(openness_minimum, 'validate_minimum_bindings',
+                          wraps=openness_minimum.validate_minimum_bindings) as validated, \
+                patch.object(reading, 'list_reading_rows', wraps=reading.list_reading_rows) as read_rows:
+            with patch.object(reading, 'NEW_MATH_CHAIN_PROTOCOLS', (reading.MATH_PROTOCOL,)):
+                assignment = self.assign('first', exported['native_packet'])
+            self.assertEqual(assignment['reading_chain_admission']['state'], 'stop')
+            self.assertEqual(validated.call_count, 1)
+            packet = self.read_packet('first')
+            self.assertEqual(reading.find_protocol(packet), reading.MATH_PROTOCOL)
+
+            planning_counts = []
+            for extra_searches in (0, 32):
+                for index in range(extra_searches):
+                    minimum_fixtures.ProblemOpennessMinimumTests.search(
+                        self, self.versions, formulation='Independent question ' + str(index))
+                validated.reset_mock()
+                read_rows.reset_mock()
+                plan = plan_next(self.store.snapshot()['records'], self.artifacts, 'first')
+                self.assertEqual((plan['state'], plan['command']), ('run', 'review-run'))
+                planning_counts.append((validated.call_count, read_rows.call_count))
+
+            validated.reset_mock()
+            with patch.object(protocol.transport, 'CODEX_INPUT_LIMIT_CHARS', 1000), \
+                    patch.object(protocol.transport, 'send_request') as send:
+                blocked = plan_next(self.store.snapshot()['records'], self.artifacts, 'first')
+                self.assertEqual((blocked['state'], blocked['code']), ('stop', reading.PROJECTION_STOP))
+                with self.assertRaises(ResearchError) as stopped:
+                    protocol.invoke_assignment(self.store, plan['payload'], expected_revision=self.store.revision,
+                                               request_id='stopped-v1-call', credential='test-only')
+                send.assert_not_called()
+            self.assertEqual(stopped.exception.code, reading.PROJECTION_STOP)
+            self.assertFalse(stopped.exception.details.get('estimate'))
+            self.assertGreater(validated.call_count, 0)
+            smaller = next(answer for answer in stopped.exception.details['decision']['then']
+                           if answer['answer'] == reading.SMALLER_PACKET_ANSWER)
+            [step] = smaller['steps']
+            self.assertIn('openness', step['chooses'])
+            self.assertNotIn('openness', step['payload'])
+
+            validated.reset_mock()
+            read_rows.reset_mock()
+            self.invoke('first', self.build_reading_response(packet), plan['payload']['id'])
+            # The plan's call preview runs the same v1 limit checks as dispatch, without the unused admission answer.
+            self.assertEqual((planning_counts, validated.call_count, read_rows.call_count),
+                             ([(0, 2), (0, 2)], 0, 2))
 
 
 class MathRecoveryRowsTests(unittest.TestCase):

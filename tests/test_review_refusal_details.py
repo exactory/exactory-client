@@ -1,5 +1,6 @@
 """Refused outputs identify the failed constraint and its output location."""
 
+from unittest.mock import patch
 import copy
 import json
 import unittest
@@ -154,6 +155,13 @@ class NativeDiagnosticTests(unittest.TestCase):
 
 
 class PhaseDiagnosticTests(phase_fixtures.ExcerptSessionCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_inventory_page_refusal_reports_range(self):
         self.assign('a')
         output = self.build_request_turn([{'id': 'too-far', 'kind': 'inventory_page', 'page': 100000}])

@@ -36,6 +36,13 @@ class OrdinaryProblemReviewTests(unittest.TestCase):
 
 
 class DecisionContractTests(StrategyCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare_visual_direction(self):
         from test_research_direction_sources import DirectionSourceTests
         self.prepare_direction()

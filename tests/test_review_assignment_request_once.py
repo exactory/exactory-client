@@ -18,6 +18,13 @@ from research_harness.storage import Store
 
 
 class AssignmentPreparationEvaluationTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_native_invocation_reuses_preparation_before_committing_its_start(self):
         assignment = self.assign('native-dispatch')
         output = self.case.build_review_output('result')
@@ -75,6 +82,10 @@ class AssignmentPreparationEvaluationTests(ResultPartsCase):
 
 class AssignmentRequestOnceTests(ResultPartsCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.records = self.case.read_records()
         self.assignment = self.records['review_assignment']['bar-first']
@@ -198,6 +209,13 @@ class AssignmentRequestOnceTests(ResultPartsCase):
 
 
 class StagedAssignmentRequestTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     staged_entry = True
 
     def test_staged_request_rebuilds_and_checks_its_frozen_digest_on_warm_evaluation(self):
@@ -224,6 +242,10 @@ class StagedAssignmentRequestTests(ResultPartsCase):
 
 class VisualAssignmentRequestTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         from test_visual_context_repair import VisualContextRepairTests
         self.fixture = VisualContextRepairTests()
         self.addCleanup(self.fixture.doCleanups)

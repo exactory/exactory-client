@@ -1,5 +1,6 @@
 """Supported research preparation, state and recovery commands."""
 
+from unittest.mock import patch
 import json
 import os
 from pathlib import Path
@@ -671,6 +672,13 @@ os._exit(23)
 
 
 class ResearchPreparationTests(DevelopmentCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def cli(self, command, *args):
         result = subprocess.run([sys.executable, str(PLUGIN / "bin" / command), *args], cwd=self.root,
                                 capture_output=True, text=True)

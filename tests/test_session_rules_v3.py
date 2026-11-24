@@ -23,6 +23,13 @@ RULES = 'exactory-independent-review-sources-v3'
 
 
 class SessionRulesTests(ExcerptSessionCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_a_paragraph_wrapped_v3_prompt_requires_the_packets_source_rules(self):
         prompt = protocol.canonical_prompt('slate', orchestration='problem_creation', source_rules=RULES,
             problem_paragraphs=['exactory-problem-slate-forming-v2'])
@@ -56,8 +63,8 @@ class SessionRulesTests(ExcerptSessionCase):
     def test_a_v3_result_refresh_names_the_wrapped_prompt_and_its_digest(self):
         case = result_contract_fixtures.ProblemResultContractTests()
         case.source_rules_protocol = RULES
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         prior, _ = case.old_result()
         self.assertEqual(json.loads(case.case.artifacts.read(prior['packet']))['source_rules'], RULES)
         successor = case.case.assign('result', 'first', identifier='result-source-rules-refresh')
@@ -198,8 +205,8 @@ class SessionRulesTests(ExcerptSessionCase):
 
     def test_a_new_parts_series_keeps_its_existing_source_contract(self):
         case = review_parts_fixtures.PartsResultCase()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         case.oversized()
         ordinary = protocol.build_packet(case.case.read_records(), case.case.artifacts, None, 'result', 'first')
         self.assertEqual(ordinary.get('source_rules'), RULES)
@@ -210,8 +217,8 @@ class SessionRulesTests(ExcerptSessionCase):
 
     def test_an_active_v3_session_is_not_downgraded_to_parts(self):
         case = review_parts_fixtures.PartsResultCase()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         first = case.assign()
         self.assertEqual(case.packet(first).get('source_rules'), RULES)
         output = case.case.build_review_output('result')

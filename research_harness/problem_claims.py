@@ -299,6 +299,7 @@ def record_formal_check(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         require_problem(records)
         fields(value, ("evidence", "native_closure_digest"))
+        text(value["native_closure_digest"], "Native closure digest")
         record = bind_formal_check(records, artifacts, value)
         identifier = digest(record)
         saved = records.get("problem_formal_check", {}).get(identifier)

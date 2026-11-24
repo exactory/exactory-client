@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import unittest
+from contextlib import nullcontext
 from unittest.mock import patch
 
 from research_harness import review_refusal as refusal
@@ -19,6 +20,56 @@ def serialize(value):
 
 
 class WireNoticeTests(unittest.TestCase):
+    def test_tight_details_room_fits_a_literal_rule_and_forecast_preview(self):
+        from research_harness import review_refusal_notice as notices
+        records, _, diagnoses = self.build_records(dict(value='Synthetic finding.'))
+        certificate = records['review_output_refusal']['attempt']
+        diagnosis = diagnoses['attempt']
+        measure = notices._measure_serialized_value
+        certificate['assignment_id'] = ''
+        empty = notices._build_refused_entry(certificate, diagnosis, measure)
+        room = 176
+        certificate['assignment_id'] = 'x' * (notices.REFUSAL_ENTRY_CHARACTERS - measure(empty) + measure({}) - room)
+        diagnosis['details'].update(rule='gap_basis', forecast=dict(outcomes=['unresolved'] * 500))
+
+        entry = notices._build_refused_entry(certificate, diagnosis, measure)
+        self.assertEqual(entry['details']['rule'], 'gap_basis')
+        preview = entry['details']['forecast']
+        text = serialize(diagnosis['details']['forecast'])
+        self.assertTrue(preview['head'])
+        self.assertTrue(text.startswith(preview['head']))
+        self.assertEqual(preview['sha256'], hashlib.sha256(text.encode()).hexdigest())
+        self.assertEqual(preview['characters'], len(text))
+        self.assertLessEqual(measure(entry['details']), room)
+        self.assertLessEqual(measure(entry), notices.REFUSAL_ENTRY_CHARACTERS)
+
+    def test_large_finding_forecast_preserves_the_rule_and_truncates_each_value(self):
+        from research_harness import review_refusal_notice as notices
+        records, artifacts, diagnoses = self.build_records(dict(value='Synthetic finding.'))
+        diagnosis = diagnoses['attempt']
+        details = diagnosis['details']
+        short = dict(rule='gap_fields', forecast=dict(outcomes=['unresolved']))
+        details.update(short)
+        [whole_entry] = notices.build_refusal_notice(records, artifacts, ('attempt',), form='bounded',
+                                                    diagnoses=diagnoses)['refused']
+        self.assertEqual(whole_entry['details'], short)
+
+        details.update(rule='gap_fields', forecast=dict(outcomes=['unresolved'] * 500),
+                       missing_fields=['x' * 10000])
+        [entry] = notices.build_refusal_notice(records, artifacts, ('attempt',), form='bounded',
+                                              diagnoses=diagnoses)['refused']
+        self.assertEqual(entry['details']['rule'], 'gap_fields')
+        forecast = serialize(details['forecast'])
+        retained = entry['details']['forecast']
+        self.assertFalse(retained['complete'])
+        self.assertTrue(retained['head'])
+        self.assertTrue(forecast.startswith(retained['head']))
+        self.assertEqual(retained['sha256'], hashlib.sha256(forecast.encode()).hexdigest())
+        self.assertEqual(retained['characters'], len(forecast))
+        self.assertEqual(entry['details']['missing_fields'], {'sha256': digest(details['missing_fields'])})
+        self.assertLessEqual(len(serialize(entry['details'])), notices.REFUSAL_DETAILS_CHARACTERS)
+        self.assertLessEqual(len(serialize(entry)), notices.REFUSAL_ENTRY_CHARACTERS)
+
     def build_refused_output(self, shape, characters):
         patterns = dict(quotes='"', backslashes='\\', newlines='\n', json='{"answer": ["quoted", "\\\\", 1]}\n')
         pattern = patterns[shape]
@@ -185,6 +236,10 @@ class WireNoticeTests(unittest.TestCase):
 
 class RefusalNoticeTests(RefusalCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         from research_harness import review_refusal_notice
         self.notices = review_refusal_notice
@@ -362,6 +417,17 @@ class RefusalNoticeTests(RefusalCase):
         def check_focused(records, output):
             protocol.validate_adjudication_contract(records, artifacts, focused, focused_packet, output)
 
+        from research_harness import review_session_v4
+
+        def check_session(records, output):
+            plan = dict(route_class=dict(adapter='codex_cli_v1', model='gpt-6-astra', effort='high'),
+                        limits=dict(output_tokens=dict(value=128000)), targets=dict(handles=['t1']))
+            inventory = dict(units=[dict(handle='u1')])
+            state = dict(requests=[], pending_requests=[], allowances=dict(passages=dict(characters=5, used=0)))
+            packet = dict(session_turn=dict(allowances=dict(notes=200), plan=dict(now=[])), evidence=[])
+            with patch.object(review_session_v4, 'read_bound_session', return_value=(plan, inventory, state)):
+                review_session_v4.validate_request_output(artifacts, assignment, packet, output)
+
         abstract_link = next(iter(case.supporting_links.values()))
         cases = {
             'evidence.fulltext': (check_ordinary, dict(ordinary, value=dict(ordinary['value'],
@@ -370,6 +436,10 @@ class RefusalNoticeTests(RefusalCase):
             'evidence.locator': (check_ordinary,
                                  dict(ordinary, value=dict(ordinary['value'], evidence=[self.evidence]))),
             'review.shape': (check_ordinary, {}),
+            'review.session_turn': (
+                check_session, dict(schema_version=1, stage='request', notes='Notes.', excerpts=[],
+                                    requests=[dict(id='passage', kind='passage', unit='u1', anchor=None, characters=8)],
+                                    settled_requests=[])),
             'review.value': (check_ordinary, dict(ordinary, value={})),
             'review.objections': (check_ordinary, dict(ordinary, objections=[{}])),
             'review.reassessment': (check_ordinary, dict(ordinary, reassessment={})),
@@ -397,7 +467,8 @@ class RefusalNoticeTests(RefusalCase):
         for check, (validate, output) in cases.items():
             with self.subTest(check=check):
                 records = copy.deepcopy(base)
-                with self.assertRaises(ResearchError) as caught, refusal.contract_check(check):
+                attribution = nullcontext() if check == 'review.session_turn' else refusal.contract_check(check)
+                with self.assertRaises(ResearchError) as caught, attribution:
                     validate(records, output)
                 error = caught.exception
                 self.assertEqual(error.contract_check, check)
@@ -413,6 +484,14 @@ class RefusalNoticeTests(RefusalCase):
                         diagnoses={attempt_id: dict(code=error.code, check=check, details=dict(error.details or {}, message=error.message))})
                     self.assertNotIn('OTHER-REVIEWER-', serialize(notice))
                     self.assertEqual(notice['refused'][0]['code'], error.code)
+                    if check == 'review.session_turn':
+                        path = '/requests/0/characters'
+                        self.assertEqual(notice['refused'][0]['path'], path)
+                        self.assertEqual(notice['refused'][0]['details'], dict(requested=8, remaining=5))
+                        if form == 'bounded':
+                            self.assertEqual(notice['refused_part'], dict(path=path, complete=True, value=8))
+                        else:
+                            self.assertEqual(notice['output']['requests'][0]['characters'], 8)
                     if check == 'evidence.fulltext':
                         self.assertEqual(notice['refused'][0]['details']['artifact'], abstract_link['artifact'])
                         self.assertEqual(notice['refused'][0]['details']['delivered_depth'], 'passage')
@@ -458,9 +537,9 @@ class RefusalNoticeTests(RefusalCase):
         for row in notice['refused']:
             self.assertLessEqual(len(serialize(row)), 6_000)
             self.assertEqual(row['message'], 'x' * 3000)
-            self.assertFalse(row['details']['complete'])
-            self.assertEqual(row['details']['characters'], len(serialize(
-                {'part_relative_span': {'start': 'x' * 10_000, 'end': 38629}})))
+            self.assertFalse(row['details']['part_relative_span']['complete'])
+            self.assertEqual(row['details']['part_relative_span']['characters'],
+                             len(serialize({'start': 'x' * 10_000, 'end': 38629})))
         self.assertLessEqual(len(serialize(notice)), 45_000)
 
     def test_unbounded_legacy_identity_or_diagnostic_metadata_is_reported_without_changing_types(self):
@@ -666,6 +745,13 @@ class ContractCheckRegistryTests(unittest.TestCase):
 
 
 class UndeliveredNoticeTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_reduced_history_final_refusal_is_delivered_without_other_reviewer_judgments(self):
         from research_harness import review_refusal_notice
         from research_harness import review_protocol as protocol, review_transport as transport

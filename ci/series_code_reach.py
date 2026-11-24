@@ -31,6 +31,56 @@ DECLARED_EDGES = {
         'research_harness/cli.py:_review_output_correction':
             'A captured correction finishes through its original review-output-correction operation.',
     },
+    # review_math_handoff.load_controller imports the plugin's math controller by its file location, so the calls on
+    # the modules that it returns are hidden from the import rules.
+    'research_harness/review_math_handoff.py:read_objective': {
+        'skills/math-solver/harness/search_controller/service.py:Controller.__init__':
+            'The plan opens the bound objective with the controller of the plugin tree.',
+        'skills/math-solver/harness/search_controller/storage.py:Store.read':
+            'The plan reads the event log of the bound objective.',
+        'skills/math-solver/harness/search_controller/model.py:replay':
+            'The plan replays the event log of the bound objective.',
+        'skills/math-solver/harness/search_controller/reviewer.py:common_root':
+            'The plan compares the common workspace of the objective with this workspace.',
+    },
+    'research_harness/review_math_handoff.py:check_recording': {
+        'skills/math-solver/harness/search_controller/reviewer.py:check_result_command':
+            'The plan checks the native command that records a math v2 result with the controller.',
+    },
+    'research_harness/review_math_handoff.py:check_export': {
+        'skills/math-solver/harness/search_controller/reviewer.py:handoff_inputs':
+            'The plan names the exported inputs of the native packet as controller inputs.',
+        'skills/math-solver/harness/search_controller/reviewer.py:refresh_export_minimum':
+            'The plan binds the material searches that a stale minimum lacks with the controller.',
+        'skills/math-solver/harness/search_controller/reviewer.py:check_export':
+            'The plan checks the export of a new native packet with the controller.',
+    },
+}
+
+# A call that its caller makes inside a try statement whose handler catches what the callee raises. The codes that the
+# callee builds are built while the root runs, so they stay in its by_command set (the recorder of a guard row of
+# plan_next allows them), and they do not leave the root through this call, so they need no registry row unless another
+# path reaches the callee uncaught. run_series and review-series hold the codes that leave the series roots. Each
+# entry names the handler as the source writes it; the scanner checks the try statement.
+# keeps names a computed site that holds the caught refusal as a diagnostic of the caller's own stop.
+_CONTROLLER = 'skills/math-solver/harness/search_controller/'
+DECLARED_CATCHES = {
+    'research_harness/review_math_handoff.py:read_objective': dict(handler='service.SearchError', callees=(
+        _CONTROLLER + 'service.py:Controller.__init__', _CONTROLLER + 'storage.py:Store.read',
+        _CONTROLLER + 'model.py:replay', _CONTROLLER + 'reviewer.py:common_root'), keeps=()),
+    'research_harness/review_continuation.py:_plan_math_v2_result': dict(handler='ResearchError', callees=(
+        'research_harness/review_math_handoff.py:check_recording',),
+        keeps=('research_harness/review_continuation.py:describe_native_math_stop:error.code',)),
+    'research_harness/review_continuation.py:_plan_math_v2_export': dict(handler='ResearchError', callees=(
+        'research_harness/review_continuation.py:describe_checked_math_export',),
+        keeps=('research_harness/review_continuation.py:describe_native_math_stop:error.code',)),
+    'research_harness/review_math_handoff.py:require_successor': dict(handler='ResearchError', callees=(
+        'research_harness/review_math_handoff.py:find_recovery_mode', 'research_harness/review_math_handoff.py:check_export'),
+        keeps=('research_harness/review_math_handoff.py:raise_controller_refusal:error.code',)),
+    'research_harness/review_route_capacity.py:describe_capacity_decision': dict(handler='ResearchError', callees=(
+        'research_harness/review_continuation.py:describe_checked_math_export',
+        'research_harness/review_math_handoff.py:find_recovery_mode'),
+        keeps=('research_harness/review_continuation.py:describe_native_math_stop:error.code',)),
 }
 
 PLANNER_MODULES = frozenset(('research_harness.review_continuation',
@@ -168,14 +218,18 @@ COMPUTED_CODE_SITES = {
         'sources': ['research_harness/review_continuation.py:_plan_head']},
     "research_harness/review_continuation.py:_plan_head:item['code']": {
         'sources': ['research_harness/review_continuation.py:_plan_head']},
+    "research_harness/review_continuation.py:_plan_head:decision['code']": {
+        'sources': ['research_harness/review_route_capacity.py:describe_capacity_decision']},
     "research_harness/review_continuation.py:_plan_staged_action:task['code']": {
         'sources': ['research_harness/review_continuation.py:_plan_staged_action']},
-    "research_harness/review_continuation.py:plan_next:getattr(detail_error, 'code', 'review_input_unreadable')": {
+    "research_harness/review_continuation.py:_plan_next:getattr(detail_error, 'code', 'review_input_unreadable')": {
         'codes': ['review_input_unreadable'], 'sources': ['research_harness/review_continuation.py:plan_next']},
-    "research_harness/review_continuation.py:plan_next:result['code']": {
+    "research_harness/review_continuation.py:_plan_next:result['code']": {
         'sources': ['research_harness/review_continuation.py:plan_next']},
     "research_harness/review_failure_class.py:plan_after_failure:recovery.get('code', OUTCOME_CODES[outcome])": {
         'sources': ['research_harness/review_failure_class.py:plan_after_failure']},
+    "research_harness/review_failure_class.py:plan_refusal_recovery:decision['code']": {
+        'sources': ['research_harness/review_route_capacity.py:describe_capacity_decision']},
     "research_harness/review_route_capacity.py:describe_capacity_decision:details.get('code', OUTCOME_CODES[outcome])": {
         'sources': ['research_harness/review_route_capacity.py:plan_capacity_recovery']},
     "research_harness/review_output_correction.py:_prepare_packet:failure['code']": {
@@ -184,6 +238,8 @@ COMPUTED_CODE_SITES = {
         'codes': ['review_correction_invalid'], 'sources': ['research_harness/review_output_correction.py:invoke_correction']},
     'research_harness/review_plan_steps.py:complete_plan:code': {
         'sources': ['research_harness/review_continuation.py:plan_next']},
+    "research_harness/review_plan_steps.py:_plan_unserved_repair:decision['code']": {
+        'sources': ['research_harness/review_route_capacity.py:describe_capacity_decision']},
     "research_harness/review_refusal_notice.py:_build_refused_entry:diagnosis['code']": {
         'sources': ['research_harness/review_refusal.py:classify_observed_output']},
     'research_harness/review_refusal_replacement.py:require_selected_output:code': {
@@ -213,8 +269,26 @@ COMPUTED_CODE_SITES.update({
     "research_harness/review_protocol.py:_observe_https_capacity_probe:getattr(error, 'code', 'review_transport_failure')": {
         'codes': ['review_transport_failure'],
         'sources': ['research_harness/review_protocol.py:_observe_https_capacity_probe']},
-    "research_harness/review_protocol.py:invoke_assignment.start:stop['code']": {
+    "research_harness/review_protocol.py:prepare_assignment_call:stop['code']": {
         'sources': ['research_harness/review_route_capacity.py:describe_session_stop']},
+    'research_harness/review_failure_class.py:describe_assignment_call_refusal:error.code': {
+        'sources': ['research_harness/review_protocol.py:prepare_assignment_call']},
+    # A math v2 handoff forwards the refusals of the controller checks that review_math_handoff runs.
+    'research_harness/review_math_handoff.py:check_export:error.code': {
+        'sources': ['skills/math-solver/harness/search_controller/reviewer.py:handoff_inputs',
+                    'skills/math-solver/harness/search_controller/reviewer.py:refresh_export_minimum',
+                    'skills/math-solver/harness/search_controller/reviewer.py:check_export']},
+    'research_harness/review_math_handoff.py:raise_controller_refusal:error.code': {
+        'sources': ['research_harness/review_math_handoff.py:check_export',
+                    'research_harness/review_math_handoff.py:check_recording']},
+    'research_harness/review_math_handoff.py:check_recording:error.code': {
+        'sources': ['skills/math-solver/harness/search_controller/reviewer.py:check_result_command']},
+    'research_harness/review_continuation.py:describe_native_math_stop:error.code': {
+        'sources': ['research_harness/review_math_handoff.py:read_objective',
+                    'research_harness/review_math_handoff.py:check_export',
+                    'research_harness/review_math_handoff.py:check_recording']},
+    'research_harness/review_continuation.py:describe_native_math_stop:code': {
+        'codes': ['native_review_objective_unavailable', 'native_review_recording_blocked']},
     'research_harness/review_stop.py:ReviewStopSignal.describe_error:self.code': {
         'codes': ['review_chain_stopped']},
 })
@@ -231,6 +305,22 @@ COMPUTED_CODE_SITES.update({
         'sources': ['research_harness/review_continuation.py:plan_next']},
 })
 
+# The forwarding sites of the release branch that joins the two merge tracks of 0.93.0.
+COMPUTED_CODE_SITES.update({
+    'research_harness/review_continuation.py:_plan_session_capacity_stop:error.code': {
+        'codes': ['review_route_capacity_below_floor', 'review_route_capacity_plan_violated', 'review_input_too_large']},
+    'research_harness/review_continuation.py:_plan_session_refresh:refusal.code': {
+        'codes': ['review_route_capacity_below_floor']},
+    # A repair that parts v3 refuses falls to the planner of parts v2, which keeps only the codes of no room.
+    'research_harness/review_parts_repair.py:prepare_packet:error.code': {
+        'codes': ['review_parts_frame_too_large', 'review_parts_final_too_large', 'review_parts_inventory_too_large',
+                  'review_parts_no_progress']},
+    # A capped session turn or v7 page at its floor plans the decision of the capacity recovery that plan_after_failure
+    # recorded.
+    "research_harness/review_continuation.py:_plan_ordinary_call:recovery['code']": {
+        'sources': ['research_harness/review_failure_class.py:plan_after_failure']},
+})
+
 # These are public command entry points, not a second registry of error codes.
 # The CLI's operation table supplies the ordinary commands below; these commands
 # have dispatchers outside that table.
@@ -240,6 +330,8 @@ EXTERNAL_COMMAND_ROOTS = {
     'review-series': ('research_harness/review_series.py:run_series',),
     'search review-packet': ('skills/math-solver/harness/search_controller/reviewer.py:export_packet',),
     'search accept': ('skills/math-solver/harness/search_controller/service.py:Controller.command',),
+    'search complete': ('skills/math-solver/harness/search_controller/service.py:Controller.command',),
+    'search guard-status': ('skills/math-solver/harness/search_controller/service.py:Controller.command',),
     'search deliver-attempt': ('skills/math-solver/harness/search_controller/service.py:Controller.command',),
     'export': ('research_harness/integration.py:export_workspace',
                'research_harness/problem_openness.py:export_openness',
@@ -1405,7 +1497,32 @@ def collect_obligation_codes(functions, calls, index, resolved_sites):
     return values
 
 
-def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, series_commands=None):
+def validate_declared_catches(catches, functions, graph, declarations):
+    """Require each declared catch in the source: the caller calls the callee inside a try statement that has the
+    declared handler, and each kept site is a declared computed site."""
+    for caller, row in catches.items():
+        if caller not in functions:
+            raise ValueError('Unknown declared catch caller: ' + caller)
+        statements = [node for node in ast.walk(functions[caller]['node']) if isinstance(node, ast.Try)
+                      and any(handler.type is not None and row['handler'] in (
+                          [ast.unparse(member) for member in handler.type.elts] if isinstance(handler.type, ast.Tuple)
+                          else [ast.unparse(handler.type)]) for handler in node.handlers)]
+        for callee in row['callees']:
+            if callee not in functions or callee not in graph[caller]:
+                raise ValueError('Declared catch needs a call of an existing callee: ' + caller + ' -> ' + callee)
+            qualified = callee.split(':', 1)[1]
+            name = qualified.rsplit('.', 2)[-2] if qualified.endswith('.__init__') else qualified.rsplit('.', 1)[-1]
+            if not any(isinstance(node, ast.Call) and getattr(node.func, 'id', getattr(node.func, 'attr', None)) == name
+                       for statement in statements for part in statement.body for node in ast.walk(part)):
+                raise ValueError('Declared catch not found in source: ' + caller + ' -> ' + callee
+                                 + ' under except ' + row['handler'])
+        for site in row['keeps']:
+            if site not in declarations:
+                raise ValueError('Declared catch keeps an undeclared computed site: ' + site)
+
+
+def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, series_commands=None,
+                    declared_catches=None):
     """Analyze source strings and explicit public-operation roots without execution."""
     declarations = {} if computed_sites is None else computed_sites
     index = build_index(sources)
@@ -1431,6 +1548,13 @@ def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, se
             if target in graph[caller] and target in collect_allowed_functions([caller], index, module_graph):
                 raise ValueError('Unused declared edge: ' + caller + ' -> ' + target)
             graph[caller].add(target)
+    declared_catches = {} if declared_catches is None else declared_catches
+    validate_declared_catches(declared_catches, functions, graph, declarations)
+    caught = {(caller, callee) for caller, row in declared_catches.items() for callee in row['callees']}
+    kept = {site for row in declared_catches.values() for site in row['keeps']}
+    escape_graph = {key: {target for target in targets if (key, target) not in caught} for key, targets in graph.items()}
+    escape_edges = {caller: {target: reason for target, reason in targets.items() if (caller, target) not in caught}
+                    for caller, targets in declared_edges.items()}
 
     nested_functions = defaultdict(list)
     for key, definition in functions.items():
@@ -1521,6 +1645,9 @@ def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, se
     resolved_declarations = resolve_computed_sites(declarations, deferred, codes, graph, set(functions))
     for site in used - set(resolved_declarations):
         resolved_declarations[site] = dict(values=sorted(declarations[site]), sources=[])
+    escape_deferred = [item for item in deferred if item[2] not in kept]
+    escape_crossings = [item for item in crossing_sources if item[2] not in kept]
+    leaving = {}
     by_command = {}
     by_command_functions = {}
     command_contexts = {}
@@ -1551,14 +1678,21 @@ def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, se
                 if key in seen or key.endswith(':<module>') and key in allowed:
                     reached_sites[site].update(contextual_sites[allowed][site]['values'])
             values.update(set().union(*(set().union(*local_codes[key].values()) for key in seen)))
+            # The codes that can leave the root: the same reach without the declared catches.
+            escaping, escape_allowed = collect_root_functions(
+                [entry], index, module_graph, escape_graph, escape_crossings, escape_edges, initial)
+            escape_codes = resolve_computed_codes(direct_codes, escape_deferred, escape_graph, escape_allowed)
+            leaving.setdefault(command, set()).update(
+                set().union(*(values for key, values in contextual_initial[allowed].items() if key in allowed)),
+                set().union(*(set().union(*escape_codes[key].values()) for key in escaping)))
         command_contexts[command] = contexts
         by_command_functions[command] = command_functions
         by_command[command] = sorted(values)
     if series_commands is None:
-        reachable = set().union(*(set(values) for values in by_command.values()))
+        reachable = set().union(*leaving.values())
     else:
         series_roots = ('plan_next', 'run_series') + tuple(series_commands)
-        reachable = set().union(*(set(by_command[command]) for command in series_roots))
+        reachable = set().union(*(leaving[command] for command in series_roots))
         for command in ('run_series', 'review-series'):
             by_command[command] = sorted(reachable)
             by_command_functions[command] = set().union(*(by_command_functions[name] for name in series_roots))
@@ -1751,7 +1885,7 @@ def collect_command_roots(sources):
 def analyze_repository(root):
     sources = read_sources(Path(root))
     return analyze_sources(sources, collect_command_roots(sources), COMPUTED_CODE_SITES,
-                           DECLARED_EDGES, read_executable_commands(sources))
+                           DECLARED_EDGES, read_executable_commands(sources), DECLARED_CATCHES)
 
 
 def build_unreviewed_rows(report, registry):

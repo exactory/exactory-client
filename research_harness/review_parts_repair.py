@@ -16,12 +16,18 @@ EXHAUSTION_FINAL_PROMPT_V1 = prompts.FINAL_REPAIR.replace(
     'no route retirement, and its cause events can be an empty list.')
 
 
+V3_REPAIR_ROUTE_UNSUPPORTED_MSG = (
+    'The review that this repair reassesses is a series of the parts protocol v3, and its repair stays in that '
+    'protocol. Name a verified route whose adapter delivers parts (claude_cli_v1, codex_cli_v1 or '
+    'codex_cli_framed_v1) and which has a local input limit.')
+
+
 def applies(value, packet):
     return (value.get('role') in ('bar', 'slate', 'result', 'adjudicator')
             and 'context_repair' in packet)
 
 
-def find_role_adapter(packet):
+def find_role_adapter_name(packet):
     from .review_parts_roles import find_adapter, get_adapter
 
     ordinary = dict(packet)
@@ -31,15 +37,22 @@ def find_role_adapter(packet):
     adapter = get_adapter(name) if name is not None else None
     # This delegation is part of recorded v2 repair inventories and prompts.
     # A role added only under a later protocol cannot change that contract.
-    return (adapter if adapter is not None and parts.PROTOCOL in
+    return (name if adapter is not None and parts.PROTOCOL in
             adapter.get('protocols', (parts.PROTOCOL,)) else None)
+
+
+def find_role_adapter(packet):
+    from .review_parts_roles import get_adapter
+
+    name = find_role_adapter_name(packet)
+    return get_adapter(name) if name is not None else None
 
 
 def list_role_units(packet):
     adapter = find_role_adapter(packet)
     if adapter is None:
         return []
-    sources = copy.deepcopy(adapter['enumerate_units'](packet))
+    sources = copy.deepcopy(list(adapter['enumerate_units'](packet)))
     for source in sources:
         if 'citations' in adapter:
             source['citations'] = adapter['citations'](source)
@@ -248,6 +261,24 @@ def build_final_prompt(role, parameters):
     return '\n\n'.join(texts + [suffix])
 
 
+def describe_prompt_binding(packet):
+    return dict(adapter=find_role_adapter_name(packet),
+                exhaustion='exhaustion' in packet.get('context_repair', {}))
+
+
+def build_final_prompt_v3(role, parameters, binding=None):
+    from .review_parts_roles import get_adapter
+
+    if binding is None:
+        binding = describe_prompt_binding(dict(role=role, subject=dict(
+            kind='problem' if parameters.get('orchestration') == 'problem_creation' else 'study')))
+    name = binding['adapter']
+    texts = [get_adapter(name)['final_prompt_v3']] if name is not None else []
+    if binding['exhaustion']:
+        texts.append(prompts.FINAL_REPAIR_EXHAUSTION_V3)
+    return '\n\n'.join(texts + [prompts.FINAL_REPAIR_V3])
+
+
 def validate_final(records, artifacts, assignment, output, *, attempt=None):
     from .research_decisions import validate_review_contract
 
@@ -343,37 +374,89 @@ def _supports_parts_route(records, value, route, packet):
     return True
 
 
-def requires_parts(records, artifacts, value, route, packet, prompt, history, slot_id):
+def requires_parts(records, artifacts, value, route, packet, prompt, history, slot_id, *, recovering_output=None):
     from . import review_transport as transport
-    from .review_problem_parts import _measure, preserves_ordinary_packet
+    from .review_route_capacity import can_send_ordinary_packet
 
     if not _supports_parts_route(records, value, route, packet):
         return False
     ordinary = transport.request_body(route, prompt['text'], packet, history)
     from .review_single_request import describe_task_entry
+    if recovering_output is None:
+        recovering_output = has_outstanding_repair_cap(records, artifacts, value, packet, slot_id)
     return (describe_task_entry(records, route, value['role'], packet, ordinary) is not None
-            or has_over_cap_attempt(records, value, slot_id, packet.get('context_repair', {}).get('assignment_id'))
+            or recovering_output
             or value['role'] == 'adjudicator' and packet.get('context_repair') is not None
             and not packet.get('staged_review')
-            or _measure(route, ordinary) > transport.local_input_limit(route)
-            or not preserves_ordinary_packet(artifacts, packet, ordinary))
+            or not can_send_ordinary_packet(records, artifacts, route, packet, ordinary))
+
+
+def has_outstanding_output_cap(records, artifacts, predecessor):
+    """A retried and reviewed cap does not authorize planning a new repair with v2."""
+    from .review_failure_class import classify_attempt
+    from .review_protocol import read_assignment_output
+    from .storage import read_filtered_records
+
+    identifier = predecessor['id']
+    attempts = read_filtered_records(records, 'review_attempt', assignment_id=identifier)
+    latest = max(attempts.values(), key=lambda attempt: attempt['recorded_revision'], default=None)
+    if latest is None:
+        return False
+    failure = classify_attempt(records, artifacts, latest)
+    if failure is None or failure['outcome'] != 'output_over_cap':
+        return False
+    _, output = read_assignment_output(records, artifacts, identifier)
+    return output is None
+
+
+def has_outstanding_repair_cap(records, artifacts, value, packet, slot_id):
+    """Only a failed attempt at the position being replaced can force parts."""
+    from .review_context_repair import find_latest_chain_repair, slot_id as find_slot
+
+    repair_id = packet.get('context_repair', {}).get('assignment_id')
+    if repair_id is None:
+        return False
+    prior_id = value.get('context', {}).get('prior_assignment_id')
+    for assignment in records.get('review_assignment', {}).values():
+        if (assignment.get('role') != value['role'] or assignment.get('dossier_id') != value['dossier_id']
+                or assignment.get('context', {}).get('prior_assignment_id') != prior_id
+                or find_slot(records, assignment) != slot_id):
+            continue
+        bound = find_latest_chain_repair(records, assignment)
+        if (bound is not None and bound['context']['context_repair']['assignment_id'] == repair_id
+                and has_outstanding_output_cap(records, artifacts, assignment)):
+            return True
+    return False
 
 
 def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
                    base_prompt_parameters, slot_id=None, repair=None, capacity_replacement=None,
-                   refusal_notice=None):
+                   refusal_notice=None, head=None):
     """Plan a repair using the engine, including entry after ordinary output overflow."""
     from . import review_transport as transport
     from .review_problem_parts import _measure
 
+    # A recorded series of the parts protocol v3 keeps its protocol, so its head is resolved before the
+    # route and size checks that let a repair stay ordinary.
+    protocols, recorded = parts.select_series_protocols(records, artifacts, value, head=head)
+    pinned_v3 = recorded and protocols == ('exactory-review-parts-v3',)
     if not _supports_parts_route(records, value, route, packet):
+        if pinned_v3:
+            raise ResearchError('review_parts_route_unsupported', V3_REPAIR_ROUTE_UNSUPPORTED_MSG)
         return packet
     prior = records.get('review_assignment', {}).get(value.get('context', {}).get('prior_assignment_id'))
     continuing = prior is not None and prior.get(parts.KEY, {}).get('adapter') == 'context_repair'
+    recovering_output = None
+    if prior is not None and not continuing and repair is None and capacity_replacement is None:
+        recovering_output = has_outstanding_repair_cap(records, artifacts, value, packet, slot_id)
+        if not recovering_output and not parts.starts_refresh(value, packet):
+            return packet
     from .review_single_request import describe_task_entry
     entry = (None if continuing else describe_task_entry(records, route, value['role'], packet,
         transport.request_body(route, prompt['text'], packet, history)))
-    if capacity_replacement is None and not continuing and not requires_parts(records, artifacts, value, route, packet, prompt, history, slot_id):
+    if (capacity_replacement is None and not continuing and not pinned_v3
+            and not requires_parts(records, artifacts, value, route, packet, prompt, history, slot_id,
+                                   recovering_output=recovering_output)):
         return packet
     from .bar_sources import PROTOCOL_V3
     if packet.get('source_rules') == PROTOCOL_V3:
@@ -426,16 +509,19 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
         else:
             history = None
         packet = prepare_history(records, artifacts, packet, history)
-    recorded_protocol = prior.get(parts.KEY, {}).get('protocol') if continuing else None
-    if (recorded_protocol == 'exactory-review-parts-v3' or not continuing
-            and next(iter(parts.NEW_SERIES_PROTOCOLS), None) == 'exactory-review-parts-v3'):
+    selected_protocol = next(iter(protocols), None)
+    if selected_protocol == 'exactory-review-parts-v3':
         from .review_parts_v3 import prepare_packet as prepare_v3
+        # A repair of a head that is no recorded v3 series and that v3 refuses falls to the planner of v2 below.
         planned = prepare_v3(records, artifacts, value, route, packet, prompt, [],
             base_prompt_parameters=base_prompt_parameters, slot_id=slot_id, entry=entry,
             capacity_replacement=capacity_replacement if capacity_replacement is not None else {},
-            refusal_notice=refusal_notice)
+            refusal_notice=refusal_notice, pinned=recorded)
         if planned is not None:
             return planned
+        if recorded:
+            from .review_route_capacity import BELOW_FLOOR_MESSAGE
+            raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE)
     # Normalized history may itself fit. Entry was already decided using the
     # ordinary request, so plan directly rather than asking the entry test again.
     series_key = compute_series_key(packet)
@@ -478,11 +564,17 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
             measured = measure_parts_request(records, route, request, measured, artifacts=artifacts)
         return measured
 
-    planned = parts.plan_turn(packet, inventory, observations, series_id=series_id,
-        input_limit=transport.local_input_limit(route), measure=measure,
-        output_tokens=route['configuration']['max_output_tokens'], replacement=replacement,
-        inventory_reference=inventory_reference, logical_reference=logical_reference, series_key=series_key,
-        entry=entry, read_allowance=read_allowance)
+    try:
+        planned = parts.plan_turn(packet, inventory, observations, series_id=series_id,
+            input_limit=transport.local_input_limit(route), measure=measure,
+            output_tokens=route['configuration']['max_output_tokens'], replacement=replacement,
+            inventory_reference=inventory_reference, logical_reference=logical_reference, series_key=series_key,
+            entry=entry, read_allowance=read_allowance)
+    except ResearchError as error:
+        # After a refusal of v3, a route without room for a turn of v2 ends in the coverage check of the assignment.
+        if selected_protocol != 'exactory-review-parts-v3' or error.code not in parts.PLANNER_ROOM_CODES:
+            raise
+        raise parts.UnfitOrdinaryPacket(error.code, error.message, dict(error.details or {}, refusal=error.code)) from error
     planned = prioritize_fill(packet, inventory, planned, measure, transport.local_input_limit(route))
     if refusal_notice is not None:
         from .review_refusal_notice import attach_refusal_notice
@@ -498,4 +590,4 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
 ADAPTER = dict(applies=applies, enumerate_units=list_units, targets=list_targets,
                series_key=compute_series_key, validate_final=validate_final,
                covers_items=parts.covers_items, final_prompt=build_final_prompt,
-               source_requests=True)
+               final_prompt_v3=build_final_prompt_v3, source_requests=True)

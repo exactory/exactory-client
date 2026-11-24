@@ -16,6 +16,13 @@ from research_harness.review_plan_steps import complete_plan
 
 
 class RegistryRowsFirstTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare(self, cls, **attributes):
         fixture = cls()
         for key, value in attributes.items():

@@ -107,13 +107,13 @@ class RoutePlanCase(renewal.RouteRenewalFixture):
         first call, and the real check refuses the call."""
         check, calls = protocol._require_route_runtime, []
 
-        def check_route(route):
+        def check_route(route, **kwargs):
             calls.append(route['id'])
             if len(calls) % 2 == 0:
                 if not change_runtime:
                     raise ResearchError(code, 'A synthetic refusal of the runtime check.')
                 self.make_stale()
-            return check(route)
+            return check(route, **kwargs)
         with patch.object(protocol, '_require_route_runtime', check_route):
             for index in range(count):
                 self.case.mutate(protocol.invoke_assignment, dict(id='call-%d' % index, assignment_id=head['id']))
@@ -350,6 +350,24 @@ class RoutePlanRegressionTests(RoutePlanCase):
                 (8, 'review-context', None), (7, 'review-route', None), (1, 'review-assignment', None)]), code)
 
 
+    def test_stale_route_plan_shows_the_procedure_and_keeps_the_refusal_of_the_command_apart(self):
+        """The plan states the stale-route procedure in details.message, and the code and the message that the
+        command of the stale route record gives in details.refusal."""
+        from research_harness.review_route_plan import STALE_ROUTE_ANSWER_MSG, STALE_ROUTE_PLAN_MSG
+        answered = self.build_answered_head()
+        head = self.assign_first_turn('third-first', 'third')
+        self.fail_probe()
+        self.make_stale()
+        plan = self.plan(head['id'])
+        with self.assertRaises(ResearchError) as refused:
+            self.case.mutate(protocol.invoke_assignment, dict(id='run-on-the-stale-route', assignment_id=head['id']))
+        refusal = dict(code=refused.exception.code, message=refused.exception.message)
+        self.assertEqual((plan['code'], plan['details']['message']), (refusal['code'], STALE_ROUTE_PLAN_MSG))
+        self.assertEqual(plan['details']['refusal'], refusal)
+        answer = self.plan(answered['id'])
+        self.assertEqual(list_steps(answer), [(8, 'review-context', None), (None, 'review-series', None)])
+        self.assertEqual((answer['details']['message'], answer['details']['refusal']), (STALE_ROUTE_ANSWER_MSG, refusal))
+
 class RoutePlanGuardTests(RoutePlanCase):
     """What the rule leaves as it is, and what it holds for every plan."""
     maxDiff = None
@@ -454,8 +472,8 @@ class RoutePlanGuardTests(RoutePlanCase):
         refused = {}
         for name, build in sorted(builders.items()):
             case = RoutePlanCase('setUp')
-            case.setUp()
             try:
+                case.setUp()
                 head = build(case)
                 fixture = case.case
                 with tempfile.TemporaryDirectory() as directory:
@@ -541,6 +559,10 @@ class EarlierTurnRouteTests(unittest.TestCase):
     earlier probe verified it."""
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         import test_visual_result_delivery as fixtures
         self.fixture = fixtures.VisualResultDeliveryTests()
         self.addCleanup(self.fixture.doCleanups)
@@ -651,6 +673,10 @@ class CorrectionRouteTests(unittest.TestCase):
     """The handoff of an output correction, with the store of tests/test_review_correction_origin.py."""
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         import test_review_correction_origin as origin
         self.origin = origin.CorrectionOriginCase('build_refused')
         self.addCleanup(self.origin.doCleanups)

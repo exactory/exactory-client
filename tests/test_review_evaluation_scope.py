@@ -15,6 +15,10 @@ import test_visual_context_repair as repair_fixtures
 
 class BridgeEvaluationScopeTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = bridge_fixtures.VisualBridgeOriginTests()
         self.addCleanup(self.fixture.doCleanups)
         self.fixture.setUp()
@@ -64,6 +68,13 @@ class BridgeEvaluationScopeTests(unittest.TestCase):
 
 
 class RepairEvaluationScopeTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_repeated_repair_uses_one_frozen_view_and_keeps_all_history_checks(self):
         fixture = repair_fixtures.VisualContextRepairTests()
         self.addCleanup(fixture.doCleanups)

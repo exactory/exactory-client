@@ -133,7 +133,7 @@ def record_probe(store, payload, *, expected_revision, request_id):
         validate_program_run(records["probe_intent"][value["id"]], value)
         existing = records.get("probe", {}).get(value["id"])
         if existing is not None:
-            if {key: existing[key] for key in value} != value:
+            if any(key not in existing or existing[key] != value[key] for key in value):
                 raise ResearchError("record_conflict", "Probe ID already has a different terminal outcome")
             return [], existing
         launch = records.get("probe_launch", {}).get(value["id"])

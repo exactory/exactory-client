@@ -27,6 +27,13 @@ FULLTEXT_CODES = ('xml_depth_limit', 'xml_element_limit', 'xml_external_entity',
 
 
 class StoreRowTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_public_handoff_roots_follow_the_cli_dispatch_paths(self):
         from ci import series_code_reach
         self.assertIn('search deliver-attempt', series_code_reach.EXTERNAL_COMMAND_ROOTS)
@@ -160,6 +167,23 @@ class StoreRowTests(unittest.TestCase):
                 self.assertEqual(fixture.plan()['state'], 'done')
                 self.assertEqual(fixture.case.read_records()['review_output_refusal']['observed'],
                                  records['review_output_refusal']['observed'])
+
+    def test_identifier_url_that_does_not_parse_is_refused_by_the_recording(self):
+        """Release 0.92.1 accepted a bar answer whose link has the version_id https://[, and the plan of the head
+        then raised ValueError. The plan names the recording, which refuses the answer, and the head is replaced."""
+        fixture = self.prepare_case(continuation_fixtures.ContinuationTests)
+        output = fixture.case.build_review_output('bar')
+        output['value']['evidence'] = [dict(kind='source', link=dict(version_id='https://[', source_id='saved-source',
+            artifact=fixture.case.supporting, locator=dict(kind='text', start=0, end=1, quote='A')))]
+        fixture.invoke(output)
+        plan = fixture.plan()
+        self.assertEqual((plan['state'], plan['command']), ('record', 'value-review'))
+        with self.assertRaises(ResearchError) as caught:
+            fixture.execute(plan)
+        self.assertEqual((caught.exception.code, caught.exception.details['path']), ('invalid_identifier', '/value/evidence'))
+        refusal = fixture.case.read_records()['review_output_refusal']['observed']
+        self.assertEqual((refusal['code'], refusal['check']), ('invalid_identifier', 'evidence.shape'))
+        self.assertEqual((fixture.plan()['state'], fixture.plan()['command']), ('replace', 'review-assignment'))
 
     def test_fulltext_rows_acquire_another_capture_and_preserve_the_pending_one(self):
         from literature_fixtures import LiteratureCase

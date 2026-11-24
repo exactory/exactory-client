@@ -1,5 +1,6 @@
 """Delivered objectives support their accepted conclusions beside the current attempt."""
 
+from unittest.mock import patch
 import copy
 import json
 from pathlib import Path
@@ -262,6 +263,13 @@ class ProblemObjectiveResultTests(ProblemCase):
 
 
 class ProblemObjectiveResultReviewTests(ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_both_shapes_arrive_in_the_result_review_packet_and_its_coverage(self):
         self.prepare_ready(solver=True)
         native = build_native_attempt(self.selected["statement"], [build_acceptance()], {})

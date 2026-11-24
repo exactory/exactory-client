@@ -118,9 +118,18 @@ def _validate_slate_potential(value, packet):
             raise ResearchError("invalid_value_review", error.message, {"candidate_id": candidate_id, "path": path}) from error
 
 
+def list_required_value_objection_ids(stage, dossier_payload, *, problem=False, historical=(), delivered=()):
+    """List prior objection IDs owed by this role, in dossier and delivery order."""
+    material = dossier_payload.get('material_change') if not problem else None
+    prior = material['prior_objections'] if material is not None and stage != 'bar' else ()
+    inherited = [row['id'] for review in historical for row in review['payload']['objections']]
+    return [row['id'] for row in prior] + inherited + [row['id'] for row in delivered]
+
+
 def _validate_value(records, artifacts, value, stage, dossier, historical=(), *, expected_checks=ALL_CHECKS, problem=None,
                     problem_objections=(), problem_rubric_required=True, slate_packet=None,
-                    evidence_validator=validate_evidence_contract, require_two_bars=True, allow_previous_rubric=False):
+                    evidence_validator=validate_evidence_contract, require_two_bars=True, allow_previous_rubric=False,
+                    rubric_path=None):
     rubric_required = problem is not None and stage == "result" and problem_rubric_required
     potential_required = problem is not None and stage == "slate"
     fields(value, ("status", "consequence", "bar_ids", "objective_adequacy", "method_adequacy", "reason", "evidence",
@@ -129,7 +138,7 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=(), *,
            (("rubric_potential",) if potential_required else ()), code="invalid_value_review", path='/value')
     if rubric_required:
         with describe_error_at('/value/rubric'):
-            problem_rubric.validate_grades(value["rubric"], allow_previous=allow_previous_rubric)
+            problem_rubric.validate_grades(value["rubric"], allow_previous=allow_previous_rubric, path=rubric_path)
         items = tuple(value["rubric"]["admission"]) + problem_rubric.NON_ADMISSION_ITEMS
         fields(value["rubric_evidence"], items, code="invalid_value_review", path='/value/rubric_evidence')
         for item in items:
@@ -182,9 +191,11 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=(), *,
             if finding["id"] in work_ids:
                 raise ResearchError("invalid_value_review", "Assess each work item once", {"path": item_path + "/id"})
             work_ids.add(finding["id"])
-    if work_ids != (set() if stage == "bar" or problem is not None else set(dossier["payload"]["work_items"])):
+    expected_work_ids = set() if stage == "bar" or problem is not None else set(dossier["payload"]["work_items"])
+    if work_ids != expected_work_ids:
+        # A final turn of a session can show the set only by its size: the refusal names what the answer left out.
         raise ResearchError("review_work_items_incomplete", "Independently assess every dossier work item",
-                            {"path": "/value/work_items"})
+                            {"path": "/value/work_items", "missing_ids": sorted(expected_work_ids - work_ids)})
     prior_ids = set()
     with describe_error_at('/value/objection_findings'):
         findings = strategy.items(value["objection_findings"], "Independent prior-objection findings")
@@ -203,13 +214,11 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=(), *,
             if finding["id"] in prior_ids:
                 raise ResearchError("invalid_value_review", "Assess each prior objection once", {"path": item_path + "/id"})
             prior_ids.add(finding["id"])
-    material = None if problem is not None else dossier["payload"]["material_change"]
-    expected_ids = set() if stage == "bar" or material is None else {item["id"] for item in material["prior_objections"]}
-    expected_ids.update(objection["id"] for review in historical for objection in review["payload"]["objections"])
-    expected_ids.update(objection["id"] for objection in problem_objections)
+    expected_ids = set(list_required_value_objection_ids(stage, dossier["payload"] if problem is None else {},
+        problem=problem is not None, historical=historical, delivered=problem_objections))
     if prior_ids != expected_ids:
         raise ResearchError("review_objection_history_incomplete", "Assess each recorded predecessor objection",
-                            {"path": "/value/objection_findings"})
+                            {"path": "/value/objection_findings", "missing_ids": sorted(expected_ids - prior_ids)})
 
 
 def _validate_review_bar_records(records, artifacts, output, dossier, problem):
@@ -284,22 +293,20 @@ def find_review_undelivered_references(records, artifacts, evidence, delivery, *
     return missing
 
 
-def validate_review_contract(records, artifacts, assignment, output, *, attempt=None, composed=False):
+def validate_review_contract(records, artifacts, assignment, output, *, attempt=None, composed=False, expanded=False):
     """Check the frozen scientific contract and the exact attempt's permitted delivery."""
     from .review_handles import expand_handles, is_material_output, validate_material
     packet = read_assignment_packet(records, artifacts, assignment['id'])
-    output = expand_handles(packet, output, artifacts=artifacts, assignment=assignment)
+    if not expanded:
+        output = expand_handles(packet, output, artifacts=artifacts, assignment=assignment)
     if is_material_output(packet, output):
         validate_material(packet, output, artifacts=artifacts, assignment=assignment)
         return
     from . import review_session_v4
     if not composed and (packet.get('session_combine') or packet.get('session_final', {}).get('page_plan_digest')):
-        review_session_v4.validate_final_turn_output(records, artifacts, assignment, packet, output)
+        review_session_v4.validate_final_turn_output(records, artifacts, assignment, packet, output, expanded=True,
+                                                     attempt=attempt)
         return
-    if review_session_v4.find_session_kind(packet) == 'final':
-        with contract_check('review.shape'):
-            review_session_v4._require_turn(isinstance(output, dict) and not set(output).intersection(
-                ('source_requests', 'settled_requests', 'excerpts')))
     if review_session_v4.find_session_kind(packet) == 'request':
         review_session_v4.validate_request_output(artifacts, assignment, packet, output)
         return
@@ -335,42 +342,12 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
                ("source_requests", "settled_requests", "reassessment", "excerpts"), code="invalid_value_review", path='')
         with describe_error_at('/stage'):
             strategy.choice(output["stage"], ("bar", "slate", "result"), "Review phase", "invalid_value_review")
-    route = records['review_route'][assignment['route_id']]
-    visual = route['adapter'] == 'codex_cli_visual_v1'
     frozen = read_assignment_packet(records, artifacts, assignment['id'])
     series = review_problem_parts.find_stage(frozen) is not None or parts_kind is not None
-    if staged_binding is not None:
-        from .direction_reviews import collect_selected_task_graph
-        graph = collect_selected_task_graph(records, artifacts, assignment['id'])
-        if not graph['completion']['complete']:
-            raise ResearchError('review_task_pending', 'Complete every required staged assessment before recording its scientific result.',
-                                {'issues': graph['completion']['issues']})
-        packets = [packet for _, packet in graph['packets']]
-        if graph.get('frame_packet') is not None:
-            packets.append(graph['frame_packet'])
-        # Frozen frame fields supply the ordinary scientific contract; actual
-        # task inputs below remain the sole evidence-delivery authority.
-        packet = frozen
-    elif series:
-        packets = (review_parts.collect_contract_packets(records, artifacts, assignment) if parts_kind is not None
-                   else review_problem_parts.collect_contract_packets(records, artifacts, assignment))
-        if not packets:
-            raise ResearchError('review_invocation_unverified', 'A series review requires its authenticated actual input')
-    elif visual:
-        from . import review_transport
-        from .review_input_projection import packets_from_visual_request
-        request = review_transport.request_body(route, assignment['prompt']['text'], frozen, read_history(artifacts, assignment))
-        # Attempt authentication independently requires these exact request bytes.
-        # Avoid assignment_state here: its refusal classifier invokes this validator.
-        packets = list(reversed(packets_from_visual_request(request)))
-    else:
-        packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment["id"]])
-    if assignment.get('session_chain'):
-        logical = json.loads(artifacts.read(assignment['session_chain']['logical']))
-        logical['evidence'] = []
-        packets = [logical] + packets
-    if staged_binding is None:
-        packet = packets[0]
+    packets, graph = _read_contract_packets(records, artifacts, assignment, frozen, series=series, parts_kind=parts_kind)
+    # Frozen frame fields supply the ordinary scientific contract of a staged review; actual task inputs remain the
+    # sole evidence-delivery authority.
+    packet = frozen if staged_binding is not None else packets[0]
     if "excerpts" in output:
         with contract_check("review.shape"), describe_error_at('/excerpts'):
             if review_excerpts.KEY not in frozen:
@@ -407,10 +384,7 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
         phase_packets.append(frozen)
     delivered_objections = list(packet.get("material_objections", []))
     for item in phase_packets:
-        delivered_objections.extend(review_supplied_evidence.list_delivered_objections(
-            {"historical_reviews": item.get("historical_reviews", [])}))
-        for historical in item.get("historical_bars", []):
-            delivered_objections.extend(historical.get("review", historical).get("objections", []))
+        delivered_objections.extend(review_supplied_evidence.list_historical_review_objections(item))
     expected_checks = (PROBLEM_CHECKS if problem else
                        CONTINUE_CHECKS_V1 + ("stop",) if is_previous_prompt(assignment) else ALL_CHECKS)
     delivered_bars = {bar["id"] for item in packets for bar in item.get("bars", [])}
@@ -460,44 +434,14 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
     with contract_check("review.reassessment"), describe_error_at('/reassessment'):
         review_context_repair.validate_reassessment(records, artifacts, assignment, output, reading_checks=False, packet=repair_packet,
                                                     evidence_validator=contract_evidence)
-    source_only = not (problem or readiness_parts) and frozen.get('source_rules') == bar_sources.PROTOCOL_V3
-    evidence_rows = list(evidence_arrays(output, with_paths=True))
-    if source_only:
-        evidence_rows = [(path, [reference for reference in evidence if reference.get('kind') == 'source'])
-                         for path, evidence in evidence_rows]
-    if source_only or assignment.get('session_chain'):
-        support = output['support'] if stage == 'result' else None
-        if isinstance(support, dict) and isinstance(support.get('checks'), list):
-            for index, check in enumerate(support['checks']):
-                if not isinstance(check, dict) or not isinstance(check.get('evidence'), list):
-                    continue
-                positions = [position for position, reference in enumerate(check['evidence'])
-                             if isinstance(reference, dict) and reference.get('kind') == 'source']
-                sources = [check['evidence'][position] for position in positions]
-                if sources:
-                    path = '/support/checks/' + str(index) + '/evidence'
-                    with describe_error_at(path):
-                        contract_evidence(records, artifacts, sources, positions=positions, forms_notice=False)
-                    evidence_rows.append((path, sources))
-    if assignment.get('session_chain') or problem or readiness_parts or source_only and any(evidence for _, evidence in evidence_rows):
-        from .review_delivered_evidence import project_delivery_view
-        if staged_binding is not None:
-            delivery = project_delivery_view(records, artifacts, packets)
-        else:
-            delivery = read_review_citation_delivery(records, artifacts, assignment, attempt=attempt)
-        for path, evidence in evidence_rows:
-            missing = find_review_undelivered_references(records, artifacts, evidence, delivery,
-                require_complete_artifacts=bool(visual or series or staged_binding))
-            if missing:
-                details = missing[0]
-                description = (details["record_kind"] + " " + details["id"] + " at the cited digest"
-                               if "record_kind" in details else "artifact " + details["sha256"]
-                               + (" within the cited locator" if "locator" in details else ""))
-                with contract_check("review.evidence_delivery"), describe_error_at(path):
-                    raise ResearchError("review_evidence_undelivered",
-                        "Cite only content that this review received: no packet of the review delivered " + description, details)
-    from .review_refusal import validate_source_links_contract
-    validate_source_links_contract(records, output, packets)
+    support = output['support'] if stage == 'result' else None
+    support_rows = [('/support/checks/' + str(index) + '/evidence', check['evidence'])
+                    for index, check in enumerate(support['checks'])
+                    if isinstance(check, dict) and isinstance(check.get('evidence'), list)
+                    ] if isinstance(support, dict) and isinstance(support.get('checks'), list) else []
+    delivery = _validate_cited_evidence(records, artifacts, assignment, frozen, packets,
+        list(evidence_arrays(output, with_paths=True)), support_rows,
+        readiness_parts=readiness_parts, series=series, attempt=attempt)
     with contract_check("review.support"), describe_error_at('/support'):
         if problem and output["support"] is not None:
             raise ResearchError("invalid_value_review", "A problem review supplies problem assurances, not native proof acceptance")
@@ -515,6 +459,135 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
                     validate_study_references(records, artifacts, check['evidence'], delivery)
 
 
+def _read_contract_packets(records, artifacts, assignment, frozen, *, series, parts_kind):
+    """The packets whose content an answer of the assignment can cite, and the selected task graph of a staged review
+    (None for any other review)."""
+    from . import review_parts, review_problem_parts, review_supplied_evidence
+    route = records['review_route'][assignment['route_id']]
+    graph = None
+    if assignment.get('staged_review') is not None:
+        from .direction_reviews import collect_selected_task_graph
+        graph = collect_selected_task_graph(records, artifacts, assignment['id'])
+        if not graph['completion']['complete']:
+            raise ResearchError('review_task_pending', 'Complete every required staged assessment before recording its scientific result.',
+                                {'issues': graph['completion']['issues']})
+        packets = [packet for _, packet in graph['packets']]
+        if graph.get('frame_packet') is not None:
+            packets.append(graph['frame_packet'])
+    elif series:
+        packets = (review_parts.collect_contract_packets(records, artifacts, assignment) if parts_kind is not None
+                   else review_problem_parts.collect_contract_packets(records, artifacts, assignment))
+        if not packets:
+            raise ResearchError('review_invocation_unverified', 'A series review requires its authenticated actual input')
+    elif route['adapter'] == 'codex_cli_visual_v1':
+        from . import review_transport
+        from .review_input_projection import packets_from_visual_request
+        request = review_transport.request_body(route, assignment['prompt']['text'], frozen, read_history(artifacts, assignment))
+        # Attempt authentication independently requires these exact request bytes.
+        # Avoid assignment_state here: its refusal classifier invokes this validator.
+        packets = list(reversed(packets_from_visual_request(request)))
+    else:
+        packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment["id"]])
+    if assignment.get('session_chain'):
+        logical = json.loads(artifacts.read(assignment['session_chain']['logical']))
+        logical['evidence'] = []
+        packets = [logical] + packets
+    return packets, graph
+
+
+def _validate_cited_evidence(records, artifacts, assignment, frozen, packets, evidence_rows, support_rows, *,
+                             readiness_parts, series, attempt):
+    """Check the citations of an answer against the records: each cited item reached this review, and each source
+    link cites a full text. evidence_rows and support_rows hold (path, evidence) for the evidence arrays of the
+    scientific fields and of the support checks. Return the delivery that the check read, or None."""
+    from . import bar_sources, review_session_v4
+    from .review_refusal import validate_source_link_rows
+    staged = assignment.get('staged_review') is not None
+    visual = records['review_route'][assignment['route_id']]['adapter'] == 'codex_cli_visual_v1'
+    problem = assignment.get("subject", {}).get("kind") == "problem"
+    source_only = not (problem or readiness_parts) and frozen.get('source_rules') == bar_sources.PROTOCOL_V3
+    cited = list(evidence_rows)
+    if source_only:
+        cited = [(path, [reference for reference in evidence if reference.get('kind') == 'source'])
+                 for path, evidence in cited]
+    if source_only or assignment.get('session_chain'):
+        for path, evidence in support_rows:
+            positions = [position for position, reference in enumerate(evidence)
+                         if isinstance(reference, dict) and reference.get('kind') == 'source']
+            sources = [evidence[position] for position in positions]
+            if sources:
+                with describe_error_at(path):
+                    validate_evidence_contract(records, artifacts, sources, packets=packets, positions=positions,
+                                               forms_notice=False)
+                cited.append((path, sources))
+    delivery = None
+    if assignment.get('session_chain') or problem or readiness_parts or source_only and any(evidence for _, evidence in cited):
+        from .review_delivered_evidence import project_delivery_view
+        if staged:
+            delivery = project_delivery_view(records, artifacts, packets)
+        else:
+            delivery = read_review_citation_delivery(records, artifacts, assignment, attempt=attempt)
+        for path, evidence in cited:
+            missing = find_review_undelivered_references(records, artifacts, evidence, delivery,
+                require_complete_artifacts=bool(visual or series or staged))
+            if missing:
+                details = missing[0]
+                description = (details["record_kind"] + " " + details["id"] + " at the cited digest"
+                               if "record_kind" in details else "artifact " + details["sha256"]
+                               + (" within the cited locator" if "locator" in details else ""))
+                hint = (review_session_v4.describe_partial_abstract_citation(
+                            delivery, details, review_session_v4.find_session_form(packets[0]))
+                        if assignment.get('session_chain') else '')
+                with contract_check("review.evidence_delivery"), describe_error_at(path):
+                    raise ResearchError("review_evidence_undelivered",
+                        "Cite only content that this review received: no packet of the review delivered " + description + hint,
+                        details)
+    validate_source_link_rows(records, evidence_rows, packets)
+    return delivery
+
+
+def validate_page_citations(records, artifacts, assignment, output, *, attempt):
+    """Run on the evidence fields of a page answer the checks of its citations that the composed answer runs with the
+    records, so that a page that cites an item this review did not receive, or a source link without a full text,
+    is refused at its own place. output is the expanded page answer of an accepted page check. The checks that need
+    the answers of several pages stay with the composed answer. A verification and an adjudicator page run the checks
+    of their own composed check."""
+    from . import review_parts, review_problem_parts
+    from .review_composition import list_page_evidence
+    # The delivery is read from the exact attempt. Without one it would be selected through assignment_state, whose
+    # refusal classifier runs this check with the attempt.
+    if attempt is None or assignment['role'] not in ('bar', 'slate', 'result', 'verification', 'adjudicator'):
+        return
+    try:
+        if assignment['role'] == 'verification':
+            from .review_parts_study import validate_verification_page
+            return validate_verification_page(records, artifacts, assignment, output, attempt=attempt)
+        if assignment['role'] == 'adjudicator':
+            from .review_protocol import validate_adjudication_page
+            return validate_adjudication_page(records, artifacts, assignment, output, attempt=attempt)
+        frozen = read_assignment_packet(records, artifacts, assignment['id'])
+        parts_kind = review_parts.find_kind(frozen) if review_parts.KEY in assignment else None
+        readiness_parts = parts_kind is not None and frozen[review_parts.KEY]['adapter'] == 'study_readiness'
+        series = review_problem_parts.find_stage(frozen) is not None or parts_kind is not None
+        packets, _ = _read_contract_packets(records, artifacts, assignment, frozen, series=series, parts_kind=parts_kind)
+        rows = list_page_evidence(output)
+        support_rows = [(path, evidence) for pointer, path, evidence in rows if pointer.startswith('/support/')]
+        delivery = _validate_cited_evidence(records, artifacts, assignment, frozen, packets,
+            [(path, evidence) for pointer, path, evidence in rows if not pointer.startswith('/support/')], support_rows,
+            readiness_parts=readiness_parts, series=series, attempt=attempt)
+        if readiness_parts:
+            from .review_parts_study import validate_study_references
+            with contract_check('review.support'):
+                for path, evidence in support_rows:
+                    with describe_error_at(path):
+                        validate_study_references(records, artifacts, evidence, delivery)
+    except ResearchError as error:
+        # A failure of a read of the records is no finding about the page, also inside the shape check of a series.
+        if not hasattr(error, 'contract_check'):
+            error.contract_external = True
+        raise
+
+
 @record_refusal_on_error
 def record_value_review(store, payload, *, expected_revision, request_id):
     artifact_store = store.build_artifact_store()
@@ -523,6 +596,8 @@ def record_value_review(store, payload, *, expected_revision, request_id):
         from .evaluation import Evaluation
         artifacts = Evaluation.of(records, artifact_store)
         from . import review_problem_parts
+        if isinstance(value, dict) and 'assignment_id' in value:
+            text(value['assignment_id'], 'Value review assignment ID', code='invalid_value_review')
         saved = records.get('review_assignment', {}).get(value.get('assignment_id')) if isinstance(value, dict) else None
         if saved is not None and 'evidence_parts' in saved['prompt'].get('parameters', {}):
             packet = read_assignment_packet(records, artifacts, saved['id'])
@@ -574,7 +649,9 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                 if not assignment['ready'] or not verified['complete']:
                     raise ResearchError('review_parts_pending', _PARTS_RESULT_PENDING_NOTE,
                                         dict(assignment_id=saved_assignment['id'], issues=verified['issues']))
-        validate_review_contract(records, artifacts, saved_assignment, effective_output, composed=composite is not None)
+        if composite is None or not saved_assignment.get('session_chain'):
+            # read_final_output already ran the v4 composite through this contract.
+            validate_review_contract(records, artifacts, saved_assignment, effective_output, composed=composite is not None)
         if value["stage"] in ("bar", "slate", "result"):
             if assignment.get("pending_source_requests") or value.get('settled_requests'):
                 raise ResearchError("review_sources_pending", "Retain the observed request turn; resolve its source deliveries before recording a final phase assessment")
@@ -1198,7 +1275,16 @@ def _collect_superseded_review_ids(records, artifacts):
                     # the ordinary two-review/focused-objection procedure needs.
                     superseded.add(prior['id'])
             continue
-        key = (review['payload']['stage'], normalized_text(assignment['reviewer_id']), assignment['session_id'],
+        # A refresh chain is a session of its own whose first assignment names the refreshed assignment in
+        # session_refresh. Its review takes the session of the review that it refreshes, through each such link.
+        session = assignment
+        while True:
+            first = records['review_assignment'].get(session['session_id'], {})
+            link = first.get('context', {}).get('session_refresh') if first.get('role') == assignment['role'] else None
+            if not isinstance(link, dict):
+                break
+            session = records['review_assignment'][link['assignment_id']]
+        key = (review['payload']['stage'], normalized_text(assignment['reviewer_id']), session['session_id'],
                slot_id(records, assignment))
         if review['payload']['stage'] == 'result':
             key += (read_assignment_packet(records, artifacts, assignment['id']).get('problem_evidence_digest'),)

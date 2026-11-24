@@ -26,6 +26,10 @@ class V7RefusalTests(OpennessReadingCase):
     finish_reading = turn_fixtures.V7CommandTests.finish_reading
 
     def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         enabled = patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (v7.PROTOCOL, reading.PROTOCOL_V6))
         enabled.start()
@@ -749,6 +753,10 @@ class LegacySuccessorTests(OpennessReadingCase):
     finish_from = V7RefusalTests.finish_from
 
     def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.limit_input(1300000)
 
@@ -929,6 +937,7 @@ class LegacySuccessorTests(OpennessReadingCase):
             self.check_v6_successor()
 
     def test_k7_no_successor_stops_with_two_answers_and_an_executable_route(self):
+        """Keep the ledger's test ID and execute the route answer when the only target cannot fit."""
         from research_harness import review_claude_transport as claude
         from research_harness.check_mode import check_mutation
         from test_research_claude_transport import clean_stream, completed
@@ -942,16 +951,19 @@ class LegacySuccessorTests(OpennessReadingCase):
                 action = plan_next(records, self.artifacts, head)
                 self.assertEqual(action['state'], 'stop', action)
                 self.assertIsNone(action['details']['successor']['protocol'])
-                self.assertEqual(len(action['details']['decision']['then']), 2)
+                self.assertEqual(action['details']['largest_one_request_targets'], 0)
+                self.assertEqual(action['details']['decision']['owner_decides'],
+                                 'Whether this review runs on another route.')
+                answers = action['details']['decision']['then']
+                self.assertEqual([[step['id'] for step in answer['steps']] for answer in answers], [[7, 4]])
                 self.assertTrue(action['details']['unserved_range'])
                 self.assertTrue(all(row['state'] == 'stop' for row in action['details']['successor']['admissions']))
         for kind in ('review_assignment', 'review_attempt'):
             self.assertEqual(records[kind], old[kind])
-        # One target is already the smallest packet: the first answer reports its unserved range.
-        # The second answer's route/probe prerequisites are executed before its export and check.
-        route_step = action['details']['decision']['then'][1]['steps'][0]
+        # Execute the route and probe prerequisites before the export and check.
+        route_step = answers[0]['steps'][0]
         self.assertEqual(route_step['command'], 'review-route')
-        export_step = action['details']['decision']['then'][1]['steps'][1]
+        export_step = answers[0]['steps'][1]
         self.assertEqual(export_step['command'], 'export')
         route = dict(build_route(effort='xhigh'), id='serving-route')
         def probe(route, request, credential):
@@ -979,6 +991,9 @@ class LegacySuccessorTests(OpennessReadingCase):
 
     def test_math_solver_input_stop_keeps_its_answers_in_both_protocol_states(self):
         from research_harness.review_plan_steps import complete_plan
+        released = patch.object(reading, 'NEW_MATH_CHAIN_PROTOCOLS', (reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         head = self.fail_legacy_final()
         records = self.store.snapshot()['records']
         assignment = copy.deepcopy(records['review_assignment'][head])
@@ -1174,6 +1189,7 @@ class NoticeRoomTests(unittest.TestCase):
     def measure_remaining_frame(self, route, packet, native, fields, level):
         # Consume only actual wire cost of each declared component. Unused component
         # budget, including the absent label vector, never reduces the envelope.
+        from research_harness import review_prompt_paragraphs as paragraphs
         skeleton = copy.deepcopy(packet)
         binding = skeleton['reading_final']
         def measure(prompt=''):
@@ -1196,6 +1212,8 @@ class NoticeRoomTests(unittest.TestCase):
         reserve_values(binding, v7.FINAL_MATERIAL_FIELDS, level + fields['material_envelope'])
         reserve_values(binding, ('allowances',), fields['allowances'])
         reserve_values(binding, ('page',), fields['page'])
+        reserve_values(binding, ('notes_cost',), fields['notes_cost'] - len(paragraphs.NOTES_COST_PROMPT))
+        reserve_values(binding, ('lists',), fields['lists'] - len(paragraphs.LIST_ROWS_PROMPT))
         reserve_values(skeleton['native'], tuple(v7._describe_native_fields(native)) + ('context_unit',), fields['native_frame'])
         reserve_values(skeleton['native'], ('subject',), fields['statement'])
         reserve_values(skeleton['native']['scientific_context'], ('decisive_work_ids',), fields['decisive_work_ids'])
@@ -1265,7 +1283,12 @@ class NoticeRoomTests(unittest.TestCase):
         self.assertLessEqual(envelope, 3000)
         self.assertEqual(v7._measure_final_material(fixture.route,
             {key: packet['reading_final'][key] for key in v7.FINAL_MATERIAL_FIELDS}), level)
-        prompt = protocol.canonical_prompt('native_math', reading_stage='final', reading_protocol=v7.PROTOCOL)
+        prompt_parameters = dict(reading_stage='final', reading_protocol=v7.PROTOCOL,
+                                 capacity=packet['reading_final']['capacity'],
+                                 finding_version=2 if 'finding_index' in packet else 1)
+        prompt = protocol.canonical_prompt('native_math', **prompt_parameters,
+            **paragraphs.select_prompt_parameters('native_math', packet))
+        self.assertTrue(v7.matches_turn_prompt(dict(role='native_math', prompt=prompt), packet))
         request = protocol.transport.request_body(fixture.route, prompt['text'], packet)
         before = capacity.measure_request(fixture.route, request)['text_characters']
         bound = plan['frame']['final']['bound'] + 45000 + level
@@ -1274,8 +1297,9 @@ class NoticeRoomTests(unittest.TestCase):
         notice = self.build_bounded_notice(fixture.artifacts, route=fixture.route)
         self.assertEqual(capacity.measure_capacity_value(fixture.route, notice), 45000)
         packet = notices.attach_refusal_notice(packet, notice)
-        prompt = paragraphs.append_prompt_paragraphs(prompt, 'native_math',
-            versions=[paragraphs.REFUSAL_PARAGRAPH_VERSIONS['bounded']])
+        prompt = protocol.canonical_prompt('native_math', **prompt_parameters,
+            **paragraphs.select_prompt_parameters('native_math', packet))
+        self.assertTrue(v7.matches_turn_prompt(dict(role='native_math', prompt=prompt), packet))
         request = protocol.transport.request_body(fixture.route, prompt['text'], packet)
         after = capacity.measure_request(fixture.route, request)['text_characters']
         self.assertLessEqual(after, bound)
@@ -1309,7 +1333,7 @@ class NoticeRoomTests(unittest.TestCase):
             for label_set in ('short', 'just_under', 'exact', 'above', 'mixed'):
                 margins, endpoints = [], []
                 with patch.object(v7, 'build_inventory', return_value=fixture.built), patch.object(
-                        capacity, 'read_profile_priors', return_value=priors):
+                        capacity, 'read_profile_priors', return_value=priors), patch.object(v7, 'V7_FINAL_FORMS', ('request',)):
                     for count in range(1, 77):
                         native = self.build_label_native(fixture.route, count, label_set)
                         admission = v7.check_v7_admission(records, fixture.artifacts, fixture.route, native)
@@ -1415,9 +1439,10 @@ class NoticeRoomTests(unittest.TestCase):
         import hashlib
         fixture = turn_fixtures.TurnPacketTests()
         fixture.setUp()
-        self.assertEqual(digest(v7.measure_turn_frames(fixture.route, fixture.native)['reading']),
-                         '5d2b6f8d1bf5363349635ebc453371fddbd97c88a142ef9484894aae0756b00e')
-        packet, chain = fixture.prepare(finding_version=1)
+        with turn_fixtures.use_earlier_v7_frames():
+            self.assertEqual(digest(v7.measure_turn_frames(fixture.route, fixture.native)['reading']),
+                             '5d2b6f8d1bf5363349635ebc453371fddbd97c88a142ef9484894aae0756b00e')
+            packet, chain = fixture.prepare(finding_version=1)
         plan = capacity.read_chain_capacity_plan(fixture.artifacts, chain)
         inventory = json.loads(fixture.artifacts.read(chain['inventory']))
         before = json.loads(fixture.artifacts.read(chain['state']))
@@ -1463,14 +1488,14 @@ class NoticeRoomTests(unittest.TestCase):
         self.assertEqual(supplied['reading_turn']['capacity']['level_material_allowance'], 15000)
         supplied = notices.attach_refusal_notice(supplied, notice)
         from research_harness import review_prompt_paragraphs as paragraphs, review_preflight
-        prompt = protocol.canonical_prompt('native_math', reading_stage='reading', reading_protocol=v7.PROTOCOL)
-        prompt = paragraphs.append_prompt_paragraphs(prompt, 'native_math',
-            versions=[paragraphs.REFUSAL_PARAGRAPH_VERSIONS['bounded']])
-        prompt['parameters']['capacity'] = supplied['reading_turn']['capacity']
+        prompt = protocol.canonical_prompt('native_math', reading_stage='reading', reading_protocol=v7.PROTOCOL,
+            capacity=supplied['reading_turn']['capacity'],
+            **paragraphs.select_prompt_parameters('native_math', supplied))
         # The assignment holds every member of a recorded one, the context included, as the fixture assigned it.
         assignment = dict(fixture.value, prompt=prompt,
             reading_chain=chain, capacity_plan=chain['capacity_plan'], capacity_plan_kind='reading',
             packet=fixture.artifacts.put_json(supplied))
+        self.assertTrue(v7.matches_turn_prompt(assignment, supplied))
         records = dict(review_route=dict(route=fixture.route))
         request = protocol.transport.request_body(fixture.route, prompt['text'], supplied)
         report = review_preflight.build_assignment_report(records, fixture.artifacts, assignment, request)

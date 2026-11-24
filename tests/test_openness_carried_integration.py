@@ -346,6 +346,9 @@ class CarriedIntegrationCases(CarriedIntegrationSupport):
         self.finish_chain(native)
 
     def test_pool_charge_is_included_in_a_denser_ratio_handoff(self):
+        released = patch.object(v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         native, receipt = self.start_chain()
         self.invoke('new', self.answer_v7(self.read_packet('new')))
         records = copy.deepcopy(self.store.snapshot()['records'])
@@ -681,6 +684,13 @@ class ManyNotesIntegrationTests(CarriedIntegrationSupport, OpennessReadingCase):
 
 
 class FallbackCarriedIntegrationTests(OpennessReadingCase):
+    def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     reading_protocol = None
     route_model = 'gpt-6-astra'
     route_output_tokens = 128000
@@ -871,6 +881,57 @@ class StoredSelectionIntegrationTests(CarriedIntegrationSupport, OpennessReading
         self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
         self.assertEqual(caught.exception.message, v7.SELECTION_MISMATCH_MESSAGE)
 
+    def assert_origin_refusal(self, identifier, operation):
+        with self.assertRaises(ResearchError) as caught:
+            operation()
+        self.assertEqual(caught.exception.code, 'claim_reassessment_required')
+        self.assertEqual(caught.exception.details['record_id'], 'review_assignment:' + identifier)
+
+    def test_postdated_origin_refuses_check_assignment_and_successor(self):
+        """The base check and assignment omit the only origin or pick the superseded turn; the planner diverges."""
+        from research_harness.check_mode import check_mutation
+        from research_harness.openness_successor import admit_successor_chain
+
+        for identifier in ('turn-1', 'repeat'):
+            with self.subTest(origin=identifier):
+                if identifier == 'repeat':
+                    with patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (reading.PROTOCOL_V6,)):
+                        self.assign('repeat', self.export(name='repeat-export', assignment_id='repeat'))
+                    self.invoke('repeat', self.build_reading_response(self.read_packet('repeat')))
+                new = 'trial-' + identifier
+                native = self.export(name=new + '-export', assignment_id=new)
+                payload = dict(id=new, route_id='route', dossier_id=None, role='native_math',
+                    reviewer_id='openness-reviewer', author_id='problem-author', context=dict(native_packet=native))
+
+                def check():
+                    return check_mutation(self.store, protocol.record_assignment, payload,
+                        expected_revision=self.store.revision, request_id=new + '-check', bounded_payload=payload)
+
+                self.assertEqual(list_carried_turns(check()['carried_readings']), {identifier: [identifier]})
+                first = self.store.snapshot()['records']['review_assignment'][identifier]
+                self.put('review_assignment', identifier, dict(first, recorded_revision=self.store.revision + 100))
+                self.assert_origin_refusal(identifier, check)
+                self.assert_origin_refusal(identifier, lambda: self.mutate(protocol.record_assignment, payload))
+                records = self.store.snapshot()['records']
+                self.assertNotIn(new, records['review_assignment'])
+                self.assert_origin_refusal(identifier, lambda: admit_successor_chain(
+                    records, self.artifacts, records['review_assignment'][identifier]))
+                self.put('review_assignment', identifier, first)
+
+    def test_verification_refuses_a_postdated_origin_of_a_stored_selection(self):
+        """The base current verifier gives a selection mismatch after replay succeeds at the true cutoff."""
+        self.start_chain()
+        first = self.store.snapshot()['records']['review_assignment']['new']
+        from test_openness_carried import observe_v7
+        observe_v7(self, first)
+        records = self.store.snapshot()['records']
+        v7.verify_problem_coverage(records, self.artifacts, first)
+        origin = records['review_assignment']['turn-1']
+        self.put('review_assignment', 'turn-1', dict(origin, recorded_revision=self.store.revision + 100))
+        records = self.store.snapshot()['records']
+        self.assert_origin_refusal('turn-1',
+            lambda: v7.verify_problem_coverage(records, self.artifacts, first))
+
     def hide_extraction_in_bundle(self, number=1):
         """fulltext and bundle: a second body of work number, whose bundle names the delivered capture as a
         supplement, so that capture is no main capture any more."""
@@ -998,6 +1059,9 @@ class StoredSelectionIntegrationTests(CarriedIntegrationSupport, OpennessReading
                 self.assert_mismatch(altered[2])
 
     def test_artifact_missing_at_the_first_assignment_refuses_the_assignment(self):
+        released = patch.object(v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         native = self.export(name='new-export', assignment_id='new')
         # The contract assertion comes before removing an artifact, so the base
         # fails for its protocol rather than an incidental refusal.
@@ -1219,11 +1283,15 @@ class ContentChangeSupport(CarriedIntegrationSupport):
         records = self.store.snapshot()['records']
         return reading.verify_chain(records, self.artifacts, records['review_assignment'][final])
 
-    def assert_stale(self, final):
+    def assert_stale(self, final, version):
+        """The finding of the chain of final is refused, because the records no longer give the full text of version
+        that its own packet holds (rule C27)."""
         with self.assertRaises(ResearchError) as caught:
             self.verify_final(final)
         self.assertEqual((caught.exception.code, caught.exception.message),
-                         ('openness_reading_incomplete', v7.STATE_VERIFICATION_MESSAGE))
+                         ('openness_reading_incomplete', v7.UNITS_CHANGED_MESSAGE))
+        self.assertEqual([(row['state'], row['unit']['kind'], row['unit']['version_id'])
+                          for row in caught.exception.details['units']], [('left', 'fulltext', version)])
 
     def finish_later_chain(self, native):
         """Run the later chain to its final, which reads no full text, and return the id of its final."""
@@ -1240,7 +1308,26 @@ class ContentChangeCarryTests(ContentChangeSupport, OpennessReadingCase):
 
     def test_supplement_bundle_keeps_the_readings_of_the_unchanged_units(self):
         """N1, with K1, N4 and N3 as its later steps on the same state. A bundle names the capture of work 1 that A and
-        B read as a supplement. On the base the later chain carries no turn: the first assertion fails."""
+        B read as a supplement. The single-turn deletion and the equal runtime-read counts for one and three turns
+        are contracts that also pass on this lane's base, where both counts are zero."""
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.openness_carried import select_carried_readings, verify_stored_selection
+
+        def measure_selection(records, artifacts, inventory, identity, selection_protocol):
+            with patch.object(ArtifactStore, 'read_runtime_fingerprint', autospec=True,
+                              side_effect=ArtifactStore.read_runtime_fingerprint) as read_runtime:
+                turns = select_carried_readings(records, artifacts, inventory, identity, protocol=selection_protocol)
+            return turns, read_runtime.call_count
+
+        records = self.store.snapshot()['records']
+        first = records['review_assignment']['turn-1']
+        native = json.loads(self.artifacts.read(first['context']['native_packet']))
+        inventory = v7.build_inventory(records, self.artifacts, native, review=first)['inventory']
+        identity = v7._describe_carried_identity(records, dict(first, recorded_revision=self.store.revision + 1),
+                                                records['review_route'][first['route_id']], native)
+        one, one_reads = measure_selection(records, self.artifacts, inventory, identity,
+                                           'exactory-openness-carried-selection-v3')
+        self.assertEqual(len(one), 1)
         final = self.finish_carrying_chain()
         self.hide_extraction_in_bundle()
         native, receipt = self.start_later_chain()
@@ -1252,22 +1339,27 @@ class ContentChangeCarryTests(ContentChangeSupport, OpennessReadingCase):
         self.assertLess(report['remaining_characters'], self.text_sizes[0])
         self.assertEqual(report['notes'], dict(current=0, affected=3))
         # K1, a contract: the finding of B, whose own packet holds the changed unit, is stale.
-        self.assert_stale(final)
+        self.assert_stale(final, self.versions[0])
         # N4: the first part of the verification refuses a stored selection without the chain whose content changed.
-        from research_harness.openness_carried import verify_stored_selection
         records, inventory, identity, selection, cutoff = self.read_selection_context('later')
+        three, three_reads = measure_selection(cutoff.records, cutoff, inventory, identity, selection['protocol'])
+        self.assertEqual(three, selection['turns'])
+        self.assertEqual(one_reads, three_reads)
         plan = capacity.read_chain_capacity_plan(self.artifacts, records['review_assignment']['later'])
         verify_stored_selection(records, self.artifacts, inventory, identity, selection, cutoff=cutoff, plan=plan)
         without_a = [row for row in selection['turns'] if row['origin']['chain'] != 'turn-1']
-        for altered in (dict(selection, turns=[]), dict(selection, turns=without_a)):
+        without_one_turn = [row for row in selection['turns'] if row['origin']['assignment_id'] != 'earlier-2']
+        for altered in (dict(selection, turns=[]), dict(selection, turns=without_a),
+                        dict(selection, turns=without_one_turn)):
             with self.assertRaises(ResearchError) as caught:
                 verify_stored_selection(records, self.artifacts, inventory, identity, altered, cutoff=cutoff, plan=plan)
+            self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
             self.assertEqual(caught.exception.message, v7.SELECTION_MISMATCH_MESSAGE)
         later = self.finish_later_chain(native)
         self.assertTrue(self.verify_final(later))
         # N3: a later change of a unit of its own packet turns the finding of the later chain stale.
         self.hide_extraction_in_bundle(2)
-        self.assert_stale(later)
+        self.assert_stale(later, self.versions[1])
 
     def test_stored_selection_of_version_2_keeps_its_verification(self):
         """N5 (C20): B stores a selection of version 2, which keeps its rule; a later chain of version 3 still carries
@@ -1305,9 +1397,8 @@ class ContentChangeCarryTests(ContentChangeSupport, OpennessReadingCase):
                          {'turn-1': ['turn-1', 'earlier-2'], 'new': ['new']})
 
 
-class SuppliedTextContentChangeTests(ContentChangeSupport, OpennessReadingCase):
-    """Work 1 is a DOI work whose full text was supplied with import-fulltext. Test N2 of the design of record
-    20261120002019-content-change-after-cutoff-discards-carried-readings."""
+class SuppliedWorkSupport:
+    """Work 1 is a DOI work whose full text was supplied with import-fulltext."""
 
     DOI = 'doi:10.1234/supplied-survey'
 
@@ -1336,17 +1427,24 @@ class SuppliedTextContentChangeTests(ContentChangeSupport, OpennessReadingCase):
             request_id='supplied-%d' % self.sequence, expected_revision=self.store.revision,
             extractor=lambda data: {'status': 'extracted', 'text': pdf_text})['capture']
 
-    def fetch_publisher_copy(self):
-        """fulltext: the publisher's copy of the supplied work arrives through a fetch, with another extracted text."""
+    def fetch_publisher_copy(self, *, same_bytes=False):
+        """fulltext: the publisher's copy of the supplied work arrives through a fetch, with another extracted text.
+        With same_bytes the copy has the bytes of the supplied file, so the gaps of the minimum stay as they were."""
         from research_fixtures import client
         from research_harness.acquisition import acquire_fulltext
-        http, _, _ = client([(200, {'Content-Type': 'application/pdf'},
-                              b'%PDF-1.4\n% The fetched publisher copy.\n%%EOF')], max_retries=0)
+        data = (b'%PDF-1.4\n% Synthetic supplied survey.\n%%EOF\n' if same_bytes
+                else b'%PDF-1.4\n% The fetched publisher copy.\n%%EOF')
+        http, _, _ = client([(200, {'Content-Type': 'application/pdf'}, data)], max_retries=0)
         self.sequence += 1
         acquire_fulltext(self.store, self.DOI, 'https://publisher.example/survey.pdf', http=http,
             extractor=lambda data: {'status': 'extracted', 'text': self.build_text(1).replace('continues here',
                                                                                               'continues  here')},
             expected_revision=self.store.revision, request_id='fetched-%d' % self.sequence)
+
+
+class SuppliedTextContentChangeTests(SuppliedWorkSupport, ContentChangeSupport, OpennessReadingCase):
+    """Work 1 is a DOI work whose full text was supplied with import-fulltext. Test N2 of the design of record
+    20261120002019-content-change-after-cutoff-discards-carried-readings."""
 
     def test_fetched_copy_after_a_supplied_text_keeps_the_readings_of_the_unchanged_units(self):
         """N2: the fetched copy replaces the supplied text as the main capture. On the base the later chain carries no
@@ -1363,6 +1461,12 @@ class SuppliedTextContentChangeTests(ContentChangeSupport, OpennessReadingCase):
 
 class ReadScopeIntegrationTests(CarriedIntegrationSupport, OpennessReadingCase):
     """C9 to C11: the selection reads an artifact of an earlier assignment only when its result can depend on it."""
+    def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def build_payload(self, identifier='new', *, reviewer_id='openness-reviewer', route_id='route', bindings=None):
         bindings = bindings or [dict(formulation=self.selected['statement'], search_id=self.search['id'])]

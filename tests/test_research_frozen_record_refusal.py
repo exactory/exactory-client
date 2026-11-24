@@ -1,5 +1,6 @@
 """Observed native outputs retain omitted references or receive exact typed delivery refusals."""
 
+from unittest.mock import patch
 import copy
 import json
 import unittest
@@ -12,6 +13,10 @@ import test_research_problem_reviews as reviewers
 
 class NativeFrozenRecordTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = fixture = reviewers.ProblemReviewTests()
         self.addCleanup(fixture.doCleanups)
         fixture.setUp()

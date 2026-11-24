@@ -99,14 +99,14 @@ class RoleFixtures:
     """One recorded assignment that has not run, on a route record with a completed probe, for each role."""
 
     def start(self, case):
-        case.setUp()
         self.opened = getattr(self, 'opened', []) + [case]
         self.addCleanup(self.close_cases)
+        case.setUp()
         return case
 
     def close_cases(self):
         """Run the cleanups of the fixtures of one role before the next role builds its own."""
-        for case in getattr(self, 'opened', []):
+        for case in reversed(getattr(self, 'opened', [])):
             case.doCleanups()
         self.opened = []
 
@@ -263,6 +263,13 @@ class V7ChainSupport(CarriedIntegrationSupport):
 
 
 class CallContextRoleTests(RoleFixtures, unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_w1_review_run_waits_for_a_probe_of_its_route_record_in_every_role(self):
         """On 12ce6199 review-run sends the request ('ResearchError not raised'), except for the bar continuation,
         whose refusal has another code and no step."""
@@ -314,8 +321,8 @@ class CallContextRoleTests(RoleFixtures, unittest.TestCase):
         """On 12ce6199 the task reaches its dispatch: the refusal is the one that the patched dispatch raises."""
         from test_review_continuation_staged import StagedContinuationTests
         fixture = StagedContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.execute(fixture.plan())
         planned = fixture.plan()
         self.assertEqual((planned['state'], planned['command']), ('run', 'review-run'))
@@ -526,6 +533,13 @@ class CallContextRefreshTests(refresh_edges.EdgeFixture):
 
 
 class CallContextCorrectionTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_w15_output_correction_reads_the_context_of_the_review_of_its_result(self):
         """review-output-correction starts a reviewer call too (finding F4 of the review of the design). Its packet
         checks the context of the result itself; the start of the call also reads the earlier turns of the review of
@@ -538,7 +552,8 @@ class CallContextCorrectionTests(unittest.TestCase):
         self.addCleanup(case.doCleanups)
         case.setUp()
         case.prepare_refused()
-        lost = dict(assignment_id='earlier-turn', events=['exposure'],
+        binding = case.case.assignment['context']['context_repair']
+        lost = dict(assignment_id=binding['assignment_id'], events=binding['event_ids'],
                     route=dict(id='route', context_status='verified_for_route'), count=1)
         with patch.object(protocol, 'find_unverified_context', return_value=lost), \
                 patch.object(transport, 'send_request', side_effect=AssertionError('a call started')), \
@@ -553,6 +568,13 @@ class CallContextCorrectionTests(unittest.TestCase):
 
 
 class CallContextStaleRouteTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_k7_stale_route_record_keeps_its_refusal_and_its_plan(self):
         """A recorded bar on a route record whose latest probe answered with a wrong control and whose runtime is
         then stale. A stale record takes no probe, so the rules of a stale route decide: review-run is refused with
@@ -560,8 +582,8 @@ class CallContextStaleRouteTests(unittest.TestCase):
         (tests/test_review_route_plan.py), whose first step retires the record (rule PC6)."""
         from test_review_route_renewal import RouteRenewalFixture
         fixture = RouteRenewalFixture()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         head = fixture.assign('bar', 'first', 'stale-head', **fixture.case.deliver_supporting('first'))
         fixture.probe_failure = True
         fixture.probe('route', 'failed-probe')
@@ -580,10 +602,8 @@ class CallContextStaleRouteTests(unittest.TestCase):
     def test_planned_replacement_on_a_stale_route_record_with_a_failed_probe_keeps_the_stale_route_handoff(self):
         """A v7 reading turn whose call ended over the input limit plans its capacity replacement. The latest probe
         of its route record then returns no answer, and the installed runtime changes. The planner simulates the
-        replacement on its overlay of the artifacts, and the check of the continued turn (rule PC7) reads the
-        standing of the route record through that overlay (rule PC6). The plan of the head stays the handoff of
-        the stale route record. Before the repair the overlay passed no runtime reading on, and the plan ended
-        with an AttributeError."""
+        replacement on its artifact overlay. The destination's standing (PC6) still gives the stale-route handoff.
+        The original incident was an AttributeError while reading runtime standing through the overlay."""
         from test_openness_reading_v7_refusal import V7RefusalTests
         from test_review_output_profile import build_row
         from research_harness import review_route_capacity as capacity
@@ -611,6 +631,13 @@ class CallContextStaleRouteTests(unittest.TestCase):
 
 
 class CallContextChainTests(V7ChainSupport, OpennessReadingCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_w7_recorded_assignment_is_not_sent_after_a_contamination_of_an_own_earlier_turn(self):
         """On 12ce6199 review-run sends the request: 'ResearchError not raised'."""
         self.start_two_turns()
@@ -694,7 +721,9 @@ class CallContextChainTests(V7ChainSupport, OpennessReadingCase):
         # The retry of the lost call waits for the first provider wait; the test does not spend that time.
         with patch('research_harness.review_series.time.sleep'):
             code, lines, calls = self.drive('new-t2')
-        self.assertEqual((code, len(calls)), (0, 3))
+        # The second turn again, three more reading turns and the final. The frame of a v7 turn reserves its notes
+        # cost and its list rows, so each reading turn of this fixture takes 60,000 characters of material.
+        self.assertEqual((code, len(calls)), (0, 5))
         self.assertTrue(read_records(self).get('problem_openness'))
 
     def test_w13_refused_turn_is_not_replaced_after_a_contamination_of_an_own_earlier_turn(self):

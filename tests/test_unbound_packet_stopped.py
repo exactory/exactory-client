@@ -18,6 +18,13 @@ from research_harness.errors import ResearchError
 
 
 class UnboundStoppedPacketTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import openness_reading
+        released = patch.object(openness_reading, 'NEW_MATH_CHAIN_PROTOCOLS', (openness_reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     variants = ((4, 'chosen'), (4, 'both'), (5, 'chosen'), (5, 'both'), ('math', 'chosen'))
 
     def describe_units(self, rows):

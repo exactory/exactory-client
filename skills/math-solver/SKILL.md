@@ -227,10 +227,18 @@ settling evidence. The packet delivers the actual common records, captured
 responses and source bundles. A proof manifest alone cannot establish openness.
 See `SEARCH.md` for the exact fields and refusal codes.
 On a text route with a local input limit (`claude_cli_v1`, `codex_cli_v1` or
-`codex_cli_framed_v1`), a packet whose captured responses, full texts and
-records do not fit one input complete, or together exceed 120,000 characters, is
-read as a reading chain (`SEARCH.md#observed-native-review-delivery`):
-`review-assignment` records `reading_chain` on the first assignment. Run the
+`codex_cli_framed_v1`), a packet with an openness minimum is read as a reading
+chain (`SEARCH.md#observed-native-review-delivery`): `review-assignment`
+records `reading_chain` on the first assignment. Since 0.93.0 the harness
+first asks the admission of the math protocol v2
+(`exactory-openness-reading-math-v2`), and a packet that it admits is a chain
+under math v2 whatever its size. A packet that math v2 refuses is a chain
+under math v1 when its captured responses, full texts and records do not fit
+one input complete, or together exceed 120,000 characters, and one turn
+otherwise. Run `review-assignment --check` first and read
+`protocol_selection`: `protocol` names the protocol of the chain, and
+`admissions` the reason of math v2 where it refused.
+Run the
 chain with `exactory-research review-series --assignment ID`, where ID is any
 assignment of the chain: it runs each turn, assigns the next turn with the same
 reviewer, route, author and packet and with `context.prior_assignment_id`,
@@ -249,7 +257,24 @@ unchanged to `search accept`, or to `search complete` for the closure review.
 The service verifies the whole chain and stores its `reading_turns` on the
 acceptance or closure. The controller records the acceptance, and
 `review-series` does not see the chain as done through it: continue with
-`search next` and do not run `review-series` on that head again. Exit status 3
+`search next` and do not run `review-series` on that head again.
+For a chain under math v2 the handoff holds the whole command:
+`details.step` names `search accept`, or `search complete` under the code
+`native_review_completion_required` for the closure review, with the workspace
+of the objective (`root`) and the payload that the controller checked. Run
+that command with that payload; it leaves nothing to choose. A chain under
+math v2 can also end with one of three plans that name `search review-packet`.
+`native_review_not_approved`: the final returned `revise` or `reject`. Address
+what `details.reason` and `details.objections` state, then take
+`details.step`, which exports a new packet, and the steps of its `then`, which
+check and record the new assignment. `native_review_legacy_closure`: the
+packet holds a closure subject of schema version 1, and the harness sends no
+call; take `details.step` in the same way. `native_review_stale_minimum`, a
+`stop`: a material search was recorded after the export; take `details.step`,
+whose packet binds the searches that `search_ids` names. After each of the
+three, run `review-series` on the new assignment; the plan of the old head is
+then `done`.
+Exit status 3
 with the handoff
 `native_review_attestation_required` (command `search review-packet`): the
 first turn needs a replacement, which needs a new attestation; export a new
@@ -307,8 +332,17 @@ will exceed the limit (`estimate: true` in the details), unless the owner's
 instruction `reading_chain_continue_to_final` is recorded; that instruction
 leaves the limit of each request in force. Each such refusal is a decision
 stop: follow the choices and the steps that `details.decision` offers. A
-refusal of the first assignment offers only to wait for the protocol
-reading-math-v2 or to run over a packet that binds less material. Where the
+refusal of the first assignment is a refusal under math v1, which a packet
+reaches only after math v2 refused it: it offers to wait for a release whose
+math v2 admits the packet, or to run over a packet that binds less material.
+The stop of a stored chain under math v1 also holds `details.successor`, the
+admission of a new chain over the same material. Where an answer offers to
+build a new packet and start that chain with the same reviewer, the new chain
+carries the reading turns that still verify. The final of a chain under math
+v2 has two size stops of its own, `review_input_too_large` and, after a second
+answer at the output limit, `review_output_over_cap`; each is a decision stop
+with its answers in `details.decision`.
+Where the
 decision offers to continue this chain to its final turn, record that answer
 with `review-context` and the reason `reading_chain_continue_to_final`; it
 waives the estimate stop only. Report

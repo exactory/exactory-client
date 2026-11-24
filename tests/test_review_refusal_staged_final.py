@@ -13,6 +13,10 @@ class StagedFinalObjectionRefusalTests(ResultPartsCase):
     staged_entry = True
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.records = self.case.read_records()
         assignment = copy.deepcopy(self.records['review_assignment']['bar-first'])

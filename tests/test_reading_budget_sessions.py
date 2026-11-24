@@ -51,6 +51,10 @@ class SessionBudgetHelpers:
 
 class LargeSessionBudgetTests(SessionBudgetHelpers, ExcerptSessionCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         StrategyCase.setUp(self)
         self.sequence = 0
         self.setup_dossier()
@@ -100,6 +104,12 @@ class LargeSessionBudgetTests(SessionBudgetHelpers, ExcerptSessionCase):
 
 class SessionBudgetTests(SessionBudgetHelpers, ExcerptSessionCase):
     """Three texts of about 60,500 characters with a budget of 25,000 characters: each arrives in three parts."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     def limit_budget(self, characters=25000):
         budget = patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', characters)

@@ -325,7 +325,8 @@ class UncheckedAnswerTests(OpennessReadingCase):
 
     def test_chain_that_went_on_over_such_an_answer_gives_no_finding(self):
         """A chain as an earlier release recorded it: the next turn was built on the answer of turn 1."""
-        native = self.refuse_turn_1('extra_member')
+        with turn_fixtures.use_earlier_v7_frames():
+            native = self.refuse_turn_1('extra_member')
         with patch.object(review_refusal, 'classify_observed_output', return_value=None):
             self.assign('turn-2', native, prior='turn-1')
             self.invoke('turn-2', self.build_v7_answer(self.read_packet('turn-2')))

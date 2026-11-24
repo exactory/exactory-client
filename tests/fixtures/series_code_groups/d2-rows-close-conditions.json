@@ -7,6 +7,9 @@
         ],
         "research_harness/check_mode.py:_CheckingStore.read_committed_request#1": [
           "form"
+        ],
+        "skills/math-solver/harness/search_controller/service.py:require_checkable_command#1": [
+          "form"
         ]
       },
       "component_hash_mismatch": {
@@ -42,6 +45,30 @@
       },
       "dependency_cycle": {
         "research_harness/probe_provenance.py:find_probe_artifact_origins#1": [
+          "limit"
+        ],
+        "skills/math-solver/harness/search_controller/admission.py:prepare_decomposition.visit#1": [
+          "limit"
+        ],
+        "skills/math-solver/harness/search_controller/evidence.py:audit_manifest#1": [
+          "limit"
+        ],
+        "skills/math-solver/harness/search_controller/evidence.py:audit_manifest#2": [
+          "limit"
+        ],
+        "skills/math-solver/harness/search_controller/evidence.py:manifest_closure.visit#1": [
+          "limit"
+        ],
+        "skills/math-solver/harness/search_controller/evidence.py:manifest_closure.visit#2": [
+          "limit"
+        ],
+        "skills/math-solver/harness/search_controller/provenance.py:collect_evidence_identities#1": [
+          "limit"
+        ],
+        "skills/math-solver/harness/search_controller/provenance.py:collect_import_sources#1": [
+          "limit"
+        ],
+        "skills/math-solver/harness/search_controller/provenance.py:expand_import_identities#1": [
           "limit"
         ]
       },
@@ -275,6 +302,21 @@
       },
       "invalid_json": {
         "research_harness/workspace.py:strict_json#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.append#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.append#2": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.append_operation#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.append_operation#2": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:canonical_bytes#1": [
           "form"
         ]
       },
@@ -613,6 +655,21 @@
         "research_harness/review_continuation.py:_list_lineage#1": [
           "content"
         ],
+        "research_harness/review_math_handoff.py:find_recovery_mode#1": [
+          "record"
+        ],
+        "research_harness/review_math_handoff.py:require_successor#1": [
+          "record"
+        ],
+        "research_harness/review_math_handoff.py:require_successor#2": [
+          "content"
+        ],
+        "research_harness/review_math_handoff.py:require_successor#3": [
+          "content"
+        ],
+        "research_harness/review_math_handoff.py:require_successor#4": [
+          "content"
+        ],
         "research_harness/review_parts_v3.py:prepare_capacity_assignment#1": [
           "record"
         ],
@@ -644,6 +701,15 @@
           "form",
           "payload"
         ],
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#2": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#3": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#4": [
+          "form"
+        ],
         "research_harness/review_protocol.py:_read_session_refresh#1": [
           "form",
           "payload"
@@ -655,6 +721,15 @@
           "payload"
         ],
         "research_harness/review_protocol.py:build_packet#1": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:build_packet#10": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:build_packet#11": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:build_packet#12": [
           "form"
         ],
         "research_harness/review_protocol.py:build_packet#2": [
@@ -685,6 +760,9 @@
         "research_harness/review_protocol.py:canonical_prompt#1": [
           "form"
         ],
+        "research_harness/review_protocol.py:canonical_prompt#10": [
+          "form"
+        ],
         "research_harness/review_protocol.py:canonical_prompt#2": [
           "form"
         ],
@@ -709,7 +787,7 @@
         "research_harness/review_protocol.py:canonical_prompt#9": [
           "form"
         ],
-        "research_harness/review_protocol.py:record_assignment.prepare#1": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#1": [
           "form"
         ],
         "research_harness/review_refusal_replacement.py:prepare_replacement#1": [
@@ -717,6 +795,9 @@
         ],
         "research_harness/review_refusal_replacement.py:prepare_replacement#2": [
           "payload"
+        ],
+        "research_harness/review_session_v4.py:prepare_capacity_assignment#1": [
+          "record"
         ],
         "research_harness/review_single_request.py:prepare_replacement#1": [
           "payload"
@@ -1070,7 +1151,7 @@
         ]
       },
       "problem_citation_work_ineligible": {
-        "research_harness/problem_citation_metadata.py:validate_citation_metadata#1": [
+        "research_harness/problem_citation_metadata.py:require_citation_metadata_work#1": [
           "form",
           "record"
         ]
@@ -1217,7 +1298,7 @@
         ]
       },
       "review_complete_source_route": {
-        "research_harness/review_protocol.py:record_assignment.prepare#1": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#1": [
           "form"
         ],
         "research_harness/review_transport.py:request_body#1": [
@@ -1276,6 +1357,9 @@
       },
       "review_evidence_unreadable": {
         "research_harness/review_protocol.py:_evidence#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:_media#1": [
           "form"
         ]
       },
@@ -1349,6 +1433,39 @@
         ],
         "research_harness/review_protocol.py:add_focused_adjudication#1": [
           "form"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:_closure#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:packet#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:require_review#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:require_review#2": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:require_review#3": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:require_review#4": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:validate_packet_context#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:validate_supplementary_inputs#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:validate_supplementary_inputs#2": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:validate_supplementary_inputs#3": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:validate_supplementary_inputs#4": [
+          "form"
         ]
       },
       "review_parts_inventory_changed": {
@@ -1373,6 +1490,9 @@
         "research_harness/review_parts.py:read_inventory#2": [
           "content"
         ],
+        "research_harness/review_parts_v3.py:_build_frame.bind_descriptors#1": [
+          "content"
+        ],
         "research_harness/review_parts_v3.py:_read_series_inventory#1": [
           "content"
         ],
@@ -1391,6 +1511,9 @@
         "research_harness/review_parts_v3.py:_validate_frozen_inventory#5": [
           "content"
         ],
+        "research_harness/review_parts_v3.py:_validate_frozen_inventory#6": [
+          "content"
+        ],
         "research_harness/review_parts_v3.py:build_series_inventory#1": [
           "content",
           "record"
@@ -1406,6 +1529,9 @@
       },
       "review_parts_route_unsupported": {
         "research_harness/review_parts_repair.py:_supports_parts_route#1": [
+          "form"
+        ],
+        "research_harness/review_parts_repair.py:prepare_packet#1": [
           "form"
         ]
       },
@@ -1430,11 +1556,17 @@
         "research_harness/openness_reading.py:_read_prior#1": [
           "record"
         ],
+        "research_harness/openness_reading.py:find_final_assignment#1": [
+          "record"
+        ],
         "research_harness/openness_reading_v7.py:prepare_next_assignment#1": [
           "record"
         ],
         "research_harness/review_continuation.py:_find_head#1": [
           "content"
+        ],
+        "research_harness/review_parts_native.py:find_final_assignment#1": [
+          "record"
         ],
         "research_harness/review_parts_native.py:read_prior_assignment#1": [
           "record"
@@ -1442,13 +1574,13 @@
         "research_harness/review_parts_v3.py:prepare_capacity_assignment#1": [
           "record"
         ],
-        "research_harness/review_protocol.py:record_assignment.prepare#1": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#1": [
           "record"
         ],
-        "research_harness/review_protocol.py:record_assignment.prepare#2": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#2": [
           "record"
         ],
-        "research_harness/review_protocol.py:record_assignment.prepare#3": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#3": [
           "record"
         ],
         "research_harness/review_single_request.py:prepare_replacement#1": [
@@ -1492,7 +1624,7 @@
         ]
       },
       "review_visual_route_mismatch": {
-        "research_harness/review_protocol.py:record_assignment.prepare#1": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#1": [
           "form"
         ],
         "research_harness/review_visual_route.py:_require#1": [
@@ -1654,6 +1786,15 @@
       "request_id_conflict": {
         "research_harness/storage.py:_read_original_response#1": [
           "content"
+        ],
+        "skills/math-solver/harness/search_controller/discovery.py:prepare#1": [
+          "content"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.append#1": [
+          "content"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.append_operation#1": [
+          "content"
         ]
       },
       "review_output_mismatch": {
@@ -1662,6 +1803,9 @@
         ],
         "research_harness/review_protocol.py:record_adjudication.prepare#1": [
           "payload"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:require_review#1": [
+          "content"
         ]
       }
     }

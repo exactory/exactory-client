@@ -9,6 +9,7 @@ from .problem_accounts import collect_entries, collect_entry_evidence
 from .problem_candidates import find_current_slate, find_slate
 from .problem_claims import compute_statement_digest, find_latest, require_problem
 from .problem_forming import count_forming
+from .problem_search import describe_search, has_left_record
 from .review_budget import CHARGE_KINDS
 from .review_protocol import usage_report
 
@@ -24,6 +25,8 @@ DEPENDENCY_KINDS = (
     "cycle_plan", "execution", "cycle_assessment", "probe", "resource_account",
     "resource_budget", "strategy_account", "review_observation", "review_budget",
 ) + CHARGE_KINDS
+# Read only when the store holds a record of the kind, so the digest of every stored report stays reproducible.
+SEARCH_KINDS = ("problem_search_step", "problem_search_origin")
 OPEN_FORMS_MESSAGE = (
     "The report is due, and the forms named in form_ids have no outcome or the disposition open. Record a "
     "form-outcome for each, with the disposition superseded, taken_up_as_candidate or set_aside, then record the report."
@@ -57,7 +60,8 @@ def order_records(records, kind):
 
 
 def project_dependencies(records):
-    return {kind: dict(records.get(kind, {})) for kind in DEPENDENCY_KINDS}
+    kinds = DEPENDENCY_KINDS + tuple(kind for kind in SEARCH_KINDS if records.get(kind))
+    return {kind: dict(records.get(kind, {})) for kind in kinds}
 
 
 def describe_forms(records):
@@ -134,7 +138,9 @@ def describe_candidate_endings(records):
     return endings
 
 
-def is_report_due(records, candidates=None):
+def requires_closed_forms(records, candidates=None):
+    """Whether problem-report refuses open forms: the rule of release 0.92.1, under which a report was due at every
+    current slate that selects nothing. It holds in every state in which the report is due."""
     marker = records.get("workspace", {}).get("problem", {})
     applies = marker.get("start", {}).get("kind") in ("phenomenon", "thought_experiment") or bool(records.get("forming_call"))
     slate = find_current_slate(records)
@@ -145,6 +151,15 @@ def is_report_due(records, candidates=None):
     candidates = describe_candidate_endings(records) if candidates is None else candidates
     ended = {row["candidate"]["id"] for row in candidates if row["ended"]}
     return all(identifier in ended for identifier in slate["selected"])
+
+
+def is_report_due(records, candidates=None):
+    """A slate that selects nothing ends the exploration only when the record holds a post or the search continues in
+    another record."""
+    if not requires_closed_forms(records, candidates):
+        return False
+    slate = find_current_slate(records)
+    return bool(slate["selected"]) or bool(records.get("problem_post")) or has_left_record(records, slate)
 
 
 def find_covered_value(records, artifacts, post):
@@ -286,7 +301,7 @@ def compute_report(records, artifacts, cutoff):
     marker = records["workspace"]["problem"]
     calls = order_records(records, "forming_call")
     start = marker.get("start", {})
-    return dict(cutoff=cutoff, dependency_digest=digest(project_dependencies(records)),
+    report = dict(cutoff=cutoff, dependency_digest=digest(project_dependencies(records)),
         start=dict(field=marker["field"], kind=start.get("kind"), description=start.get("description"),
                    first_question=None if not calls else calls[0]["question"]),
         forms=forms, imports=order_records(records, "problem_forming_import"), candidates=candidates, statements=statements,
@@ -308,6 +323,10 @@ def compute_report(records, artifacts, cutoff):
             reviews=usage_report(records),
             reported_forming_usage=[dict(forming_call_id=call["id"], usage=call["usage"]) for call in calls]),
         outcome=choose_outcome(records, forms, candidates, statements))
+    search = describe_search(records)
+    if search is not None:
+        report["search"] = search
+    return report
 
 
 def record_report(store, payload, *, expected_revision, request_id):
@@ -319,7 +338,7 @@ def record_report(store, payload, *, expected_revision, request_id):
         text(value["id"], "Problem report ID")
         text(value["reopen_when"], "Finding that would make the exploration worth reopening")
         forms = describe_forms(records)
-        if is_report_due(records) and any(row["disposition"]["status"] == "open" for row in forms):
+        if requires_closed_forms(records) and any(row["disposition"]["status"] == "open" for row in forms):
             raise ResearchError("problem_report_forms_open", OPEN_FORMS_MESSAGE,
                                 {"form_ids": [row["form"]["id"] for row in forms if row["disposition"]["status"] == "open"]})
         report = dict(compute_report(records, artifacts, expected_revision), **value, recorded_revision=expected_revision + 1)
@@ -338,6 +357,8 @@ def describe_report_advisories(records):
                      report_id=report["id"])]
     if report is None and is_report_due(records):
         return [dict(code="problem_report_due",
-                     reason="The current slate selects nothing, or each candidate that it selects is posted, withdrawn "
-                            "or taken up in another record. Record the report of the exploration with problem-report.")]
+                     reason="The exploration has ended, in one of two cases. In the first case, each candidate that "
+                            "the current slate selects is posted, withdrawn or taken up in another record. In the second "
+                            "case, the slate selects nothing, and the record holds a post or its search continues in "
+                            "another record. Record the report of the exploration with problem-report.")]
     return []

@@ -855,6 +855,8 @@ FIELD_CLASSES = {
             'output_refusal': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'own_bars': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'place_review': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
+            'slate_delivery': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
+            'slate_delivery.cited_works': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'pending_source_requests': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'previously_supplied_evidence': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'problem_areas': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},

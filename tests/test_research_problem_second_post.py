@@ -18,6 +18,13 @@ from openness_legacy_fixtures import export_as_0_85_3
 
 
 class ProblemSecondPostTests(ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_a_second_selected_candidate_is_posted_from_the_same_workspace(self):
         claims = self.load_problem_module()
         self.initialize_problem()

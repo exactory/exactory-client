@@ -15,6 +15,7 @@ from .evidence import digest
 from .review_refusal import CONTRACT_CHECKS
 
 PROTOCOL = 'exactory-review-output-refusal-notice-v1'
+PAGED_POSITION_BINDING = 'exactory-review-paged-refusal-position-v1'
 REFUSED_ATTEMPT_LIMIT = 4
 REFUSAL_ENTRY_CHARACTERS = 6_000
 REFUSAL_DETAILS_CHARACTERS = 4_000
@@ -69,6 +70,31 @@ def _retain_value(value, limit, measure):
     return retained
 
 
+def _retain_details(details, original, limit, measure):
+    """Fit the shortest details first, starting from the cheapest form of each value."""
+    if measure(details) <= limit:
+        return details
+    shortest = sorted((measure(value), key) for key, value in details.items())
+    retained = {}
+    for characters, key in shortest:
+        hashed = {'sha256': digest(original[key])}
+        retained[key] = details[key] if characters <= measure(hashed) else hashed
+    if measure(retained) > limit:
+        return _retain_value(details, limit, measure)
+    for characters, key in shortest:
+        if retained[key] is details[key]:
+            continue
+        room = limit - measure(retained) + measure(retained[key])
+        if characters <= room:
+            retained[key] = details[key]
+        else:
+            preview = _retain_value(details[key], room, measure)
+            if measure(preview) <= room:
+                retained[key] = preview
+            break
+    return retained
+
+
 def _build_refused_entry(certificate, diagnosis, measure):
     """Copy only the registered details; identify every other detail by its digest."""
     entry = {key: certificate[key] for key in ('assignment_id', 'attempt_id', 'output_digest')}
@@ -77,12 +103,19 @@ def _build_refused_entry(certificate, diagnosis, measure):
         return _check_entry_bound(entry, measure)
     allowed = CONTRACT_CHECKS[diagnosis['check']]['notice_fields']
     details = diagnosis.get('details') or {}
+    # These combinations are emitted by the paged composition validators.
+    if ((diagnosis['check'], diagnosis['code']) in (
+            ('review.shape', 'review_composition_conflict'), ('native.output', 'invalid_native_review'),
+            ('openness.finding', 'openness_finding_invalid'))
+            and details.get('size') in ('page_fields', 'page_row', 'closing_total', 'coverage',
+                                        'serialized_value', 'serialized_string', 'serialized_key', 'text_characters')):
+        allowed += ('size', 'characters', 'maximum_characters', 'key_sha256', 'path_sha256')
     filtered = {key: copy.deepcopy(value) if key in allowed else {'sha256': digest(value)}
-                for key, value in details.items() if key not in ('message', 'path')}
+                for key, value in details.items() if key not in ('message', 'path', 'harness_exception')}
     entry.update(code=diagnosis['code'], check=diagnosis['check'], path=details.get('path', ''),
                  message=details.get('message', ''), details={})
     room = REFUSAL_ENTRY_CHARACTERS - measure(entry) + measure(entry['details'])
-    entry['details'] = _retain_value(filtered, max(0, min(REFUSAL_DETAILS_CHARACTERS, room)), measure)
+    entry['details'] = _retain_details(filtered, details, max(0, min(REFUSAL_DETAILS_CHARACTERS, room)), measure)
     return _check_entry_bound(entry, measure)
 
 
@@ -120,7 +153,7 @@ def _read_refused_part(output, path):
 
 
 def build_refusal_notice(records, artifacts, attempt_ids, *, form='whole', diagnoses=None,
-                         measure=_measure_serialized_value, enforce_bounded_limit=False):
+                         measure=_measure_serialized_value, enforce_bounded_limit=False, position_binding=None):
     """Build from admitted certificates; only planned callers enable the aggregate limit."""
     attempt_ids = tuple(attempt_ids)
     if (form not in ('whole', 'bounded') or not 1 <= len(attempt_ids) <= REFUSED_ATTEMPT_LIMIT
@@ -134,6 +167,8 @@ def build_refusal_notice(records, artifacts, attempt_ids, *, form='whole', diagn
     notice = {'protocol': PROTOCOL, 'form': form,
               'refused': [_build_refused_entry(certificate, diagnoses[certificate['attempt_id']], measure)
                           for certificate in certificates]}
+    if position_binding is not None:
+        notice['position_binding'] = position_binding
     latest = certificates[-1]
     artifact = records['review_attempt'][latest['attempt_id']]['output']
     text = artifacts.read(artifact).decode('utf-8')
@@ -186,7 +221,7 @@ def attach_refusal_notice(packet, notice):
 
 def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, prompt, packet,
                           task_characters=0, task_limit_characters=None, diagnoses=None, forms=('whole', 'bounded'),
-                          prepare_turn=None, capacity_plan=None, turn_kind=None):
+                          prepare_turn=None, capacity_plan=None, turn_kind=None, position_binding=None):
     """Try whole then bounded as fresh requests, reporting the notice charged to each task.
 
     The caller supplies versioned prompt text, a recorded prompt, or a function from form to either.
@@ -206,7 +241,7 @@ def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, promp
                if capacity_plan is not None else _measure_serialized_value)
     for form in forms:
         notice = build_refusal_notice(records, artifacts, attempt_ids, form=form, diagnoses=diagnoses, measure=measure,
-                                      enforce_bounded_limit=capacity_plan is not None)
+                                      enforce_bounded_limit=capacity_plan is not None, position_binding=position_binding)
         trial = {'form': form, 'fits': False}
         trials.append(trial)
         if prepare_turn is None:

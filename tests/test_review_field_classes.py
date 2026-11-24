@@ -17,8 +17,8 @@ from test_review_route_capacity import build_route
 def build_problem_packets():
     from review_parts_fixtures import PartsResultCase
     case = PartsResultCase()
-    case.setUp()
     try:
+        case.setUp()
         fixture = case.case
         records = fixture.read_records()
         return {role: review_protocol.build_packet(records, fixture.artifacts, None, role, 'first')
@@ -127,6 +127,10 @@ def walk_fields(value, path=()):
 
 class FieldClassTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fields = importlib.import_module('research_harness.review_field_classes')
         self.route = build_route()
 

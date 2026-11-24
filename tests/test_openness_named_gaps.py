@@ -5,10 +5,11 @@ import hashlib
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from openness_named_gap_fixtures import (FIXED_PACKET_NAMES, REQUEST_FORMS, build_fixed_answer,
     build_ground, build_packet, fixture_case, load_fixed_packet)
-from research_harness import native_review, review_protocol, review_search_delivery
+from research_harness import native_review, openness_reading, openness_reading_v7, review_protocol, review_search_delivery
 from research_harness.errors import ResearchError
 from research_harness.problem_openness import serialize_record
 
@@ -25,20 +26,38 @@ class FindingVersionTests(unittest.TestCase):
                 self.assertTrue(native_review.uses_finding_contract(dict(prompt=prompt)))
 
     def test_version_two_has_same_template_and_explicit_finding_parameter(self):
-        options = [dict(version=7), dict(reading_stage='final', reading_protocol='exactory-openness-reading-v6'),
-                   dict(reading_stage='final', reading_protocol='exactory-openness-reading-v7'),
-                   dict(reading_stage='page', reading_protocol='exactory-openness-reading-v7'),
-                   dict(reading_stage='closing', reading_protocol='exactory-openness-reading-v7')]
-        for option in options:
+        options = [(dict(version=7), 'FINDING_V2_TEXT')]
+        for protocol, stage, text_name in (
+                (openness_reading.PROTOCOL_V6, 'final', 'FINDING_V2_TEXT'),
+                (openness_reading_v7.PROTOCOL, 'final', 'FINDING_V2_TEXT'),
+                (openness_reading_v7.PROTOCOL, 'page', 'FINDING_V2_PAGE_TEXT'),
+                (openness_reading_v7.PROTOCOL, 'closing', 'FINDING_V2_CLOSING_TEXT')):
+            options.append((dict(reading_stage=stage, reading_protocol=protocol), text_name))
+        selected = []
+        for option, expected in options:
             with self.subTest(options=option):
                 old = review_protocol.canonical_prompt('native_math', **option)
                 new = review_protocol.canonical_prompt('native_math', finding_version=2, **option)
                 self.assertEqual(new['template_id'], old['template_id'])
                 self.assertEqual(new['parameters']['finding_version'], 2)
-                self.assertIn(native_review.FINDING_V2_TEXT, new['text'])
+                suffix = new['text'][len(old['text']):]
+                self.assertEqual(suffix, getattr(native_review, expected, None))
+                self.assertTrue(new['text'].startswith(old['text']))
+                selected.append(suffix)
                 self.assertTrue(native_review.uses_finding_contract(dict(prompt=new)))
                 self.assertEqual(native_review.find_finding_version(dict(prompt=new)), 2)
                 self.assertEqual(native_review.find_finding_version(dict(prompt=old)), 1)
+        self.assertEqual(len(set(selected)), 3)
+
+    def test_bounded_stage_prompts_fit_the_measured_final_prompt(self):
+        for protocol in openness_reading.BOUNDED_CHAIN_PROTOCOLS:
+            for version in (1, 2):
+                options = dict(reading_protocol=protocol, finding_version=version)
+                final = review_protocol.canonical_prompt('native_math', reading_stage='final', **options)
+                for stage in ('page', 'closing', 'combine'):
+                    with self.subTest(protocol=protocol, version=version, stage=stage):
+                        prompt = review_protocol.canonical_prompt('native_math', reading_stage=stage, **options)
+                        self.assertLessEqual(len(prompt['text']), len(final['text']))
 
     def test_version_two_finding_rules_keep_the_pinned_placeholder_text(self):
         pinned = (Path(__file__).parent / 'fixtures' / 'openness-named-gaps-v2-prompt.txt').read_text(encoding='utf-8')
@@ -231,10 +250,25 @@ class NamedGapRecordingTests(unittest.TestCase):
         self.addCleanup(case.doCleanups)
         return case
 
+    def test_failed_page_fixture_setup_restores_patches(self):
+        import openness_named_gap_fixtures as fixtures
+        from research_harness import openness_final_pages
+        child = fixtures.NamedGapStoreCase()
+        self.addCleanup(child.doCleanups)
+        before = (openness_reading_v7.V7_FINAL_FORMS, openness_reading.NEW_PROBLEM_CHAIN_PROTOCOLS,
+                  openness_final_pages.measure_page_room, openness_final_pages.build_final_inputs)
+        with patch.object(fixtures, 'NamedGapStoreCase', return_value=child), \
+                patch.object(fixtures.OpennessReadingCase, 'setUp', side_effect=RuntimeError('fixture setup')):
+            with self.assertRaisesRegex(RuntimeError, 'fixture setup'):
+                fixtures.fixture_case('variant-search', 'page')
+        self.assertEqual((openness_reading_v7.V7_FINAL_FORMS, openness_reading.NEW_PROBLEM_CHAIN_PROTOCOLS,
+                          openness_final_pages.measure_page_room, openness_final_pages.build_final_inputs), before)
+
     def assert_real_index(self, case, packet, assignment):
         self.assertTrue(native_review.uses_finding_contract(assignment))
         self.assertEqual(assignment['prompt']['parameters']['finding_version'], 2)
-        self.assertIn(native_review.FINDING_V2_TEXT, assignment['prompt']['text'])
+        if openness_reading.find_stage(packet) in ('page', 'closing'):
+            self.assertTrue(openness_reading_v7.matches_turn_prompt(assignment, packet))
         index = packet['finding_index']
         self.assertEqual(len(index['read_works']), 1)
         for field in ('queries', 'dispositions'):
@@ -246,7 +280,7 @@ class NamedGapRecordingTests(unittest.TestCase):
         if case.request_form != 'single':
             self.assertFalse(any(query in row.get('content', '') for row in packet.get('evidence', [])))
 
-    def finish_answer(self, case, current, packet, work=None, term=None):
+    def finish_answer(self, case, current, packet, work=None, term=None, *, cite_formulation=False):
         from openness_named_gap_fixtures import bind_fixture_basis
         native_reference = case.store.snapshot()['records']['review_assignment'][current]['context']['native_packet']
         saved_ground = None
@@ -265,7 +299,8 @@ class NamedGapRecordingTests(unittest.TestCase):
                     for target in packet['reading_final']['page']['targets']:
                         page_ground = dict(ground, formulation=formulations[int(target[1:]) - 1])
                         rows.append(dict(formulation=target, coverage='The shared searches cover this formulation.',
-                                         sentence='The named gap requires further evidence.', grounds=[page_ground]))
+                            sentence='The named gap requires further evidence.',
+                            grounds=[dict(page_ground, formulation=dict(ref=target)) if cite_formulation else page_ground]))
                     output = dict(targets=rows)
                 else:
                     validation_packet = dict(bound_packet, native=json.loads(case.artifacts.read(native_reference)))
@@ -275,6 +310,10 @@ class NamedGapRecordingTests(unittest.TestCase):
                 saved_ground = saved_ground or ground
             result = case.invoke(current, output)
             self.assertNotIn('output_refusal', result, result)
+            if cite_formulation and 'targets' in output:
+                records = case.store.snapshot()['records']
+                stored = json.loads(case.artifacts.read(records['review_attempt']['attempt-' + current]['output']))
+                self.assertEqual(stored['targets'][0]['grounds'][0]['formulation'], formulations[int(rows[0]['formulation'][1:]) - 1])
             if ('page_plan_digest' not in packet.get('reading_final', {})
                     or 'closing' in packet['reading_final']):
                 record = case.mutate(case.load_problem_module().record_openness, dict(assignment_id=current))['result']
@@ -287,6 +326,126 @@ class NamedGapRecordingTests(unittest.TestCase):
             case.assign(following, native_reference, prior=current)
             current, packet = following, case.read_packet(following)
         self.fail('Two target pages and their closing must finish.')
+
+    def test_page_named_gap_with_long_formulation_expands_and_composes(self):
+        from openness_named_gap_fixtures import bind_fixture_basis
+        from research_harness import openness_final_pages, review_composition
+        descriptor = load_fixed_packet('unsearched-term')
+        descriptor['statement'] = descriptor['statement'].ljust(2000, 'a')
+        with patch('openness_named_gap_fixtures.load_fixed_packet', return_value=descriptor):
+            case = self.make_case('unsearched-term', 'page')
+        current, packet = case.finish_reading(case.export())
+        assignment = case.store.snapshot()['records']['review_assignment'][current]
+        targets = packet['reading_final']['page']['targets']
+        self.assertEqual(targets, ['t1'])
+        bound = bind_fixture_basis(case, packet)
+        ground = build_ground(bound)
+        row = dict(formulation='t1', coverage='A check.', sentence='A gap remains.', grounds=[ground])
+        envelope = openness_final_pages.build_validation_envelope(case.artifacts, assignment, packet)
+        rule = review_composition.find_rule('native_math', envelope)
+        self.finish_answer(case, current, packet, term=descriptor['missing_term'], cite_formulation=True)
+        review_composition.validate_page_output(rule, envelope, targets, dict(targets=[row]), finding_version=2)
+        measured_ground = {key: value for key, value in ground.items() if key != 'formulation'}
+        measured_ground['need'] = ''
+        padding = 1400 - review_composition._measure_final_value([measured_ground])
+        oversized = dict(row, coverage='c' * 200, grounds=[dict(ground, need='n' * padding)])
+        with self.assertRaises(ResearchError) as caught:
+            review_composition.validate_page_output(rule, envelope, targets, dict(targets=[oversized]), finding_version=2)
+        self.assertEqual(caught.exception.code, 'review_composition_conflict')
+
+    def test_page_ground_refusals_point_into_the_page_answer(self):
+        """Repairs A13. A ground of a page that fails gap_basis or gap_fields is refused at the pointer of its row of the
+        page answer, under both finding versions; the notice calls that path a JSON Pointer into the answer."""
+        from openness_named_gap_fixtures import bind_fixture_basis
+        from research_harness import openness_final_pages, review_composition
+        case = self.make_case('unsearched-term', 'page')
+        current, packet = case.finish_reading(case.export())
+        targets = packet['reading_final']['page']['targets']
+        assignment = case.store.snapshot()['records']['review_assignment'][current]
+        envelope = openness_final_pages.build_validation_envelope(case.artifacts, assignment, packet)
+        rule = review_composition.find_rule('native_math', envelope)
+        ground = build_ground(bind_fixture_basis(case, packet))
+        quote = ground['basis'][0]
+        for name, refused, path in (
+                ('gap_basis', dict(ground, basis=[dict(quote, text=quote['text'][:19])]), '/targets/0/grounds/0/basis'),
+                ('gap_fields', {key: value for key, value in ground.items() if key != 'need'}, '/targets/0/grounds/0')):
+            row = dict(formulation=targets[0], coverage='Reviewed.', sentence='A gap remains.', grounds=[refused])
+            for version in (1, 2):
+                with self.subTest(rule=name, version=version), self.assertRaises(ResearchError) as caught:
+                    review_composition.validate_page_output(rule, envelope, targets, dict(targets=[row]),
+                                                            finding_version=version)
+                details = caught.exception.details
+                self.assertTrue(details['path'].startswith('/targets/0/grounds/0'), details)
+                if version == 2:
+                    self.assertEqual((details['rule'], details['path']), (name, path))
+
+    def test_off_target_gap_is_refused_at_page_and_its_correction_records(self):
+        from openness_named_gap_fixtures import bind_fixture_basis
+        from research_harness import openness_final_pages, review_composition
+        from research_harness.review_continuation import plan_next
+
+        case = self.make_case('variant-search', 'page')
+        native = case.export()
+        current, packet = case.finish_reading(native)
+        targets = packet['reading_final']['page']['targets']
+        self.assertEqual(targets, ['t1'])
+        ground = build_ground(bind_fixture_basis(case, packet), term='graph spectral radius')
+        row = dict(formulation='t1', coverage='Reviewed.', sentence='A search gap remains.')
+        path = '/targets/0/grounds/0/formulation'
+
+        with self.subTest(spelling='literal'):
+            assignment = case.store.snapshot()['records']['review_assignment'][current]
+            envelope = openness_final_pages.build_validation_envelope(case.artifacts, assignment, packet)
+            rule = review_composition.find_rule('native_math', envelope)
+            literal = dict(row, grounds=[dict(ground, formulation=case.descriptor['neighbour'])])
+            with self.assertRaises(ResearchError) as caught:
+                review_composition.validate_page_output(rule, envelope, targets, dict(targets=[literal]), finding_version=2)
+            self.assertEqual(caught.exception.details['path'], path)
+            self.assertEqual(caught.exception.details['rule'], 'gap_formulation')
+
+        cited = dict(row, grounds=[dict(ground, formulation=dict(ref='t2'))])
+        receipt = case.invoke(current, dict(targets=[cited]))
+        self.assertIn('output_refusal', receipt)
+        refusal = receipt['output_refusal']
+        self.assertEqual((refusal['code'], refusal['check']), ('openness_finding_invalid', 'openness.finding'))
+        self.assertEqual((refusal['details']['path'], refusal['details']['rule']), (path, 'gap_formulation'))
+        action = plan_next(case.store.snapshot()['records'], case.artifacts, current)
+        self.assertEqual((action['state'], action['command']), ('replace', 'review-assignment'))
+        replacement = case.mutate(review_protocol.record_assignment, action['payload'])['result']['id']
+        replacement_packet = case.read_packet(replacement)
+        entry = replacement_packet['output_refusal']['refused'][-1]
+        self.assertEqual((entry['path'], entry['details']['rule']), (path, 'gap_formulation'))
+        self.assertEqual(replacement_packet['reading_final']['page']['targets'], targets)
+        self.finish_answer(case, replacement, replacement_packet, term='planar partial case', cite_formulation=True)
+
+    def test_page_formulation_citations_stay_out_of_material_and_other_fields(self):
+        from research_harness import review_handles
+
+        case = self.make_case('unsearched-term', 'page')
+        native = case.export()
+        current, packet = case.finish_reading(native)
+        self.assertEqual(packet['reading_final']['page']['targets'], ['t1'])
+        records = case.store.snapshot()['records']
+        assignment = records['review_assignment'][current]
+        with self.subTest(field='coverage'):
+            with self.assertRaises(ResearchError) as caught:
+                review_handles.expand_handles(packet, dict(targets=[dict(coverage=dict(ref='t1'))]),
+                                              artifacts=case.artifacts, assignment=assignment)
+            self.assertEqual(caught.exception.code, 'invalid_reference_handle')
+            self.assertEqual(caught.exception.details['path'], '/targets/0/coverage')
+
+        material = dict(stage='material', title='Argument', part=1, more=False, text='Relevant short reasoning.')
+        receipt = case.invoke(current, material)
+        self.assertNotIn('output_refusal', receipt)
+        records = case.store.snapshot()['records']
+        attempt = records['review_attempt']['attempt-' + current]
+        self.assertTrue(review_protocol.authenticate_attempt(records, case.artifacts, assignment, attempt))
+        table = json.loads(case.artifacts.read(attempt['material']))['handle_table']
+        self.assertIn('m1', table)
+        self.assertTrue({'t1', 't2'}.isdisjoint(table))
+        following = case.assign('page-after-material', native, prior=current)['id']
+        self.finish_answer(case, following, case.read_packet(following), term=case.descriptor['missing_term'],
+                           cite_formulation=True)
 
     def test_unread_work_is_validated_and_preserved_through_every_real_recording_path(self):
         for form in ('single', 'v6', 'v7', 'page'):

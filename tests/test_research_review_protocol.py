@@ -12,6 +12,13 @@ from research_harness.errors import ResearchError
 
 
 class ReviewProtocolTests(LiteratureCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_native_result_scalar_findings_match_closed_native_schema(self):
         from research_harness.review_protocol import canonical_prompt, _prompt_matches
         current = canonical_prompt("native_math")

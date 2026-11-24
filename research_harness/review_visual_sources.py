@@ -68,7 +68,7 @@ def _validate_manifest(evaluation, manifest):
         if not derivable:
             _require(isinstance(page['image'], dict) and page['image'].get('media_type') == 'image/png'
                      and review_pdf_pages.dimensions(evaluation.read(page['image'])) == (page['width'], page['height']),
-                     'The recorded page image must keep its descriptor and its dimensions')
+                     'The image of a recorded page must be a PNG artifact with the width and the height that the page states')
             continue
         key = ('review_pdf_page', digest(source['original']), page['page_index'], digest(manifest['render_profile']))
         _, derived = evaluation.once(key, lambda: review_pdf_pages.render_bytes(

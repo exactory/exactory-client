@@ -13,6 +13,10 @@ import test_review_output_correction as fixtures
 
 class CorrectionOutputLimitTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = fixtures.CorrectionTests()
         self.addCleanup(self.case.doCleanups)
         self.case.setUp()

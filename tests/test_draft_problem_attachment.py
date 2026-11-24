@@ -2,6 +2,7 @@
 recovery journal, and attach-problem (design 2026-10-12 §17)."""
 
 from __future__ import annotations
+from unittest.mock import patch
 
 import contextlib
 import http.server
@@ -410,6 +411,10 @@ class TestManagedDepositForAProblem(_PendingAttachmentTests, _DepositTestCase):
                                 " The same manuscript resumes the same completed deposit.")
 
     def setUp(self) -> None:
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.exactory = _install_exactory(self)
 

@@ -1,5 +1,6 @@
 """Problem statements retain the immutable subject area of their field bars."""
 
+from unittest.mock import patch
 from research_harness import research_decisions, review_protocol
 from research_harness.errors import ResearchError
 from test_research_problem_claims import ProblemCase
@@ -33,6 +34,13 @@ class ProblemStatementAreaTests(ProblemCase):
 
 
 class ProblemBarAreaTests(ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_legacy_foreign_area_statement_cannot_use_the_record_bars(self):
         self.prepare_ready()
         records = self.store.snapshot()["records"]

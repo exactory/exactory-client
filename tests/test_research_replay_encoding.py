@@ -88,8 +88,10 @@ class ReplayEncodingTests(unittest.TestCase):
         with mock.patch.object(storage, "_encode_json", wraps=storage._encode_json) as encode_json:
             snapshot = store.snapshot()
         self.assertEqual(snapshot, {"revision": 40, "records": snapshots[-1]})
-        # Three event components, one encode per changed value, and the configuration precheck.
-        self.assertEqual(encode_json.call_count, 3 * 40 + changes + 1)
+        # Two event components, one encode per changed value, and the configuration precheck of the replay before
+        # the read and of the read. The changes text of an event is compared in place with the encodings of its values
+        # (record 20261120143200-every-transaction-replays-the-whole-history).
+        self.assertEqual(encode_json.call_count, 2 * 40 + changes + 2)
 
     def test_snapshots_histories_and_fingerprint_equal_released_0736(self):
         store, snapshots, _ = write_replay_store(self.root)

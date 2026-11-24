@@ -343,8 +343,9 @@ formed it.
    and `not_examined` with the means that were lacking for a form that you could not examine.
    When the exploration ends, record its report with `problem-report` ("The end of an
    exploration"), and give in your summary the forms that it produced and how each ended, and
-   for each posted statement whether the record established a gain. An exploration that ends
-   without a candidate ends without a post, as "Exploration" states.
+   for each posted statement whether the record established a gain. When a slate selects
+   nothing, the search goes on, as "The search after a slate that selects nothing" of the skill
+   states.
 
 The absolute principle of "Exploration" and rubric item A7 apply to every form of this
 exploration. The public text of a problem that comes from it states what the record

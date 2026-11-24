@@ -9,8 +9,25 @@ from .review_budget import check_admission
 
 def admit_review_call(transaction, operation, invocation_id, route_id, *, invocation=None, epoch_id=None, task_id=None):
     """Check the allowance, then shared store and route capacity, before a start."""
-    from .review_task_execution import _TransactionRecords, _get, _policy
+    from .review_task_execution import _TransactionRecords
     records = _TransactionRecords(transaction)
+    admission = check_review_call_admission(records, operation, invocation_id, route_id,
+                                           invocation=invocation, epoch_id=epoch_id, task_id=task_id)
+    if admission is None:
+        return
+    # Successful admission commits abandonment and the exact wait's completion
+    # together with its invocation or reservation. Failed admission writes nothing.
+    abandon_dead_waits(transaction)
+    own = admission['wait']
+    if own is not None:
+        transaction.put('review_call_wait', own['id'], dict(own, state='admitted'))
+
+
+def check_review_call_admission(records, operation, invocation_id, route_id, *, invocation=None, epoch_id=None,
+                                task_id=None):
+    """Check a proposed call on the supplied view without changing the wait queue."""
+    from .review_task_execution import _get, _policy
+
     check_admission(records, operation, invocation_id)
     from .review_stop import build_call_scope, require_unstopped
     if records.get('review_stop'):
@@ -39,11 +56,7 @@ def admit_review_call(transaction, operation, invocation_id, route_id, *, invoca
                             'Run the command again after they end, and reconcile a call whose process has ended.',
                             dict(reservations=[row['id'] for row in active], scope='store',
                                  calls_before=len(before), call=call, wait_seconds=wait_seconds))
-    # Successful admission commits abandonment and the exact wait's completion
-    # together with its invocation or reservation. Failed admission writes nothing.
-    abandon_dead_waits(transaction)
-    if own is not None:
-        transaction.put('review_call_wait', own['id'], dict(own, state='admitted'))
+    return dict(wait=own)
 
 
 def check_launch(records, transition, lifecycle, *, token=None, read_identity=None):

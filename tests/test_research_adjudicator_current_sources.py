@@ -23,6 +23,13 @@ class AdjudicatorCurrentSourceTests(delivery_fixtures.ProblemDeliveryCase):
     build_correction = contract_fixtures.ProblemAdjudicationContractTests.build_correction
     read_records = contract_fixtures.ProblemAdjudicationContractTests.read_records
 
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare_current_comparator(self):
         self.prepare_reviews(result_reviewer="first")
         self.new_source = self.add_new_source()

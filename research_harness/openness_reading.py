@@ -55,7 +55,7 @@ MATH_PROTOCOL = 'exactory-openness-reading-math-v1'
 # The chain of a math-solver result review in the form of protocol v7 (D1 9; unit reading-math-v2).
 MATH_PROTOCOL_V2 = 'exactory-openness-reading-math-v2'
 # A new math chain starts under the first of these whose admission accepts its packet. A chain keeps its protocol.
-NEW_MATH_CHAIN_PROTOCOLS = (MATH_PROTOCOL,)
+NEW_MATH_CHAIN_PROTOCOLS = (MATH_PROTOCOL_V2, MATH_PROTOCOL)
 # The protocols of a chain with a stored capacity plan, built by openness_reading_v7.
 BOUNDED_CHAIN_PROTOCOLS = (PROTOCOL_V7, MATH_PROTOCOL_V2)
 # The protocols whose units carry the identities of review_excerpts.IDENTITY_FIELDS.
@@ -105,8 +105,21 @@ PROJECTION_STOP_MESSAGE = ('The harness stopped this reading chain before its ne
                            'decides and the steps of each answer.')
 PROBLEM_PROJECTION_DECISION = ('Whether this review waits for a reading protocol that bounds the record of its chain, '
                                'or runs over a packet that binds less material.')
-MATH_PROJECTION_DECISION = ('Whether this chain continues to its final turn, waits for the protocol reading-math-v2, '
-                            'or runs over a packet that binds less material.')
+MATH_PROJECTION_DECISION = ('Whether this chain continues to its final turn, the review waits for a release whose '
+                            'protocol exactory-openness-reading-math-v2 admits this packet, or the review runs over a '
+                            'packet that binds less material.')
+MATH_V2_PROJECTION_DECISION = ('Whether the review starts again over the same material on a route record that '
+                               'admits it, or over a packet that binds less material for the same claim.')
+MATH_V2_ROUTE_ANSWER = 'Start the review again over the same material on a route record that admits it'
+MATH_V2_ROUTE_PREREQUISITE = (
+    'Give route_id a verified route record on which the check of the new assignment gives '
+    'exactory-openness-reading-math-v2 as protocol_selection.protocol. On a route record that this protocol '
+    'refuses, the check names the protocol that takes the review in its place.')
+MATH_V2_SMALLER_PREREQUISITE = (
+    'Choose the openness minimum of the smaller packet yourself: this step does not carry the minimum of the '
+    'stopped chain. A minimum with fewer neighbours binds fewer searches and readings; the math controller refuses '
+    'a minimum that leaves out a material search of a formulation that it keeps. Choose the supplementary inputs '
+    'of the packet as well.')
 WAIT_PROBLEM_ANSWER = 'Wait for a reading protocol that bounds the record'
 WAIT_MATH_ANSWER = 'Wait for reading-math-v2'
 SMALLER_PACKET_ANSWER = 'Run over a smaller packet'
@@ -740,7 +753,11 @@ def choose_chain_protocol(records, artifacts, route, native, *, packet=None, ass
     admissions = []
     protocols = NEW_MATH_CHAIN_PROTOCOLS if is_math_openness_packet(native) else NEW_PROBLEM_CHAIN_PROTOCOLS
     for protocol in protocols:
-        if protocol in BOUNDED_CHAIN_PROTOCOLS:
+        if (protocol == MATH_PROTOCOL_V2 and assignment is not None
+                and len(assignment['id']) > RESERVED_IDENTIFIER_CHARACTERS):
+            result = dict(state='stop', protocol=protocol, reason='identifier_too_long',
+                          maximum=RESERVED_IDENTIFIER_CHARACTERS)
+        elif protocol in BOUNDED_CHAIN_PROTOCOLS:
             result = v7.check_v7_admission(records, artifacts, route, native)
         elif protocol == PROTOCOL_V6:
             if transport.local_input_limit(route) is None:
@@ -821,7 +838,7 @@ def list_reading_texts(records, native, *, artifacts=None, review=None):
     return sorted(rows.values(), key=lambda row: (ranks[row['version_id']], row['version_id'], row['text_sha256']))
 
 
-def list_math_response_rows(records, artifacts, native):
+def list_math_response_rows(records, artifacts, native, *, unavailable=None):
     """The captured-response rows of a math result openness packet: for each bound search in the order of the minimum,
     the captured response of each of its responses in the order of the search record that the packet carries. The
     packet must carry each response body, so that a capture recorded after the export never enlarges the chain. A row
@@ -836,18 +853,23 @@ def list_math_response_rows(records, artifacts, native):
         for response in json.loads(artifacts.read(reference))['responses']:
             body = (records.get('source', {}).get(response['source_id']) or {}).get('response')
             if body is None or body['sha256'] not in carried:
+                details = dict(source_id=response['source_id'])
+                if unavailable is not None:
+                    unavailable.append(dict(details, search_digest=binding['search_digest']))
+                    continue
                 raise ResearchError('openness_reading_incomplete', 'The openness packet does not carry the captured '
-                                    'response of a bound search', {'source_id': response['source_id']})
+                                    'response of a bound search', details)
             rows.setdefault(response['source_id'], {'kind': 'search_response', 'source_id': response['source_id'],
                                                     'text_sha256': body['sha256'], 'artifact': body})
     return list(rows.values())
 
 
-def list_math_text_rows(records, native, *, artifacts=None, review=None):
+def list_math_text_rows(records, native, *, artifacts=None, review=None, unavailable=None):
     """The full-text rows of a math result openness packet: for each bound reading whose source bundle pins an original,
     the extracted text of that original's bound main capture, by version id and then text digest. The packet must
     carry each text, so that a capture recorded after the export never enlarges the chain. A row is {kind, version_id,
-    text_sha256, artifact}."""
+    text_sha256, artifact}. When diagnosing a frozen inventory, collect unavailable bindings and keep deriving the
+    remaining rows."""
     from .graph import main_captures
     from .capture_selection import bind_packet_selections
     records = bind_packet_selections(records, native['scientific_context'], artifacts=artifacts, review=review)
@@ -864,9 +886,12 @@ def list_math_text_rows(records, native, *, artifacts=None, review=None):
             if capture['original']['sha256'] == bundle['original_sha256']
             and capture.get('extraction_status') == 'extracted' and capture.get('text') is not None]
         if not texts or texts[0]['sha256'] not in carried:
+            details = dict(reading_id=reading['id'], version_id=reading['version_id'])
+            if unavailable is not None:
+                unavailable.append(details)
+                continue
             raise ResearchError('openness_reading_incomplete', 'The openness packet does not carry the extracted text '
-                                'of an original that a bound reading pins',
-                                {'reading_id': reading['id'], 'version_id': reading['version_id']})
+                                'of an original that a bound reading pins', details)
         rows[reading['version_id'], texts[0]['sha256']] = {'kind': 'fulltext', 'version_id': reading['version_id'],
                                                            'text_sha256': texts[0]['sha256'], 'artifact': texts[0]}
         source = records['source'][bundle['source_id']]
@@ -938,12 +963,12 @@ READING_CONTENT_KINDS = ('work', 'source', 'source_bundle', 'reading', capture_s
                          'bundle_selection')
 
 
-def list_reading_rows(records, artifacts, native, *, review=None):
+def list_reading_rows(records, artifacts, native, *, review=None, unavailable=None):
     """The whole reading units that an openness packet requires, in the order of delivery: for a problem its full texts,
     then its records; for a math result its captured responses, its pinned full texts, then its records."""
     if is_math_openness_packet(native):
-        return (list_math_response_rows(records, artifacts, native) + list_math_text_rows(
-                    records, native, artifacts=artifacts, review=review)
+        return (list_math_response_rows(records, artifacts, native, unavailable=unavailable) + list_math_text_rows(
+                    records, native, artifacts=artifacts, review=review, unavailable=unavailable)
                 + list_record_rows(artifacts, native))
     return (list_reading_texts(records, native, artifacts=artifacts, review=review)
             + list_result_texts(artifacts, native) + list_record_rows(artifacts, native))
@@ -1283,8 +1308,9 @@ def project_reading_chain(route, packet, rows, record, *, artifacts, records=Non
 
 def describe_projection_decision(protocol, *, records=None, artifacts=None, assignment=None):
     """The owner's answers use D2's payload rules; an admission need not have a stored head yet."""
+    from .openness_successor import MATH_PROTOCOLS, choose_math_minimum
     from .review_plan_steps import PLAN_STEPS, describe_step, _build_identity_payload
-    math_chain = protocol == MATH_PROTOCOL
+    math_chain = protocol in MATH_PROTOCOLS
     number = 5 if math_chain else 4
     if assignment is not None and records is not None and (number == 4 or assignment.get('packet')):
         export = describe_step(records, artifacts, assignment, number)
@@ -1298,17 +1324,29 @@ def describe_projection_decision(protocol, *, records=None, artifacts=None, assi
         if assignment is None:
             chooses.append('author_id')
         export['then'] = [dict(command='review-assignment', payload=payload, chooses=chooses)]
+    if protocol == MATH_PROTOCOL_V2:
+        export['prerequisites'].append(dict(condition=MATH_V2_ROUTE_PREREQUISITE))
+        child = export['then'][0]
+        export['then'] = [dict(copy.deepcopy(child), check=True), child]
+        smaller = copy.deepcopy(export)
+        choose_math_minimum(smaller, MATH_V2_SMALLER_PREREQUISITE)
+        return dict(owner_decides=MATH_V2_PROJECTION_DECISION,
+                    then=[dict(answer=MATH_V2_ROUTE_ANSWER, steps=[export]),
+                          dict(answer=SMALLER_PACKET_ANSWER, steps=[smaller])])
     wait = copy.deepcopy(export)
     wait['prerequisites'].insert(0, dict(condition='The installed release holds ' + (
-        'reading-math-v2 for this packet.' if math_chain else
+        'exactory-openness-reading-math-v2 in a form that admits this packet.' if math_chain else
         'exactory-openness-reading-v6 or exactory-openness-reading-v7 for this packet.')))
     smaller = copy.deepcopy(export)
-    smaller['prerequisites'].insert(0, dict(condition='Bind less material in a new packet.'))
+    if math_chain:
+        choose_math_minimum(smaller, MATH_V2_SMALLER_PREREQUISITE)
+    else:
+        smaller['prerequisites'].insert(0, dict(condition='Bind less material in a new packet.'))
     assignment_step = smaller['then'][0]
     smaller['then'] = [dict(assignment_step, check=True), assignment_step]
     answers = [dict(answer=WAIT_MATH_ANSWER if math_chain else WAIT_PROBLEM_ANSWER, steps=[wait]),
                dict(answer=SMALLER_PACKET_ANSWER, steps=[smaller])]
-    if math_chain and assignment is not None and assignment.get('packet'):
+    if protocol == MATH_PROTOCOL and assignment is not None and assignment.get('packet'):
         step = describe_step(records, artifacts, assignment, 9)
         step['payload']['reason'] = MATH_CONTINUATION_REASON
         step['chooses'] = [key for key in step['chooses'] if key != 'reason']
@@ -1506,12 +1544,16 @@ def forecast_reading_chain(records, artifacts, route, packet, rows, record, *, r
         warning.update(request=_measure_chain_request(records, artifacts, route, request, set(assignments)))
         warning['warning'] = warning['warning'] or not warning['request']['fits']
     if record['protocol'] == MATH_PROTOCOL:
-        warning['ways'] = [CONTINUE_MATH_ANSWER, WAIT_MATH_ANSWER, SMALLER_PACKET_ANSWER]
+        warning['ways'] = [CONTINUE_MATH_ANSWER, SMALLER_PACKET_ANSWER]
+        if MATH_PROTOCOL_V2 not in NEW_MATH_CHAIN_PROTOCOLS:
+            warning['ways'].insert(1, WAIT_MATH_ANSWER)
     return forecast, warning
 
 
-def describe_reading_receipt(records, artifacts, assignment, route, logical, packet, request, *, admit_turn=True):
-    """Attach forecasts to receipts only; saved assignments, prompts and requests keep their bytes."""
+def describe_reading_receipt(records, artifacts, assignment, route, logical, packet, request, *, admit_turn=True,
+                             include_admission=True):
+    """Attach forecasts to receipts only; saved assignments, prompts and requests keep their bytes. A caller that
+    discards the receipt passes include_admission=False and skips the first-assignment decision."""
     if find_protocol(packet) in BOUNDED_CHAIN_PROTOCOLS:
         from .openness_reading_v7 import describe_turn_receipt
         return describe_turn_receipt(records, artifacts, assignment, route, packet, request)
@@ -1534,7 +1576,7 @@ def describe_reading_receipt(records, artifacts, assignment, route, logical, pac
     forecast, warning = forecast_reading_chain(records, artifacts, route, logical, rows, record,
         request=request, eligible_texts=selected, assignments=identifiers, projection=projection, final_input=final)
     admission = admit_reading_chain(route, projection, records=records, artifacts=artifacts,
-                                    assignment=head or assignment)
+                                    assignment=head or assignment) if include_admission else None
     exact = warning['request']
     details = dict(request=exact, capacity_forecast=forecast, limit=exact['character_limit'],
                    projection=projection, units=projection['units'])
@@ -1555,8 +1597,11 @@ def describe_reading_receipt(records, artifacts, assignment, route, logical, pac
         from .review_route_capacity import describe_assignment_limits, describe_assignment_kind, read_output_profile, describe_output_warning
         limits = describe_assignment_limits(route, read_output_profile(records, route), assignment)
         warnings.update(describe_output_warning({describe_assignment_kind(assignment): limits}) or {})
-    return dict(diagnostics=dict(final_input=forecast['measured_final']), capacity_forecast=forecast,
-                capacity_warning=warnings, reading_chain_admission=admission)
+    receipt = dict(diagnostics=dict(final_input=forecast['measured_final']), capacity_forecast=forecast,
+                   capacity_warning=warnings)
+    if include_admission:
+        receipt['reading_chain_admission'] = admission
+    return receipt
 
 
 def describe_unavailable_forecast(error):
@@ -2193,7 +2238,7 @@ def _create_record(protocol, manifest=None, *, excerpt_protocol=None):
     return record
 
 
-def prepare_packet(records, artifacts, value, route, packet):
+def prepare_packet(records, artifacts, value, route, packet, *, receipt=None):
     """The packet of a native_math assignment and its place in a reading chain. An openness packet, of a problem or of
     a math result, stays a single turn when one input of the route holds every reading unit complete and its units
     total at most one turn's reading budget. Otherwise the first assignment is reading turn 1; a turn that continues a
@@ -2254,6 +2299,8 @@ def prepare_packet(records, artifacts, value, route, packet):
                                                              selection['result'])
                 chain['protocol_selection'] = {key: item for key, item in selection.items() if key != 'result'}
                 return prepared, chain
+            if receipt is not None:
+                receipt['protocol_selection'] = {key: item for key, item in selection.items() if key != 'result'}
         if ((PROTOCOL_V7 not in NEW_PROBLEM_CHAIN_PROTOCOLS or is_math_openness_packet(native))
                 and characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS
                 and _fits(route, canonical_prompt('native_math', version=7 if is_openness_packet(native) else 6,
@@ -2424,13 +2471,14 @@ def _validate_reading_response(binding, output, protocol):
             review_excerpts.validate_passage_request(request, INVALID_RESPONSE, kinds, path=path)
 
 
-def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
+def validate_turn_output(packet, output, *, artifacts=None, assignment=None, expanded=False, records=None):
     """The output contract of a reading-chain turn under the protocol of its packet. A reading turn returns a reading
     response. A final turn returns the native result review, or a reading response with at least one passage request
     while the passage allowance has characters left."""
     if find_protocol(packet) in BOUNDED_CHAIN_PROTOCOLS:
         from .openness_reading_v7 import validate_turn_output as validate_v7
-        return validate_v7(packet, output, artifacts=artifacts, assignment=assignment)
+        return validate_v7(packet, output, artifacts=artifacts, assignment=assignment, expanded=expanded,
+                           records=records)
     from .native_review import validate_output
     final = find_stage(packet) == 'final'
     if final and not (isinstance(output, dict) and output.get('stage') == 'reading'):
@@ -2490,13 +2538,24 @@ def has_deliverable_passage(records, artifacts, packet, output, *, assignment=No
 def find_final_assignment(records, artifacts, identifier):
     """The effective terminal turn of the reading chain whose first turn is the given assignment. A continuation that
     ended without output and that a later continuation of the same turn replaced is history, not a branch, and so is
-    a turn that a capacity replacement took over; any other second continuation is a fork. The terminal turn is a
-    final turn, or the closing page of a final in pages, whose observed output is the native result."""
+    a turn superseded by a capacity or output-refusal replacement. Any other second continuation is a fork. The
+    terminal turn is a final turn, or the closing page of a final in pages, whose observed output is the native result."""
     from .review_protocol import assignment_state, find_replacement, has_ended_without_output, is_dead_assignment
+    from .review_refusal_replacement import read_replacement_link
     assignments = records.get('review_assignment', {})
     replaced = {saved['capacity_replacement_of'] for saved in assignments.values()
                 if saved.get('capacity_replacement_of')}
     current = assignments[identifier]
+    if find_protocol(json.loads(artifacts.read(current['packet']))) == MATH_PROTOCOL_V2:
+        for saved in assignments.values():
+            kind, prior_id = read_replacement_link(saved)
+            if kind == 'output_refused' and saved.get('reading_chain', {}).get('first_assignment_id') == identifier:
+                replaced.add(prior_id)
+        while current['id'] in replaced:
+            successor = find_replacement(records, current)
+            if successor is None:
+                break
+            current = successor
     while True:
         live = [saved for saved in assignments.values()
                 if saved['role'] == 'native_math' and saved['context'].get('prior_assignment_id') == current['id']

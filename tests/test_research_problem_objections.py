@@ -10,15 +10,28 @@ from research_harness.evidence import digest
 from research_harness.problem_delivery import export_problem, assess_post
 import test_research_problem_delivery as fixtures
 import test_research_problem_slate as slate_fixtures
+from slate_refresh_fixtures import cite_in_refresh_chain, cite_review
 
 
 class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     build_slate_output = slate_fixtures.ProblemSlateTests.build_slate_output
 
     def make_objection(self):
         return {"id": "unsupported-implication", "claim": "The stated implication exceeds the read comparator.",
             "reason": "The exact quantifier is unsupported.", "evidence": [self.supporting],
             "resolution_condition": "Supply the missing implication or narrow the supported claim."}
+
+    def cite_in_slate_refresh(self, output):
+        """The answer of the refreshed slate review of `first`, a new chain that delivers its bar as a record and no
+        turn of the bar session: it cites that bar where the fixture answer cites the bar session's text."""
+        return cite_in_refresh_chain(output, self.supporting, cite_review(self, "review-bar-first"))
 
     def make_finding(self, status):
         return {"id": "unsupported-implication", "status": status,
@@ -353,7 +366,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
             reason="The supplied counterexample refutes the earlier resolution.",
             resolution_condition="Answer the counterexample or narrow the claim.")]
         output["value"]["objection_findings"] = [self.make_finding("contested")]
-        updated = self.observe("slate", "first", output, identifier="slate-first-refreshed")
+        updated = self.observe("slate", "first", self.cite_in_slate_refresh(output), identifier="slate-first-refreshed")
         self.record_slate("slate-2", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}],
                           review_ids=[updated["id"]])
         return updated, counterexample
@@ -428,7 +441,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
                        reason="The supplied counterexample refutes the earlier resolution.")
         output = self.build_slate_output(["candidate-1", "candidate-2"])
         output["value"]["objection_findings"] = [finding]
-        updated = self.observe("slate", "first", output, identifier="slate-first-refreshed")
+        updated = self.observe("slate", "first", self.cite_in_slate_refresh(output), identifier="slate-first-refreshed")
         self.assertEqual(updated["payload"]["objections"], [])
         self.record_slate("slate-2", deferred=[{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}],
                           review_ids=[updated["id"]])
@@ -572,7 +585,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
         output = self.build_slate_output(["candidate-1", "candidate-2"])
         output["value"]["objection_findings"] = [] if status is None else [self.make_finding(status)]
-        return output
+        return self.cite_in_slate_refresh(output)
 
     def observe_refreshed_slate_review(self, output):
         review = self.observe("slate", "first", output, identifier="slate-first-refreshed")

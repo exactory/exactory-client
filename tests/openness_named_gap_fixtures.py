@@ -276,7 +276,11 @@ def fixture_case(name, protocol='single'):
     case = NamedGapStoreCase()
     case.packet_name = name
     case.request_form = protocol
-    case.setUp()
+    try:
+        case.setUp()
+    except BaseException:
+        case.doCleanups()
+        raise
     return case
 
 

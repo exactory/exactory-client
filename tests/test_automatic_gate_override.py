@@ -25,6 +25,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class StopClassificationTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_auto_pass_example_contains_only_the_stop_identity(self):
         args = cli.build_parser().parse_args(["example", "gate-auto-pass"])
         self.assertEqual(cli.run(args), {"stop_id": "SERIES_STOP_ID"})
@@ -104,8 +111,8 @@ class StopClassificationTests(unittest.TestCase):
     def test_authentication_series_follows_backoff_and_stops_on_seventh_failure(self):
         from datetime import datetime, timedelta, timezone
         fixture = continuation_fixtures.ContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         now = [datetime(2026, 11, 7, 8, tzinfo=timezone.utc)]
         delays = []
 
@@ -207,9 +214,13 @@ class StopClassificationTests(unittest.TestCase):
 
 class RecordedSeriesStopTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = continuation_fixtures.ContinuationTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
 
     def stop_series(self):
@@ -257,6 +268,9 @@ class RecordedSeriesStopTests(unittest.TestCase):
     def test_malformed_packet_keeps_the_cli_terminal_stop_and_exit_code(self):
         import io
         from contextlib import redirect_stdout, redirect_stderr
+        from ci.reviewer_program_guard import use_absent_programs
+        # The plan observes the installed runtime of each route adapter; the stored history names a Codex route.
+        use_absent_programs(self)
         from test_review_failed_request_history import FailedRequestHistoryTests, read_cases
         history = FailedRequestHistoryTests()
         history.setUp()
@@ -578,6 +592,10 @@ class AutomaticStudyPassTests(DevelopmentCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        cls.addClassCleanup(released.stop)
         case = DevelopmentCase()
         case.setUp()
         cls.addClassCleanup(case.doCleanups)

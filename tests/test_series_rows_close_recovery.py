@@ -61,10 +61,17 @@ class _StagedCase(ResultPartsCase):
 
 
 class RecoveryRowTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare_fixture(self, cls=continuation_fixtures.ContinuationTests):
         fixture = cls()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         return fixture
 
     def run_series(self, case, head):
@@ -428,8 +435,11 @@ class RecoveryRowTests(unittest.TestCase):
         # study and verification finals retain separate delivery preconditions.
         self.assertEqual(stop_classes.STOP_REGISTRY['review_evidence_undelivered']['group'], 'named_cause')
         sites = json.loads(GROUPS.read_text())['named_cause']['members']['review_evidence_undelivered']
-        self.assertEqual(len(sites), 5)
+        # The sixth site is the evidence check of a page answer. It raises under the same contract check
+        # (review.evidence_delivery), so the answer is refused by that check and not admitted by the shared code.
+        self.assertEqual(len(sites), 6)
         self.assertTrue(any('validate_reassessment#' in site for site in sites))
+        self.assertIn('research_harness/review_composition.py:_validate_packet_evidence#1', sites)
 
     def test_inventory_overflow_keeps_its_two_inspections_from_the_actual_parts_state(self):
         fixture = self.prepare_parts()

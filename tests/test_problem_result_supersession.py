@@ -1,5 +1,6 @@
 """A later solver delivery leaves reports usable and permits evidence recovery."""
 
+from unittest.mock import patch
 import copy
 from contextlib import redirect_stderr
 import io
@@ -19,6 +20,13 @@ from test_research_record_check import digest_tree
 
 
 class ProblemResultSupersessionTests(ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def run_command(self, command, *arguments):
         return cli.run(cli.build_parser().parse_args([command, "--workspace", str(self.root), *arguments]))
 

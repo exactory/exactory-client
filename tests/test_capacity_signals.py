@@ -147,6 +147,13 @@ class CapacitySignalTests(unittest.TestCase):
 
 
 class ResponseLimitJourneyTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_math_review_moves_by_new_attestation_to_recorded_acceptance(self):
         result = subprocess.run([sys.executable, str(Path(__file__).parent / 'fixtures/capacity_math_journey.py')],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)

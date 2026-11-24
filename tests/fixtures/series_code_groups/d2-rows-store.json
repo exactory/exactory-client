@@ -13,7 +13,52 @@
         "research_harness/storage.py:Store._check_files#2": [
           "store"
         ],
+        "research_harness/storage.py:_Replay.add_event#1": [
+          "store"
+        ],
+        "research_harness/storage.py:_Replay.add_event#2": [
+          "store"
+        ],
+        "research_harness/storage.py:_Replay.add_event#3": [
+          "store"
+        ],
+        "research_harness/storage.py:_Replay.add_event#4": [
+          "store"
+        ],
+        "research_harness/storage.py:_Replay.add_event#5": [
+          "store"
+        ],
+        "research_harness/storage.py:_Replay.add_event#6": [
+          "store"
+        ],
+        "research_harness/storage.py:_Replay.add_event#7": [
+          "store"
+        ],
+        "research_harness/storage.py:_Replay.add_event#8": [
+          "store"
+        ],
+        "research_harness/storage.py:_Replay.add_event#9": [
+          "store"
+        ],
+        "research_harness/storage.py:_check_event#1": [
+          "store"
+        ],
+        "research_harness/storage.py:_check_structure#1": [
+          "store"
+        ],
+        "research_harness/storage.py:_check_structure#2": [
+          "store"
+        ],
+        "research_harness/storage.py:_check_structure#3": [
+          "store"
+        ],
+        "research_harness/storage.py:_check_structure#4": [
+          "store"
+        ],
         "research_harness/storage.py:_commit_mutation#1": [
+          "store"
+        ],
+        "research_harness/storage.py:_encode_changes#1": [
           "store"
         ],
         "research_harness/storage.py:_load#1": [
@@ -31,30 +76,6 @@
         "research_harness/storage.py:_validate#1": [
           "store"
         ],
-        "research_harness/storage.py:_validate#10": [
-          "store"
-        ],
-        "research_harness/storage.py:_validate#11": [
-          "store"
-        ],
-        "research_harness/storage.py:_validate#12": [
-          "store"
-        ],
-        "research_harness/storage.py:_validate#13": [
-          "store"
-        ],
-        "research_harness/storage.py:_validate#14": [
-          "store"
-        ],
-        "research_harness/storage.py:_validate#15": [
-          "store"
-        ],
-        "research_harness/storage.py:_validate#16": [
-          "store"
-        ],
-        "research_harness/storage.py:_validate#17": [
-          "store"
-        ],
         "research_harness/storage.py:_validate#2": [
           "store"
         ],
@@ -64,19 +85,70 @@
         "research_harness/storage.py:_validate#4": [
           "store"
         ],
-        "research_harness/storage.py:_validate#5": [
+        "skills/math-solver/harness/search_controller/admission.py:_current_account#1": [
           "store"
         ],
-        "research_harness/storage.py:_validate#6": [
+        "skills/math-solver/harness/search_controller/output_views.py:read_marker#1": [
           "store"
         ],
-        "research_harness/storage.py:_validate#7": [
+        "skills/math-solver/harness/search_controller/service.py:Controller._recover_effects#1": [
           "store"
         ],
-        "research_harness/storage.py:_validate#8": [
+        "skills/math-solver/harness/search_controller/service.py:Controller._recover_effects#2": [
           "store"
         ],
-        "research_harness/storage.py:_validate#9": [
+        "skills/math-solver/harness/search_controller/storage.py:Store._read_document#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store._read_document#2": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.append#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.append_operation#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:Store.append_operation#2": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:_validate_document#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:_validate_document#2": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:_validate_document#3": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:_validate_document#4": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:_validate_document#5": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:_validate_document#6": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:_validate_document#7": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:_validate_event#1": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:_validate_event#2": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:_validate_event#3": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:_validate_event#4": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:_validate_event#5": [
+          "store"
+        ],
+        "skills/math-solver/harness/search_controller/storage.py:_validate_event#6": [
           "store"
         ]
       },
@@ -86,7 +158,7 @@
         ]
       },
       "unsupported_schema": {
-        "research_harness/storage.py:_validate#1": [
+        "research_harness/storage.py:_check_structure#1": [
           "store"
         ]
       }

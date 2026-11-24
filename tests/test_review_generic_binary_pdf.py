@@ -195,6 +195,10 @@ class GenericBinarySourceDeliveryTests(StrategyCase):
     metadata = LiteratureCase.metadata
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.sequence = 0
         self.setup_dossier()
@@ -270,6 +274,10 @@ class GenericBinaryProblemBarTests(LiteratureCase):
     built for a text-only route, as record_assignment does for a Claude Code or Codex route."""
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         from test_research_problem_reviews import ProblemReviewTests
         super().setUp()
         self.reviews = ProblemReviewTests

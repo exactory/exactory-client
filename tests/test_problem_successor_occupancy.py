@@ -17,6 +17,13 @@ def make_objection(evidence):
 
 
 class OrdinaryOccupancyTests(RefreshCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_no_head_one_pending_two_pending_and_complete_keep_report_shapes(self):
         self.prepare_reviews(bar_reviewer='first', results=False)
         report = decisions.assess_problem_reviews(self.store.snapshot()['records'], self.artifacts)
@@ -238,6 +245,13 @@ class PartsOccupancyMixin:
 
 
 class LegacyPartsOccupancyTests(PartsOccupancyMixin, ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     use_parts_v2 = False
 
     def test_two_refreshed_legacy_slots_remain_pending_at_part_turn_21(self):
@@ -266,4 +280,11 @@ class LegacyPartsOccupancyTests(PartsOccupancyMixin, ResultPartsCase):
 
 
 class FreshPartsOccupancyTests(PartsOccupancyMixin, PartsResultCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     pass

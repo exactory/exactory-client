@@ -18,7 +18,7 @@ from test_review_output_profile import build_row
 class PartsDriver:
     def setUp(self):
         self.enter_patch(patch.object(protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,)))
-        self.enter_patch(patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL, review_parts.PROTOCOL)))
+        self.select_parts_v3()
         planner = capacity.plan_chain_capacity
 
         def request_plan(*args, **kwargs):
@@ -30,6 +30,11 @@ class PartsDriver:
     def enter_patch(self, patcher):
         patcher.start()
         self.addCleanup(patcher.stop)
+
+    def select_parts_v3(self):
+        """Put parts v3 first. A fixture of a released series states parts v2 in its own setUp, so a driver states its
+        order again after it."""
+        self.enter_patch(patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL, review_parts.PROTOCOL)))
 
     def open_series(self, *, grouped=False, identifier='first'):
         case = fixtures.NativePartsTests()
@@ -43,6 +48,7 @@ class PartsDriver:
                 dict(build_row(level=None, kind='read', thinking=1), largest_output_tokens=12)]))
         else:
             case.setUp()
+        self.select_parts_v3()
         if not grouped:
             for index, row in enumerate(case.native['evidence']):
                 ref = case.artifacts.put(('Exact argument %d.\n' % index * 700).encode(), 'text/plain')

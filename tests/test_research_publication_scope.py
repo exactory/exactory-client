@@ -1,5 +1,6 @@
 """An explicitly scoped paper cannot close or hide the wider objective."""
 
+from unittest.mock import patch
 import copy
 import json
 
@@ -8,6 +9,13 @@ from research_harness.cli import OPERATIONS
 
 
 class PublicationScopeTests(SourceLimitedCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_managed_scope_and_its_review_survive_an_unrelated_reading(self):
         from managed_strategy_fixtures import ManagedStrategy
         self.store.mutate("fixture.managed", {}, lambda tx: tx.put("workspace", "study", {"stage": "literature"}),

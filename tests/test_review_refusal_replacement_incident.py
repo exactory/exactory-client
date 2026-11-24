@@ -14,13 +14,20 @@ from research_harness.source_links import span_locator
 
 
 class PartOffsetReplacementIncidentTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def build_revision_200(self):
         """The store of record 7 at revision 200: a repaired bar continuation with two refused answers that cite the
         second part of a split full text with whole-text offsets."""
         # Shape and quantities: 20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets, T2.
         case = fixtures.ProblemReviewTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         case.supporting = case.artifacts.put(b'A synthetic field standard.', 'text/plain')
         case.prepare_review_route()
         case.observe('bar', 'first')
@@ -54,8 +61,8 @@ class PartOffsetReplacementIncidentTests(unittest.TestCase):
         with patch.object(protocol.transport, 'send_request', side_effect=probe):
             case.mutate(protocol.probe_route, dict(id='repair-probe', route_id='route'), credential='fixture')
         build = protocol._repair_packet
-        def build_repaired_packet(*args):
-            packet = build(*args)
+        def build_repaired_packet(*args, **kwargs):
+            packet = build(*args, **kwargs)
             packet['source_deliveries'].append(copy.deepcopy(delivery))
             packet['evidence'].append(dict(artifact=part, encoding='utf-8', content=part_text))
             packet.pop('digest', None)

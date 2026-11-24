@@ -54,6 +54,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         return identifiers
 
     def test_each_formed_candidate_requires_a_slate_review_before_selection(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         identifiers = self.record_formed_candidates()
         self.observe_bars()
         revision = self.store.revision
@@ -67,6 +71,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertNotIn("problem_slate", self.read_records())
 
     def test_stored_phenomenon_source_requires_a_review_independently_of_its_evidence(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         candidate = build_candidate(source={"kind": "phenomenon", "reference": "The recorded phenomenon.", "evidence": []})
         self.put("problem_candidate", candidate["id"], dict(candidate, recorded_revision=self.store.revision + 1))
         self.observe_bars()
@@ -75,6 +83,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(self.store.revision, revision)
 
     def test_a_current_slate_review_allows_selection_of_formed_candidates(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         identifiers = self.record_formed_candidates()
         self.observe_bars()
         review = self.observe("slate", "first", self.build_slate_output(identifiers))
@@ -84,6 +96,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(problem_candidates.assess_slate(self.read_records(), self.artifacts), [])
 
     def test_a_stale_slate_review_cannot_authorize_selection_of_formed_candidates(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         identifiers = self.record_formed_candidates()
         self.observe_bars()
         review = self.observe("slate", "first", self.build_slate_output(identifiers))
@@ -95,6 +111,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertNotIn("problem_slate", self.read_records())
 
     def test_ordinary_candidates_can_still_be_selected_without_a_slate_review(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         reading = self.record_full_reading()
         row = self.read_records()["reading"][reading["reading_id"]]
         self.record_candidate(source={"kind": "literature", "reference": "The read survey's open question.", "evidence": [
@@ -106,6 +126,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(problem_candidates.assess_slate(self.read_records(), self.artifacts), [])
 
     def test_0820_slate_keeps_validation_digest_projection_and_rendered_bytes(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         fixture = json.loads((Path(__file__).parent / "fixtures/problem_slate_0820.json").read_text())
         self.record_candidate()
         self.observe_bars()
@@ -126,6 +150,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual((self.root / fixture["view_path"]).read_text(), fixture["view"]["content"])
 
     def test_unselected_formed_candidates_do_not_require_a_slate_review(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         identifiers = self.record_formed_candidates()
         self.record_candidate()
         self.observe_bars()
@@ -139,6 +167,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual((saved["selected"], saved["review_ids"]), ([], []))
 
     def test_a_slate_review_after_the_statement_keeps_realized_problem_assurances_unassessed(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.observe_bars()
         self.select_statement(candidate_id="candidate-1")
@@ -150,6 +182,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
             "This role grades candidate potential; leave every realized-problem assurance not_assessed."))
 
     def test_slate_needs_two_ready_bars(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.assert_error("problem_bar_pending", lambda: self.record_slate())
         self.supporting = self.artifacts.put(b"A captured field standard.", "text/plain")
@@ -170,6 +206,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertNotIn("problem_slate", self.read_records())
 
     def test_every_current_candidate_has_one_disposition(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
         self.record_candidate("candidate-3", previous="candidate-2", statement=r"Does the bound hold for odd $n \geq 3$?")
@@ -195,6 +235,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(problem_candidates.find_slate(self.read_records()), saved)
 
     def test_selected_candidate_needs_potential_at_threshold(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.record_candidate("candidate-low", potential={"significance": {"B1": 1, "B2": 1}, "priority": 3, "readiness": "pass"})
         self.record_candidate("candidate-unready", potential={"significance": {"B1": 0, "B2": 3}, "priority": 2})
@@ -214,6 +258,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(self.record_slate(deferred=rest)["selected"], ["candidate-1"])
 
     def test_empty_selection_needs_a_reason_and_reports_no_post(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.observe_bars()
         rejected = [{"candidate_id": "candidate-1", "reason": "A parameter increment of a settled case."}]
@@ -228,19 +276,23 @@ class ProblemSlateTests(ProblemDeliveryCase):
         report = status_report(self.store)
         self.assertFalse(report["ready"])
         self.assertEqual(report["milestone"], "slate")
-        self.assertEqual(report["next"]["code"], "problem_no_post")
+        self.assertEqual(report["next"]["code"], "problem_search_step_required")
         self.assertEqual(report["next"]["reason"], reason)
         self.assertEqual(report["candidates"], {"current": 1, "selected": 0, "deferred": 0, "rejected": 1})
         self.assertEqual(report["slate_id"], "slate-1")
         self.select_statement(candidate_id="candidate-1")
         report = status_report(self.store)
-        self.assertEqual((report["milestone"], report["next"]["code"]), ("slate", "problem_no_post"))
+        self.assertEqual((report["milestone"], report["next"]["code"]), ("slate", "problem_search_step_required"))
         summary = status_summary(report)
         self.assertEqual((summary["candidates"], summary["slate_id"]), (report["candidates"], "slate-1"))
         for view in (summary, next_summary(report)):
-            self.assertEqual(view["next_hint"]["code"], "problem_no_post")
+            self.assertEqual(view["next_hint"]["code"], "problem_search_step_required")
 
     def test_statement_candidate_must_be_selected_in_the_latest_slate(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
         self.record_candidate("candidate-old", statement="An earlier formulation.")
@@ -276,6 +328,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
             "id": "decision", "action": "post", "review_ids": [], "bar_review_ids": [], "reason": "Ready."}))
 
     def test_milestones_and_next_order(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         report = status_report(self.store)
         self.assertEqual((report["milestone"], report["next"]["code"]), ("exploration", "problem_slate_missing"))
         self.assertEqual((report["candidates"], report["slate_id"]),
@@ -291,6 +347,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual((report["milestone"], report["next"]["code"]), ("formulation", "problem_attempt_missing"))
 
     def test_optional_slate_review_packet_and_response(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?",
                               notes="PRIVATE_CANDIDATE_NOTE", source={"kind": "computation",
@@ -347,6 +407,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
                          ("problem_slate_review_unverified", {"review_id": "review-slate-second"}))
 
     def test_slate_review_source_request_continues_with_the_same_bars_and_candidates(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.observe_bars()
         request = self.build_slate_output(["candidate-1"])
@@ -380,7 +444,29 @@ class ProblemSlateTests(ProblemDeliveryCase):
         assignment = self.read_records()["review_assignment"][identifier]
         return assignment, json.loads(self.artifacts.read(assignment["packet"]))
 
+    def observe_refreshed_slate(self, candidate_ids, identifier, bar_ids=None):
+        """A refreshed slate review of `first`. Since 0.93.0 it is a new chain in the slot of the earlier review, whose
+        packet delivers the bars and replays no turn of the bar session, so its answer cites the reviewer's own bar."""
+        assignment = self.assign("slate", "first", identifier=identifier)
+        _, packet = self.read_assignment(identifier)
+        reference = packet["own_bars"][0]["record_reference"]
+        output = self.build_slate_output(candidate_ids)
+        output["value"]["evidence"] = [reference]
+        for assurance in output["value"]["assurances"]:
+            assurance["evidence"] = [reference]
+        if bar_ids is not None:
+            output["value"]["bar_ids"] = bar_ids
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment, {"id": "attempt-" + identifier, "assignment_id": identifier},
+                        credential="test-only")
+        return self.mutate(decisions.record_value_review,
+                           dict(output, id="review-" + identifier, dossier_id=None, assignment_id=identifier))["result"]
+
     def test_a_new_slate_review_carries_the_places_paragraph(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.observe_bars()
         review = self.observe("slate", "first", self.build_slate_output(["candidate-1"]))
@@ -393,6 +479,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], [review["id"]])
 
     def test_a_recorded_slate_review_without_the_member_stays_verified(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.observe_bars()
         review = self.observe_recorded_slate()
@@ -406,6 +496,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], [review["id"]])
 
     def test_a_source_request_continuation_keeps_the_paragraphs_of_its_parent(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.observe_bars()
         request = self.build_slate_output(["candidate-1"])
@@ -436,15 +530,19 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(self.record_slate(review_ids=review_ids)["review_ids"], review_ids)
 
     def test_a_recorded_slate_review_refreshed_in_its_slot_gains_the_places_paragraph(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.observe_bars()
         first = self.observe_recorded_slate()
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
-        refreshed = self.observe("slate", "first", self.build_slate_output(["candidate-1", "candidate-2"]),
-                                 identifier="slate-first-refreshed")
+        refreshed = self.observe_refreshed_slate(["candidate-1", "candidate-2"], "slate-first-refreshed")
         original, _ = self.read_assignment("slate-first")
         assignment, packet = self.read_assignment("slate-first-refreshed")
-        self.assertEqual((assignment["history_assignment_id"], assignment["slot_id"]), ("slate-first", original["slot_id"]))
+        self.assertEqual((assignment["context"], assignment["history_assignment_id"], assignment["slot_id"]),
+                         ({"session_refresh": {"assignment_id": "slate-first"}}, None, original["slot_id"]))
         self.assertEqual(packet["problem_refresh"]["review_ids"], [first["id"]])
         self.assertEqual(packet["place_review"], {"protocol": "exactory-problem-slate-places-v1"})
         self.assertIn("exactory-problem-slate-places-v1", assignment["prompt"]["parameters"]["problem_paragraphs"])
@@ -452,10 +550,18 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(self.record_slate(deferred=deferred, review_ids=[refreshed["id"]])["review_ids"], [refreshed["id"]])
 
     def test_slate_review_context_repair_keeps_the_bars_and_candidates(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         original, review = self.prepare_repaired_slate_review()
         self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], ["review-repaired-slate"])
 
     def test_a_reviewer_installed_by_a_slate_repair_refreshes_the_slate(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         original, review = self.prepare_repaired_slate_review(legacy_bars=True)
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
         refreshed = self.assign("slate", "repaired-first", identifier="repaired-slate-refresh")
@@ -548,18 +654,21 @@ class ProblemSlateTests(ProblemDeliveryCase):
                              dict(output, id="review-repaired-slate", dossier_id=None, assignment_id=repaired["id"]))["result"]
         return original, review
 
-    def test_changed_candidates_refresh_the_slate_reviewer_in_its_session(self):
+    def test_changed_candidates_refresh_the_slate_reviewer_as_a_new_chain_in_its_slot(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.observe_bars()
         first = self.observe("slate", "first", self.build_slate_output(["candidate-1"]))
         self.assert_error("review_resampling_forbidden", lambda: self.assign("slate", "first", identifier="slate-first-again"))
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
-        refreshed = self.observe("slate", "first", self.build_slate_output(["candidate-1", "candidate-2"]),
-                                 identifier="slate-first-refreshed")
+        refreshed = self.observe_refreshed_slate(["candidate-1", "candidate-2"], "slate-first-refreshed")
         records = self.read_records()
         original, assignment = (records["review_assignment"][identifier] for identifier in ("slate-first", "slate-first-refreshed"))
         self.assertEqual((assignment["context"], assignment["history_assignment_id"], assignment["slot_id"]),
-                         ({"prior_assignment_id": "slate-first"}, "slate-first", original["slot_id"]))
+                         ({"session_refresh": {"assignment_id": "slate-first"}}, None, original["slot_id"]))
         packet = json.loads(self.artifacts.read(assignment["packet"]))
         previous = json.loads(self.artifacts.read(original["packet"]))
         self.assertEqual([candidate["id"] for candidate in packet["candidates"]], ["candidate-1", "candidate-2"])
@@ -574,6 +683,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assert_error("review_resampling_forbidden", lambda: self.assign("slate", "first", identifier="slate-first-third"))
 
     def test_slate_requires_version_two_bars_and_refreshes_version_one_bars(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         original = protocol.canonical_prompt
 
         def previous_prompt(role, **options):
@@ -610,7 +723,11 @@ class ProblemSlateTests(ProblemDeliveryCase):
         packet = json.loads(self.artifacts.read(result["packet"]))
         self.assertEqual((result["history_assignment_id"], sorted(packet["bar_ids"])), ("bar-first-v2", bar_review_ids))
 
-    def test_changed_bars_refresh_the_slate_reviewer_in_its_session(self):
+    def test_changed_bars_refresh_the_slate_reviewer_as_a_new_chain_in_its_slot(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         original = protocol.canonical_prompt
 
         def previous_prompt(role, **options):
@@ -627,20 +744,22 @@ class ProblemSlateTests(ProblemDeliveryCase):
         bar_review_ids = ["review-bar-first-v2", "review-bar-second-v2"]
         self.assert_error("problem_slate_review_unverified",
                           lambda: self.record_slate(bar_review_ids=bar_review_ids, review_ids=[stranded["id"]]))
-        output = self.build_slate_output(["candidate-1"])
-        output["value"]["bar_ids"] = bar_review_ids
-        refreshed = self.observe("slate", "first", output, identifier="slate-first-refreshed")
+        refreshed = self.observe_refreshed_slate(["candidate-1"], "slate-first-refreshed", bar_ids=bar_review_ids)
         records = self.read_records()
         assignment = records["review_assignment"]["slate-first-refreshed"]
         packet = json.loads(self.artifacts.read(assignment["packet"]))
         self.assertEqual((assignment["context"], sorted(packet["bar_ids"])),
-                         ({"prior_assignment_id": "slate-first"}, bar_review_ids))
+                         ({"session_refresh": {"assignment_id": "slate-first"}}, bar_review_ids))
         self.assertEqual((sorted(packet["problem_refresh"]["previous_bar_ids"]), packet["problem_refresh"]["bar_ids"]),
                          (["review-bar-first", "review-bar-second"], packet["bar_ids"]))
         self.assertEqual(self.record_slate(bar_review_ids=bar_review_ids, review_ids=[refreshed["id"]])["review_ids"],
                          [refreshed["id"]])
 
     def test_slate_objections_name_candidates_of_the_packet(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
         self.observe_bars()
@@ -657,6 +776,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertIn('"candidate_ids": []', schema)
 
     def test_a_bar_refresh_keeps_an_applicable_slate_objection(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         original = protocol.canonical_prompt
 
         def previous_prompt(role, **options):
@@ -681,6 +804,10 @@ class ProblemSlateTests(ProblemDeliveryCase):
         self.assertEqual(sorted(packet["bar_ids"]), ["review-bar-first-v2", "review-bar-second-v2"])
 
     def test_a_slate_review_recorded_before_candidate_binding_is_ignored(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.observe_bars()
         output = self.build_slate_output(["candidate-1"])
@@ -704,11 +831,15 @@ class ProblemSlateTests(ProblemDeliveryCase):
                 self.assertEqual(problem_candidates.collect_bound_slate_reviews(changed, self.artifacts), [])
 
     def test_a_stale_slate_counts_as_no_slate_for_next_and_the_milestone(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.record_candidate()
         self.observe_bars()
         self.record_slate(selected=[], rejected=[{"candidate_id": "candidate-1", "reason": "A settled case."}],
                           reason="No candidate reaches potential level 2.")
-        self.assertEqual(status_report(self.store)["next"]["code"], "problem_no_post")
+        self.assertEqual(status_report(self.store)["next"]["code"], "problem_search_step_required")
         self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
         report = status_report(self.store)
         self.assertEqual((report["milestone"], report["next"]["code"], report["slate_id"]),
@@ -723,6 +854,13 @@ class ProblemSlateTests(ProblemDeliveryCase):
 
 
 class ProblemSlateCurrencyTests(ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_gate_reports_slate_stale_after_a_new_or_superseded_candidate(self):
         self.prepare_ready()
         self.record_post_decision()
@@ -752,6 +890,12 @@ class ProblemSlateCurrencyTests(ProblemDeliveryCase):
 
 class ProblemResultCalibrationTests(ProblemDeliveryCase):
     """A result reviewer assesses calibrated bars only after they reach it."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     version_two_bar_ids = ["review-bar-first-v2", "review-bar-second-v2"]
 

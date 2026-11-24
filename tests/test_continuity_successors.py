@@ -13,6 +13,13 @@ import continuity_stage3_fixtures as stage3
 
 
 class SuccessorJourneyTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import openness_reading_v7
+        released = patch.object(openness_reading_v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare(self, cls):
         case = cls()
         self.addCleanup(case.doCleanups)

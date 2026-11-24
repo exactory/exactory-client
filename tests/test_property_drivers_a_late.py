@@ -1,5 +1,6 @@
 """Drive late records past the stored reserve in an adjudicator series."""
 
+import json
 import math
 
 import property_stub_a as stub
@@ -78,8 +79,11 @@ class LateAdjudicatorProperties(fixtures.RoleProperties):
         stub.invoke_prompt(self, case, assignment, stub.request_archived_quote)
         final = self.continue_series(case, assignment)
         packet = protocol._read_json(case.artifacts, final['packet'])
+        requested = next(json.loads(row['output']['summary'])[0] for row in conditioned
+                         if row['output'].get('summary', '').startswith('['))
         card_row, quote = packet['review_parts_requests']
-        card = next(row for row in state['cards'] if row['id'] == card_row['unit'])
+        card = next(row for row in state['cards'] if row['id'] == requested)
+        self.assertEqual(json.loads(card_row['text']), card['output'])
         self.assertEqual(card['output']['bearing'][0]['relation'], 'contradicts')
         self.assertEqual(quote['text'], card['statements'][0]['text'])
         self.assertNotIn(card['id'], state['entries'])

@@ -284,7 +284,7 @@ def require_current_slot(records, assignment):
             raise ResearchError('review_assignment_superseded', 'Continue the current assignment in this fixed slot; a replaced invocation cannot be retried')
 
 
-def _exposure_lineage(records, assignment):
+def _exposure_lineage(records, assignment, *, allow_empty_history=False):
     """Actual prior scientific context can cross phases without merging slots."""
     ordered, visited, active = [], set(), set()
 
@@ -295,7 +295,10 @@ def _exposure_lineage(records, assignment):
         if identifier in visited:
             return
         active.add(identifier)
-        parents = [find_scientific_predecessor(current), current.get('history_assignment_id'),
+        history = current.get('history_assignment_id')
+        if allow_empty_history and history == '':
+            history = None
+        parents = [find_scientific_predecessor(current), history,
                    current.get('context', {}).get('output_refusal', {}).get('assignment_id')]
         for parent in dict.fromkeys(value for value in parents if value is not None):
             visit(_assignment(records, parent))
@@ -494,6 +497,40 @@ def _has_recorded_exhaustion_repair(records, artifacts, predecessor, exhaustion)
     return False
 
 
+def find_repair_scope(records, chain):
+    """Find the assignments and staged epochs exposed to the predecessor."""
+    identifiers = {item['id'] for item in chain}
+    epochs = {item.get('staged_review', {}).get('epoch_id') for item in chain} - {None}
+    if epochs:
+        identifiers.update(item['id'] for item in records.get('review_assignment', {}).values()
+                           if item.get('staged_review', {}).get('epoch_id') in epochs)
+    return identifiers, epochs
+
+
+def find_repair_cause(records, artifacts, predecessor, *, exhaustion=None, events=None, state=None):
+    """Return the citable events and probe boundary, or None when a repair needs a new cause event.
+
+    Exhaustion, when supplied, is the binding already checked by assignment admission.
+    """
+    from .review_protocol import assignment_state, retired_routes
+
+    if events is None:
+        identifiers, _ = find_repair_scope(records, _exposure_lineage(records, predecessor))
+        events = cause_events(records, identifiers)
+    if exhaustion is not None:
+        return dict(events=events, after_revision=_find_exhaustion_boundary(records, exhaustion, events))
+    if not events:
+        return None
+    if state is None:
+        state = assignment_state(records, artifacts, predecessor['id'])
+    dependency_codes = {'review_source_parent_unverified', 'review_context_repair_stale'}
+    if (state['context_status'] == 'contaminated' or any(event['kind'] == 'contamination' for event in events)
+            or any(item['code'] in dependency_codes for item in state['obligations'])
+            or predecessor['route_id'] in retired_routes(records)):
+        return dict(events=events, after_revision=events[-1]['recorded_revision'])
+    return None
+
+
 def prepare_repair(records, artifacts, assignment_payload):
     """Validate a prospective repair without altering the original record."""
     from .review_protocol import assignment_state, route_state
@@ -535,10 +572,7 @@ def prepare_repair(records, artifacts, assignment_payload):
             or normalized_text(predecessor['author_id']) != normalized_text(assignment_payload['author_id'])):
         raise ResearchError('review_context_repair_mismatch', 'Reassess the exact phase, dossier and author boundary')
     chain = _exposure_lineage(records, predecessor)
-    identifiers = {item['id'] for item in chain}
-    epochs = {item.get('staged_review', {}).get('epoch_id') for item in chain} - {None}
-    identifiers.update(item['id'] for item in records.get('review_assignment', {}).values()
-                       if item.get('staged_review', {}).get('epoch_id') in epochs)
+    identifiers, epochs = find_repair_scope(records, chain)
     if (any(item['assignment_id'] in identifiers and item['id'] not in records.get('review_attempt', {})
             for item in records.get('review_invocation', {}).values())
             or any(item.get('epoch_id') in epochs and item.get('state') not in ('released', 'terminated')
@@ -554,20 +588,15 @@ def prepare_repair(records, artifacts, assignment_payload):
         _raise_binding_mismatch(repair, events)
     if {digest(item) for item in repair['evidence']} != {digest(item) for event in events for item in event['evidence']}:
         _raise_binding_mismatch(repair, events)
-    from .review_protocol import is_dead_assignment, retired_routes
-    retired = retired_routes(records)
+    from .review_protocol import is_dead_assignment
     state = assignment_state(records, artifacts, predecessor['id'])
-    dependency_codes = {'review_source_parent_unverified', 'review_context_repair_stale'}
-    dependency_lost = any(item['code'] in dependency_codes for item in state['obligations'])
-    if (exhaustion is None and state['context_status'] != 'contaminated' and not any(event['kind'] == 'contamination' for event in events) and not dependency_lost
-            and predecessor['route_id'] not in retired):
+    cause = find_repair_cause(records, artifacts, predecessor, exhaustion=exhaustion, events=events, state=state)
+    if cause is None:
         raise ResearchError('review_context_repair_mismatch', 'Repair an actual contaminated or retired reviewer context')
     proof = route_state(records, artifacts, assignment_payload['route_id'])
     probe = records.get('review_route_probe', {}).get(repair['probe_id'])
-    last_bound_revision = (_find_exhaustion_boundary(records, exhaustion, events) if exhaustion is not None
-                           else max(event['recorded_revision'] for event in events))
     if (proof['context_status'] != 'verified_for_route' or proof['probe_id'] != repair['probe_id']
-            or probe is None or probe['recorded_revision'] <= last_bound_revision):
+            or probe is None or probe['recorded_revision'] <= cause['after_revision']):
         raise ResearchError('review_context_repair_unverified', EXHAUSTION_PROBE_MSG if exhaustion is not None
                             else 'A current observed route probe after contamination must precede reassessment')
     original_slot = slot_id(records, predecessor)
@@ -646,22 +675,25 @@ def collect_scientific_history(records, artifacts, chain, roles, *, exhausted_po
         if ancestor['id'] in exhausted_position:
             scientific_output = None
         packet = source_delivery_packet(records, artifacts, ancestor)
-        from . import review_problem_parts, review_parts
+        from . import review_problem_parts, review_parts, review_parts_v3
         intermediate_output = None
+        parts_binding = packet.get(review_parts.KEY, {})
+        observed = scientific_output or {}
         if ancestor.get('session_chain'):
             from .review_session_v4 import find_session_form
             form = find_session_form(packet)
-            if form in ('request', 'page', 'combine'):
-                intermediate_output, scientific_output = scientific_output, None
-            elif form == 'closing' and scientific_output is not None:
-                # A final in pages is recorded as the review that its closing page composes.
-                from .review_composite import read_final_output
-                scientific_output = read_final_output(records, artifacts, ancestor)[0]
-        if (review_problem_parts.find_stage(packet) == 'part'
-                or review_parts.find_kind(packet) is not None
-                and (review_parts.find_kind(packet) != 'final'
-                     or (scientific_output or {}).get('kind') == 'requests')):
+        else:
+            form = parts_binding.get('final_form')
+        parts_kind = review_parts.find_kind(packet)
+        if (form in ('request', 'page', 'combine') or review_problem_parts.find_stage(packet) == 'part'
+                or parts_kind is not None
+                and (parts_kind != 'final' or observed.get('kind') == 'requests'
+                     or review_parts_v3.is_final_material_answer(packet, observed))):
             intermediate_output, scientific_output = scientific_output, None
+        elif form == 'closing' and scientific_output is not None:
+            # A final in pages is recorded as the review that its closing page composes.
+            from .review_composite import read_final_output
+            scientific_output = read_final_output(records, artifacts, ancestor)[0]
         if ancestor.get('staged_review', {}).get('kind') == 'task':
             intermediate_output, scientific_output = prior_state.get('raw_output'), None
         # Selection of a later head does not invalidate the exact earlier scientific history.
@@ -670,6 +702,10 @@ def collect_scientific_history(records, artifacts, chain, roles, *, exhausted_po
         if scientific_output is None:
             allowed.update(('review_output_pending', 'review_output_refused', 'review_task_pending',
                             'assessment_incomplete', 'review_source_coverage_pending', 'review_composition_pending'))
+            if ancestor.get('session_chain'):
+                # A turn of the rules v4 capped at its floor holds no scientific history; the decision of its
+                # capacity recovery moves the chain to another route through this repair.
+                allowed.add('review_output_over_cap')
         if any(item['code'] not in allowed for item in prior_state['obligations']):
             raise ResearchError('review_context_repair_unverified', 'Preserve only the exact observed scientific history with verified invocation provenance')
         from .bar_sources import pending
@@ -918,4 +954,5 @@ def validate_reassessment(records, artifacts, assignment, observed_output, *, re
         if finding['disposition'] == 'confirmed' and not _is_unchanged(originals[finding['review_id']], content, identities):
             raise ResearchError('review_reassessment_mismatch', 'A changed scientific finding cannot be labeled confirmed')
     if seen != set(originals):
-        raise ResearchError('review_reassessment_incomplete', 'Address every inherited final review')
+        raise ResearchError('review_reassessment_incomplete', 'Address every inherited final review',
+                            dict(missing_ids=sorted(set(originals) - seen)))

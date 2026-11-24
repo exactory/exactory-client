@@ -122,7 +122,7 @@
       "coverage": "constructed",
       "evidence": {
         "tests": [
-          "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+          "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot",
           "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted",
           "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
           "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
@@ -153,7 +153,7 @@
         {
           "code": "review_route_capacity_below_floor",
           "tests": [
-            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot",
             "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
           ]
         },
@@ -790,7 +790,7 @@
           "test_review_capacity_closure.CapacityEvidenceTests.test_two_endpoints_share_the_profile_class_but_no_input_capacity",
           "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime",
           "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review",
-          "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+          "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot",
           "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
         ],
         "reports": []
@@ -806,7 +806,7 @@
             "test_review_capacity_closure.CapacityEvidenceTests.test_two_endpoints_share_the_profile_class_but_no_input_capacity",
             "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime",
             "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review",
-            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot",
             "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
           ]
         }
@@ -846,7 +846,7 @@
         "tests": [
           "test_review_binary_capacity.BinaryCapacityTests.test_individually_valid_attachments_pass_the_combined_capacity",
           "test_review_uncovered_stop.UncoveredReviewTests.test_pdf_attachment_stops_and_text_route_completes_same_review",
-          "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+          "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot",
           "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
         ],
         "reports": []
@@ -860,7 +860,7 @@
           "tests": [
             "test_review_binary_capacity.BinaryCapacityTests.test_individually_valid_attachments_pass_the_combined_capacity",
             "test_review_uncovered_stop.UncoveredReviewTests.test_pdf_attachment_stops_and_text_route_completes_same_review",
-            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot",
             "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
           ],
           "reasons": [
@@ -1509,7 +1509,7 @@
       "coverage": "stop_before_call",
       "evidence": {
         "tests": [
-          "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+          "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot",
           "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
         ],
         "reports": []
@@ -1528,7 +1528,7 @@
         {
           "code": "review_route_capacity_below_floor",
           "tests": [
-            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot",
             "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
           ]
         }
@@ -2074,18 +2074,19 @@
           "test_route_capacity_properties.ReadingCapacityCommandTests.test_final_pages_five_and_twenty_thousand_targets_stop_both_admissions_then_execute_smaller_answer",
           "test_openness_final_pages.FinalPagesCommandTests.test_a5_q7_nine_targets_record_one_authenticated_composite",
           "test_review_parts_v3_pages.PagedSeriesTests.test_a5_q7_two_hundred_material_objections_record_a_composite",
-          "test_review_parts_v3_pages.PagedSeriesTests.test_q7_five_thousand_targets_check_admits_and_forecasts_pages"
+          "test_review_parts_v3_pages.PagedSeriesTests.test_q7_eight_hundred_targets_check_admits_and_forecasts_pages"
         ],
         "reports": []
       },
       "tests": [
         "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity",
         "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_nine_targets_v7_refuses_v6_exports_reads_again_and_records",
-        "test_route_capacity_properties.ReadingCapacityCommandTests.test_final_pages_five_and_twenty_thousand_targets_stop_both_admissions_then_execute_smaller_answer"
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_final_pages_five_and_twenty_thousand_targets_stop_both_admissions_then_execute_smaller_answer",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_q7_five_thousand_targets_start_the_series_of_the_next_protocol"
       ],
       "required_stops": [],
       "verification_required": false,
-      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests. From 0.93.0 a series of the parts protocol v3 holds a table of the targets that fits the frame of a turn; a review with a larger table starts in the parts protocol v2."
     },
     {
       "id": "Q8",
@@ -3184,7 +3185,7 @@
       ],
       "tests": [
         "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted",
-        "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot"
+        "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot"
       ],
       "presence": {
         "module": "research_harness/review_route_capacity.py",
@@ -3195,7 +3196,7 @@
         "A1": {
           "tests": [
             "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted",
-            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot"
+            "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot"
           ],
           "stops": [
             "review_route_capacity_below_floor"
@@ -3204,7 +3205,7 @@
         "A10a": {
           "tests": [
             "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted",
-            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot"
+            "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot"
           ],
           "stops": [
             "review_route_capacity_below_floor"
@@ -3213,7 +3214,7 @@
         "A10b": {
           "tests": [
             "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted",
-            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot"
+            "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot"
           ],
           "stops": [
             "review_route_capacity_below_floor"
@@ -3222,7 +3223,7 @@
         "A23": {
           "tests": [
             "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted",
-            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot"
+            "test_review_uncovered_stop.UncoveredReviewTests.test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot"
           ],
           "stops": [
             "review_route_capacity_below_floor"
@@ -5079,7 +5080,10 @@
         "tests": [
           "test_openness_reading_math_v2.MathV2ChainTests.test_a25_request_final_delivers_native_evidence_with_its_binding_and_records_the_review",
           "test_openness_reading_math_v2.MathV2ChainTests.test_a25_forty_neighbours_reach_a_recorded_composite_at_the_final_floor",
-          "test_openness_reading_math_v2.MathV2CarriedTests.test_a25_stopped_v1_turns_are_carried_without_repeating_units_to_a_recorded_review"
+          "test_openness_reading_math_v2.MathV2CarriedTests.test_a25_stopped_v1_turns_are_carried_without_repeating_units_to_a_recorded_review",
+          "test_property_drivers_b_math.MathFinalProperties.test_math_final_admission_at_the_one_request_boundary",
+          "test_property_drivers_b_math.MathFinalProperties.test_math_carried_note_preserves_approval_evidence",
+          "test_property_drivers_b_math.MathFinalEvidenceTests.test_math_final_lists_citable_units_and_the_search_date"
         ]
       },
       {
@@ -5137,7 +5141,8 @@
         "subject": "*",
         "property": "late_units",
         "tests": [
-          "test_property_drivers_b.MathPropertyDrivers.test_math_late_units_and_denser_ratio"
+          "test_property_drivers_b.MathPropertyDrivers.test_math_late_units_and_denser_ratio",
+          "test_property_drivers_b_math.MathFinalProperties.test_math_carried_note_preserves_approval_evidence"
         ]
       },
       {
@@ -5363,6 +5368,23 @@
         "tests": [
           "test_property_drivers_a_parts_roles.StrategicProperties.test_study_readiness"
         ]
+      },
+      {
+        "family": "v7-pages",
+        "subject": "*",
+        "property": "every_allowance",
+        "tests": [
+          "test_property_drivers_b_v7.PendingV7Allowance.test_v7_pages_allowances"
+        ]
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "k6_three_allowances",
+        "tests": [
+          "test_property_drivers_b_math.MathFinalProperties.test_math_k6_three_allowances",
+          "test_property_drivers_b_math.MathFinalProperties.test_math_carried_note_preserves_approval_evidence"
+        ]
       }
     ],
     "gaps": [
@@ -5383,18 +5405,6 @@
         "subject": "*",
         "property": "k6_three_allowances",
         "reason": "The frame and optional source delivery shapes still need a complete segmented drive."
-      },
-      {
-        "family": "math-v2",
-        "subject": "*",
-        "property": "k6_three_allowances",
-        "reason": "F-B2 and F-B3: the reading prompt omits the list-page request form, and a carried affected note leaves the approval without earlier evidence citations. Both pending Math K6 tests reproduce the gaps."
-      },
-      {
-        "family": "v7-pages",
-        "subject": "*",
-        "property": "every_allowance",
-        "reason": "F-B1: the closing turn advertises more answer room than its composition validator accepts. PendingV7Allowance.test_v7_pages_allowances reproduces the refusal."
       },
       {
         "family": "parts-v3",

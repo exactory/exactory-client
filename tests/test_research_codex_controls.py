@@ -2,8 +2,11 @@
 
 import base64
 from contextlib import ExitStack
+import json
+from pathlib import Path
 import struct
 import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 import zlib
@@ -193,6 +196,68 @@ class CodexControlTests(unittest.TestCase):
                 self.assertTrue(adapter.verify_context(route, request, response))
                 response['context_evidence'] = dict(evidence, runtime=installed)
                 self.assertFalse(adapter.verify_context(route, request, response))
+
+    def test_each_command_passes_the_effort_of_its_route_once(self):
+        # The output names a thread, so the visual sender also inspects its rollout.
+        result = subprocess.CompletedProcess(['/fixture/codex'], 0, json.dumps(
+            {'type': 'thread.started', 'thread_id': 'thread-fixture'}) + '\n', '')
+        for adapter in ADAPTERS:
+            for effort, expected in (('xhigh', 'model_reasoning_effort="xhigh"'), (None, 'model_reasoning_effort="high"')):
+                with self.subTest(adapter=adapter.ADAPTER, effort=effort), \
+                        patch.object(codex, '_rollout', return_value=[]), \
+                        patch.object(framed, '_rollout', return_value=[]), \
+                        patch.object(visual, 'inspect_rollout', wraps=visual.inspect_rollout) as inspection:
+                    route = self.build_route(adapter)
+                    if effort is not None:
+                        route['configuration']['effort'] = effort
+                    _, invocation = self.run_request(adapter, self.build_request(adapter), result, route)
+                    command = invocation.args[0]
+                    overrides = [command[index + 1] for index, value in enumerate(command) if value == '-c']
+                    self.assertEqual([value for value in overrides if value.startswith('model_reasoning_effort')],
+                                     [expected])
+                    if adapter is visual:
+                        self.assertEqual(inspection.call_args.kwargs['effort'], effort or 'high')
+
+
+class CodexRouteConfigurationTests(unittest.TestCase):
+    def build_route(self, adapter, **configuration):
+        return {'adapter': adapter.ADAPTER, 'endpoint': 'codex://local', 'model': 'fixture-model',
+                'configuration': dict({'max_output_tokens': 100, 'timeout_seconds': 5}, **configuration)}
+
+    def test_a_route_takes_an_optional_effort_and_a_timeout_of_at_most_3600_seconds(self):
+        for adapter in ADAPTERS:
+            accepted = [{}, {'timeout_seconds': 3600}] + [{'effort': effort} for effort in codex.EFFORTS]
+            for configuration in accepted:
+                with self.subTest(adapter=adapter.ADAPTER, configuration=configuration):
+                    adapter.validate_route(self.build_route(adapter, **configuration))
+            for configuration in ({'effort': 'ultra'}, {'effort': ['xhigh']}, {'effort': None},
+                                  {'reasoning': 'high'}, {'timeout_seconds': 3601}):
+                with self.subTest(adapter=adapter.ADAPTER, configuration=configuration):
+                    with self.assertRaises(ResearchError) as refused:
+                        adapter.validate_route(self.build_route(adapter, **configuration))
+                    self.assertEqual(refused.exception.code, 'invalid_review_route')
+
+    def test_the_framed_runtime_digests_the_plain_transport_that_validates_it(self):
+        version = subprocess.CompletedProcess(['/fixture/codex', '--version'], 0, 'codex-cli 0.167.0\n', '')
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(codex.shutil, 'which', return_value='/fixture/codex'), \
+                patch.object(framed, '_run_owned', return_value=version):
+            installed = framed.runtime()['implementation_sha256']
+            changed = Path(directory) / 'review_codex_transport.py'
+            changed.write_bytes(Path(codex.__file__).read_bytes() + b'\n# A changed validation.\n')
+            with patch.object(codex, '__file__', str(changed)):
+                self.assertNotEqual(framed.runtime()['implementation_sha256'], installed)
+
+    def test_the_runtime_controls_hold_no_effort_setting(self):
+        version = subprocess.CompletedProcess(['/fixture/codex', '--version'], 0, 'codex-cli 0.167.0\n', '')
+        for adapter in ADAPTERS:
+            with self.subTest(adapter=adapter.ADAPTER), \
+                    patch.object(codex.shutil, 'which', return_value='/fixture/codex'), \
+                    patch.object(codex, '_run_owned', return_value=version), \
+                    patch.object(framed, '_run_owned', return_value=version):
+                controls = adapter.runtime()['controls']
+                self.assertTrue(controls)
+                self.assertEqual([value for value in controls if value.startswith('model_reasoning_effort')], [])
 
 
 if __name__ == '__main__':

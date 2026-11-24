@@ -27,8 +27,8 @@ class ProbeClock(datetime):
 class SessionTurnsTests(unittest.TestCase):
     def setUp(self):
         self.case = problem_fixtures.ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
         with patch.object(protocol, 'datetime', ProbeClock):
             record_codex_route(self.case, model='gpt-6-astra', output_tokens=128000)
@@ -572,6 +572,7 @@ class SessionTurnsTests(unittest.TestCase):
     def test_dossier_result_records_native_support_from_frozen_assessor(self):
         import test_research_strategic_source_requests as strategic
         case = strategic.ResultSourceRequestTests()
+        self.addCleanup(case.doCleanups)
         record_route = protocol.record_route
         def register_session_route(store, payload, **kwargs):
             # The legacy fixture's 1,500 tokens cannot hold the v4 final floor.
@@ -580,7 +581,6 @@ class SessionTurnsTests(unittest.TestCase):
         with patch.object(protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,)), patch.object(
                 protocol, 'record_route', side_effect=register_session_route):
             case.setUp()
-        self.addCleanup(case.doCleanups)
         self.install_measured_profile()
         current = case.assignment('dossier-request')
         self.assertIn('session_chain', current)

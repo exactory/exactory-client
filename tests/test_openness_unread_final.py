@@ -714,6 +714,7 @@ class IncidentUnreadTests(UnreadFinalSupport):
     completed_prefix = 6
 
     def test_g1_k7_six_completed_turns_survive_refusal_at_turn_seven_and_next_export_reads_one_text(self):
+        turn_fixtures.stub_fit_for_full_v7_reading_level(self)
         _, final, packet = self.reach_unread()
         result = self.record_final(final, packet)
         self.assertEqual(len(result['reading_turns']), 7)
@@ -1002,7 +1003,9 @@ class UnreadFrameTests(unittest.TestCase):
             causes={cause:dict(rows=largest, characters=largest) for cause in core['causes']})
         core['artifact']['size'] = largest
         self.assertEqual(core['rows'], [])
-        charge = capacity.measure_capacity_value(route, dict(unread=core)) + len(paragraphs.UNREAD_FINAL_PROMPT)
+        # A closing turn carries the unread-closing paragraph in the place of the unread-final paragraph.
+        paragraph = max(len(paragraphs.UNREAD_FINAL_PROMPT), len(paragraphs.UNREAD_CLOSING_PROMPT))
+        charge = capacity.measure_capacity_value(route, dict(unread=core)) + paragraph
         self.assertLessEqual(charge, v7.UNREAD_CORE_CHARACTERS)
 
     def test_u_t5_unread_frame_preserves_levels_and_allocation_on_both_fixtures(self):

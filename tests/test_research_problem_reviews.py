@@ -188,6 +188,10 @@ class ProblemReviewTests(LiteratureCase):
 
     def test_bar_citations_require_a_current_fulltext_reading(self):
         """R61: an abstract is readable context; only the full-text passage offers output evidence."""
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.supporting = self.artifacts.put(b"An abstract-only field standard.", "text/plain")
         self.prepare_review_route()
         abstract_context = self.deliver_supporting("first")
@@ -344,6 +348,10 @@ class ProblemReviewTests(LiteratureCase):
                                                   "review_attempt": records["review_attempt"]}, "replacement", "result"))
 
     def test_version_one_problem_assignment_stays_verified_and_gate_requires_version_two_result(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         original = protocol.canonical_prompt
         hashes = {'bar': '818b715d1acdfcd10db45e60d70ce6ef5f864dcdcbd82be9312125cf0fe42fca',
                   'result': '31a44bac73484c1aaf62a02199623a147e71a57902ee6d50d61973166a28364b',
@@ -393,6 +401,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertIn("source_deliveries", packet)
 
     def test_result_review_without_rubric_is_refused(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_bar_reviews()
         output = self.build_review_output('result')
         del output['value']['rubric']
@@ -401,6 +413,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assert_error('invalid_value_review', lambda: self.mutate(decisions.record_value_review, payload))
 
     def test_result_review_rubric_evidence_must_cover_every_item(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_bar_reviews()
         output = self.build_review_output('result')
         payload = self.observe('result', 'first', output, record=False)
@@ -425,6 +441,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assert_error('invalid_value_review', lambda: self.mutate(decisions.record_value_review, second))
 
     def test_rubric_review_templates_follow_the_current_problem_protocol(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_result_reviews()
         records = self.read_records()
         review = records['value_review']['review-result-first']
@@ -459,6 +479,10 @@ class ProblemReviewTests(LiteratureCase):
         return saved, json.loads(self.artifacts.read(assignment['packet']))
 
     def test_below_threshold_grade_blocks_until_adjudicated(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.prepare_below_threshold_reviews()
         pending = decisions.assess_problem_reviews(self.read_records(), self.artifacts)
         below = [row for row in pending['obligations'] if row['code'] == 'problem_rubric_below_threshold']
@@ -470,6 +494,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertTrue(state['ready'], state['obligations'])
 
     def test_rubric_adjudication_under_old_evidence_does_not_resolve(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.prepare_below_threshold_reviews()
         self.observe_rubric_adjudication()
         self.expected['value']['motivation'][0]['text'] = 'Changed mathematical payoff.'
@@ -477,6 +505,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertIn('problem_rubric_below_threshold', {row['code'] for row in state['obligations']})
 
     def test_adjudicator_packet_carries_the_rubric_grades_for_a_rubric_objection(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.prepare_below_threshold_reviews()
         saved, packet = self.observe_rubric_adjudication()
         self.assertEqual(packet['objection']['id'], 'rubric:review-result-first:priority')
@@ -493,6 +525,10 @@ class ProblemReviewTests(LiteratureCase):
             'kind': 'record', 'record_kind': 'value_review', 'id': identifier, 'digest': digest(saved)})
 
     def test_adjudicator_packet_carries_both_bar_calibrations_and_the_rubric_definition(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.prepare_below_threshold_reviews()
         _, packet = self.observe_rubric_adjudication()
         records = self.read_records()
@@ -503,9 +539,17 @@ class ProblemReviewTests(LiteratureCase):
                                                        'threshold': anchor['threshold']})
 
     def test_rubric_adjudication_without_the_bar_calibrations_does_not_clear_the_shortfall(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.assert_incomplete_rubric_adjudication_keeps_the_shortfall('bar_calibrations')
 
     def test_rubric_adjudication_without_the_rubric_definition_does_not_clear_the_shortfall(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.assert_incomplete_rubric_adjudication_keeps_the_shortfall('rubric_definition')
 
     def assert_incomplete_rubric_adjudication_keeps_the_shortfall(self, key):
@@ -548,6 +592,10 @@ class ProblemReviewTests(LiteratureCase):
                                                         assignment_id='bar-replaced'))
 
     def test_adjudicator_packet_keeps_the_original_bars_after_a_bar_repair(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.prepare_below_threshold_reviews()
         self.replace_first_bar()
         _, packet = self.observe_rubric_adjudication()
@@ -562,6 +610,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertNotIn('problem_rubric_below_threshold', {row['code'] for row in pending})
 
     def test_rubric_adjudication_against_a_replaced_bar_does_not_clear_the_shortfall(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.prepare_below_threshold_reviews()
         self.replace_first_bar()
         real = protocol.add_focused_adjudication
@@ -586,6 +638,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertEqual([row['shortfalls'] for row in below], [[{'item': 'priority', 'required': '>= 2', 'graded': 1}]])
 
     def test_rubric_adjudication_cannot_waive_an_assurance_or_another_item(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.prepare_below_threshold_reviews()
         self.observe_rubric_adjudication()
         records = self.read_records()
@@ -597,6 +653,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertEqual([row['item'] for row in below['shortfalls']], ['calibration'])
 
     def test_rubric_significance_objection_claim_uses_sorted_json(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_bar_reviews()
         output = self.build_review_output('result')
         output['value']['rubric']['significance'] = {'B2': 1, 'B1': 1}
@@ -610,6 +670,10 @@ class ProblemReviewTests(LiteratureCase):
             'significance graded {"B1": 1, "B2": 1} by first; required max(B1, B2) >= 2')
 
     def test_rubric_adjudication_requires_a_ready_not_upheld_finding_for_the_same_subject(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.prepare_below_threshold_reviews()
         self.observe_rubric_adjudication('upheld')
         records = self.read_records()
@@ -623,6 +687,10 @@ class ProblemReviewTests(LiteratureCase):
             ['problem_rubric_below_threshold'])
 
     def test_rubric_adjudication_for_another_subject_or_without_held_evidence_does_not_resolve(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.prepare_below_threshold_reviews()
         self.observe_rubric_adjudication()
         records = self.read_records()
@@ -637,6 +705,10 @@ class ProblemReviewTests(LiteratureCase):
             ['artifact_missing', 'problem_rubric_below_threshold'])
 
     def test_focused_rubric_objection_must_name_an_original_below_threshold_grade(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.prepare_below_threshold_reviews()
         for identifier in ('rubric:absent:priority', 'rubric:review-result-first:B1',
                            'rubric:review-result-second:priority'):
@@ -645,6 +717,10 @@ class ProblemReviewTests(LiteratureCase):
                     review_ids=['review-result-first', 'review-result-second'], objection_id=identifier))
 
     def test_both_observed_results_must_cover_the_assessment(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_result_reviews()
         evidence_digest = digest(self.expected)
         self.expected['assessment'] = {'id': 'new-assessment', 'grades': passing_grades(),
@@ -656,6 +732,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertTrue(all(row['missing'] == ['assessment'] for row in pending))
 
     def test_rubric_adjudication_refuses_a_pair_without_both_original_rubrics(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_bar_reviews()
         output = self.build_review_output('result')
         output['value']['rubric']['priority'] = 1
@@ -675,6 +755,10 @@ class ProblemReviewTests(LiteratureCase):
             objection_id='rubric:review-result-first:priority'))
 
     def test_rubric_id_cannot_replace_an_explicit_material_objection(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_bar_reviews()
         identifier = 'rubric:review-result-first:priority'
         output = self.build_review_output('result')
@@ -688,6 +772,10 @@ class ProblemReviewTests(LiteratureCase):
             review_ids=['review-result-first', 'review-result-second'], objection_id=identifier))
 
     def test_material_bar_objection_can_keep_a_rubric_shaped_id(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.supporting = self.artifacts.put(b'The field comparison needs an additional hypothesis.', 'text/plain')
         self.prepare_review_route()
         identifier = 'rubric:review-bar-first:priority'
@@ -718,6 +806,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertEqual(packet["subject"], {"kind": "problem", "statement_id": None})
 
     def test_result_requires_both_observed_bars(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.assert_error("review_bar_pending", lambda: protocol.build_packet(
             self.read_records(), self.artifacts, None, "result", "first"))
         self.supporting = self.artifacts.put(b"Field standard.", "text/plain")
@@ -727,6 +819,10 @@ class ProblemReviewTests(LiteratureCase):
             self.read_records(), self.artifacts, None, "result", "first"))
 
     def test_changed_bar_field_or_area_is_refused_for_result(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_bar_reviews()
         for key, changed in (("field", "A changed field"), ("area", "math.NT")):
             records = self.read_records()
@@ -734,6 +830,10 @@ class ProblemReviewTests(LiteratureCase):
             self.assert_error("review_bar_mismatch", lambda: protocol.build_packet(records, self.artifacts, None, "result", "first"))
 
     def test_problem_result_continues_its_own_bar_session(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_bar_reviews()
         self.assert_error("review_bar_continuity", lambda: self.assign("result", "third"))
         result = self.assign("result", "first")
@@ -749,6 +849,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assert_error("problem_author_unknown", lambda: self.assign("bar", "first", author="invented-author"))
 
     def test_result_packet_delivers_readings_outputs_validations_and_native_closure(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         output, validation = self.add_reading_and_computation()
         self.observe_bar_reviews()
         assignment = self.assign("result", "first")
@@ -762,6 +866,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertIn("original_claim", json.dumps(packet["problem_evidence"]["formal_checks"]))
 
     def test_exact_problem_assurance_set_is_required(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_bar_reviews()
         payload = self.observe("result", "first", self.build_review_output("result", decisions.ALL_CHECKS), record=False)
         self.assert_error("invalid_value_review", lambda: self.mutate(decisions.record_value_review, payload))
@@ -769,6 +877,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assert_error("invalid_value_review", lambda: self.mutate(decisions.record_value_review, payload))
 
     def test_problem_not_assessed_is_recorded_and_blocks_assurance(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_bar_reviews()
         output = self.build_review_output("result")
         output["value"]["assurances"][0]["status"] = "not_assessed"
@@ -778,6 +890,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertIn("problem_assurance_pending", {item["code"] for item in state["obligations"]})
 
     def test_current_observed_pair_covers_the_problem_evidence(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.add_reading_and_computation()
         self.observe_result_reviews()
         with patch.object(type(self.artifacts), "put", side_effect=AssertionError("read-only coverage")):
@@ -787,12 +903,20 @@ class ProblemReviewTests(LiteratureCase):
         self.assertEqual(set(state["bar_review_ids"]), {"review-bar-first", "review-bar-second"})
 
     def test_missing_pair_and_duplicate_reviewer_do_not_authorize_post(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_result_reviews()
         for identifiers in (["review-result-first"], ["review-result-first", "review-result-first"]):
             state = decisions.assess_problem_reviews(self.read_records(), self.artifacts, review_ids=identifiers)
             self.assertIn("problem_review_pair_required", {item["code"] for item in state["obligations"]})
 
     def test_structural_review_assessment_does_not_describe_unmet_evidence(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_result_reviews()
         claims = sys.modules["research_harness.problem_claims"]
         with patch.object(claims, "describe_problem_evidence", side_effect=AssertionError("unavailable claim evidence")):
@@ -801,6 +925,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertIsNone(state["problem_evidence_digest"])
 
     def test_unobserved_results_cannot_cover_problem_evidence(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_result_reviews()
         records = self.read_records()
         records["review_attempt"]["attempt-result-first"]["origin"] = "imported"
@@ -808,6 +936,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertIn("problem_evidence_unassessed", {item["code"] for item in state["obligations"]})
 
     def test_changed_claim_or_computation_invalidates_coverage(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.add_reading_and_computation()
         self.observe_result_reviews()
         self.expected["computations"][0]["assessment"]["interpretation"] = "Changed interpretation"
@@ -815,6 +947,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertIn("problem_evidence_unassessed", {item["code"] for item in state["obligations"]})
 
     def test_records_without_delivered_output_bytes_do_not_count_as_coverage(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         output, _ = self.add_reading_and_computation()
         original = protocol._evidence
         def omit_output(artifacts, value, **kwargs):
@@ -826,6 +962,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertIn("problem_evidence_unassessed", {item["code"] for item in state["obligations"]})
 
     def test_reading_digest_without_delivered_passages_does_not_count_as_coverage(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.add_reading_and_computation()
         original = protocol._evidence
         omitted = {passage["excerpt"]["sha256"] for passage in self.expected["passages"]}
@@ -838,6 +978,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertIn("problem_evidence_unassessed", {item["code"] for item in state["obligations"]})
 
     def test_source_request_continuation_preserves_the_problem_bar_boundary(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.add_reading_and_computation()
         version = self.expected["readings"][0]["version_id"]
         self.supporting = self.artifacts.put(b"A field standard.", "text/plain")
@@ -865,6 +1009,10 @@ class ProblemReviewTests(LiteratureCase):
         self.assertTrue(protocol.assignment_state(self.read_records(), self.artifacts, assignment["id"])["ready"])
 
     def test_new_statement_requires_new_result_reviews_and_preserves_field_bars(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.observe_result_reviews()
         revised = dict(self.statement, id="statement-2", statement="A changed exact statement")
         self.put("problem_statement", revised["id"], revised)
@@ -890,6 +1038,10 @@ class ProblemOpennessReviewTests(ProblemCase):
         return ProblemReviewTests.assign(self, role, reviewer, author, identifier, **context)
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.initialize_problem()
         self.put_selecting_slate()
@@ -1106,6 +1258,13 @@ class ProblemOpennessReviewTests(ProblemCase):
 
 
 class ProblemSeriesCitationTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_record_citation_from_a_part_is_delivered_but_an_unknown_record_is_not(self):
         self.oversized()
         parts, final = self.finish_parts()

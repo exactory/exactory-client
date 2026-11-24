@@ -383,6 +383,9 @@
         "research_harness/openness_reading.py:_verify_legacy_chain#2": [
           "content"
         ],
+        "research_harness/openness_reading.py:find_final_assignment#1": [
+          "record"
+        ],
         "research_harness/openness_reading.py:list_math_response_rows#1": [
           "record"
         ],
@@ -437,13 +440,16 @@
         ],
         "research_harness/review_search_delivery.py:verify_search_deliveries#1": [
           "content"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:require_review#1": [
+          "record"
         ]
       },
       "problem_author_unknown": {
         "research_harness/research_decisions.py:record_value_review.prepare#1": [
           "content"
         ],
-        "research_harness/review_protocol.py:record_assignment.prepare#1": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#1": [
           "form"
         ]
       },
@@ -472,13 +478,16 @@
         "research_harness/review_parts_native.py:read_prior_assignment#1": [
           "record"
         ],
-        "research_harness/review_protocol.py:invoke_assignment.start#1": [
+        "research_harness/review_protocol.py:prepare_assignment_call#1": [
           "record"
         ],
         "research_harness/review_refusal_replacement.py:prepare_replacement#1": [
           "record"
         ],
         "research_harness/review_refusal_replacement.py:require_selected_output#1": [
+          "record"
+        ],
+        "research_harness/review_session_v4.py:prepare_capacity_assignment#1": [
           "record"
         ]
       },
@@ -516,19 +525,22 @@
         ]
       },
       "review_evidence_undelivered": {
-        "research_harness/research_decisions.py:validate_review_contract#1": [
+        "research_harness/research_decisions.py:_validate_cited_evidence#1": [
+          "form"
+        ],
+        "research_harness/review_composition.py:_validate_packet_evidence#1": [
           "form"
         ],
         "research_harness/review_context_repair.py:validate_reassessment#1": [
           "form"
         ],
+        "research_harness/review_parts_study.py:_validate_verification_evidence#1": [
+          "form"
+        ],
         "research_harness/review_parts_study.py:validate_study_references#1": [
           "form"
         ],
-        "research_harness/review_parts_study.py:validate_verification_final#1": [
-          "form"
-        ],
-        "research_harness/review_protocol.py:validate_adjudication_contract#1": [
+        "research_harness/review_protocol.py:_validate_adjudication_citations#1": [
           "form"
         ]
       },
@@ -554,13 +566,34 @@
         "research_harness/review_protocol.py:add_focused_adjudication#2": [
           "form"
         ],
-        "research_harness/review_protocol.py:record_assignment.prepare#1": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#1": [
           "form"
         ],
-        "research_harness/review_protocol.py:record_assignment.prepare#2": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#2": [
           "form"
         ],
-        "research_harness/review_protocol.py:record_assignment.prepare#3": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#3": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/admission.py:record_review#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/admission.py:record_review#2": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/adoption.py:record_allowance#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/computation.py:record_amendment#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/research.py:record_amendment#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/reviewer.py:require_review#1": [
+          "form"
+        ],
+        "skills/math-solver/harness/search_controller/strategy_refresh.py:record_assessment#1": [
           "form"
         ]
       },
@@ -579,10 +612,16 @@
         ],
         "research_harness/review_parts.py:prepare_plan#1": [
           "limit"
+        ],
+        "research_harness/review_parts_repair.py:prepare_packet#1": [
+          "limit"
         ]
       },
       "review_parts_frame_too_large": {
         "research_harness/review_parts.py:prepare_plan#1": [
+          "limit"
+        ],
+        "research_harness/review_parts_repair.py:prepare_packet#1": [
           "limit"
         ]
       },
@@ -603,6 +642,10 @@
           "form",
           "limit"
         ],
+        "research_harness/review_parts_repair.py:prepare_packet#1": [
+          "form",
+          "limit"
+        ],
         "research_harness/review_parts_v3.py:_describe_inventory_unit#1": [
           "limit"
         ],
@@ -614,16 +657,22 @@
         "research_harness/review_parts.py:plan_read#1": [
           "limit"
         ],
+        "research_harness/review_parts_repair.py:prepare_packet#1": [
+          "limit"
+        ],
         "research_harness/review_parts_v3.py:_select_check_work#1": [
+          "limit"
+        ],
+        "research_harness/review_parts_v3.py:build_final_packet#2": [
           "limit"
         ],
         "research_harness/review_parts_v3.py:plan_series_turn#1": [
           "limit"
         ],
-        "research_harness/review_parts_v3.py:plan_series_turn#2": [
+        "research_harness/review_parts_v3.py:build_final_packet#1": [
           "limit"
         ],
-        "research_harness/review_parts_v3.py:build_final_packet#1": [
+        "research_harness/review_parts_v3.py:prepare_series_final.finish_single#1": [
           "limit"
         ]
       },
@@ -660,13 +709,16 @@
         "research_harness/review_protocol.py:_source_parent#4": [
           "form"
         ],
-        "research_harness/review_protocol.py:record_assignment.prepare#1": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#1": [
           "form"
         ],
-        "research_harness/review_protocol.py:record_assignment.prepare#2": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#2": [
           "form"
         ],
-        "research_harness/review_protocol.py:record_assignment.prepare#3": [
+        "research_harness/review_protocol.py:_prepare_assignment.prepare#3": [
+          "form"
+        ],
+        "research_harness/review_session_v4.py:prepare_capacity_assignment#1": [
           "form"
         ],
         "research_harness/review_single_request.py:prepare_replacement#1": [
@@ -692,7 +744,7 @@
         "research_harness/review_protocol.py:_source_parent#1": [
           "record"
         ],
-        "research_harness/review_protocol.py:invoke_assignment.start#1": [
+        "research_harness/review_protocol.py:prepare_assignment_call#1": [
           "content",
           "record"
         ]
@@ -704,7 +756,7 @@
         "research_harness/cli.py:_review_run#1": [
           "record"
         ],
-        "research_harness/research_decisions.py:validate_review_contract#1": [
+        "research_harness/research_decisions.py:_read_contract_packets#1": [
           "record"
         ],
         "research_harness/review_protocol.py:_validate_staged_adjudication_scope#1": [
@@ -818,7 +870,7 @@
   "stored_state": {
     "members": {
       "review_route_changed": {
-        "research_harness/review_protocol.py:invoke_assignment.start#1": [
+        "research_harness/review_protocol.py:prepare_assignment_call#1": [
           "content"
         ]
       }

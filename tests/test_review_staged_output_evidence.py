@@ -1,5 +1,6 @@
 """Output renders evaluate staged currency against real retained problem evidence."""
 
+from unittest.mock import patch
 import copy
 import json
 from unittest import TestCase, mock
@@ -57,6 +58,13 @@ class StagedOutputCase:
 
 
 class StagedOutputEvidenceTests(StagedOutputCase, CitationMetadataCase, ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_staged_context_events_refuse_record_reference_dependencies(self):
         self.record_metadata()
         self.observe_bars()
@@ -112,6 +120,13 @@ class StagedOutputEvidenceTests(StagedOutputCase, CitationMetadataCase, ProblemD
 
 
 class StagedComputationOutputTests(StagedOutputCase, ProblemToolsCase, ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_render_with_search_computation_formal_check_and_native_result_matches_full_store(self):
         from research_harness import problem_attempt
         plan, observed = self.run_problem()

@@ -1,5 +1,6 @@
 """A recorded choice changes future source delivery while retaining exact earlier evidence."""
 
+from unittest.mock import patch
 import copy
 import hashlib
 import unittest
@@ -201,6 +202,10 @@ class MainCaptureSelectionTests(LiteratureCase):
 
 class MainCaptureChainTests(ExcerptSessionCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         StrategyCase.setUp(self)
         self.sequence = 0
         self.setup_dossier()
@@ -292,6 +297,13 @@ class MainCaptureChainTests(ExcerptSessionCase):
 
 
 class StoredCompleteCaptureTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_frozen_complete_source_manifest_authenticates_after_a_new_main_choice(self):
         from test_research_complete_source_continuation import NativeCompleteSourceTests
         from research_harness import review_source_complete as complete

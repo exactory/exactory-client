@@ -223,6 +223,13 @@ class CoverageReuseTests(LiteratureCase):
 
 
 class PostAssessmentReuseTests(ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_post_minimum_and_milestone_share_attempt_and_openness_assessments(self):
         self.prepare_ready()
         records = self.store.snapshot()["records"]

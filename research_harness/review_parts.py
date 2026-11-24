@@ -15,7 +15,7 @@ from .evidence import digest
 from .operations import fields
 
 PROTOCOL = 'exactory-review-parts-v2'
-NEW_SERIES_PROTOCOLS = (PROTOCOL,)
+NEW_SERIES_PROTOCOLS = ('exactory-review-parts-v3', PROTOCOL)
 KEY = 'review_parts'
 KINDS = ('read', 'combine', 'check', 'final')
 STATE_KEY = 'review_parts_state'
@@ -28,6 +28,23 @@ STATEMENT_CHARACTERS = 6000
 STATEMENTS_CHARACTERS = 40000
 
 
+# The refusals of the planner of a series that say that the route has no room for a turn of it.
+PLANNER_ROOM_CODES = ('review_parts_frame_too_large', 'review_parts_final_too_large',
+                      'review_parts_inventory_too_large', 'review_parts_no_progress')
+
+
+class UnfitOrdinaryPacket(ResearchError):
+    """The series planner refused after excluding the prospective ordinary packet."""
+
+
+def starts_refresh(value, packet):
+    """Identify the entry by its immediate predecessor, including an explicit session refresh."""
+    context = value.get('context', {})
+    parent = context.get('prior_assignment_id') or context.get('session_refresh', {}).get('assignment_id')
+    return parent is not None and any(packet.get(key, {}).get('assignment_id') == parent
+                                      for key in ('problem_refresh', 'focused_refresh'))
+
+
 def render_json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False,
                       separators=(',', ':'))
@@ -38,6 +55,16 @@ def find_kind(packet):
     if header.get('protocol') in (PROTOCOL, 'exactory-review-parts-v3') and header.get('kind') in KINDS:
         return header['kind']
     return None
+
+
+def is_intermediate_answer(packet, output):
+    kind = find_kind(packet)
+    if kind is None:
+        return False
+    header = packet[KEY]
+    return (kind != 'final' or header.get('final_form') == 'page' or output.get('kind') == 'requests'
+            or output.get('stage') == 'material'
+            and (header['protocol'] == 'exactory-review-parts-v3' or bool(header.get('page_plan_digest'))))
 
 
 def _require(condition, message, code='invalid_value_review', **details):
@@ -1890,20 +1917,40 @@ def find_failed_replacement(records, artifacts, value, adapter, series_key, slot
 
 def build_turn_prompt(role, base_parameters, header):
     from .review_protocol import canonical_prompt
+    if header.get('protocol') == 'exactory-review-parts-v3':
+        base_parameters = dict(base_parameters, excerpts=False)
     return canonical_prompt(role, **base_parameters,
         review_parts=dict(adapter=header['adapter'], kind=header['kind'],
                           **(dict(final_form=header['final_form']) if 'final_form' in header else {}),
                           **(dict(protocol=header['protocol'], capacity=header['capacity'])
                              if header.get('protocol') == 'exactory-review-parts-v3' else {}),
+                          **(dict(repair_binding=header['repair_binding']) if 'repair_binding' in header else {}),
                           answer=bool(header.get('request')),
                           **(dict(entry=header['entry']) if 'entry' in header else {})))
 
 
-def validate_turn_output(records, artifacts, assignment, packet, output, *, attempt=None):
+def build_packet_prompt(role, base_parameters, packet):
+    """Select v3 prompt paragraphs from the delivered turn packet."""
+    from . import review_prompt_paragraphs as paragraphs
+
+    header = packet[KEY]
+    if header.get('protocol') != 'exactory-review-parts-v3':
+        return build_turn_prompt(role, base_parameters, header)
+    ignored = (paragraphs.CARRY_PARAMETER, paragraphs.PARAMETER, paragraphs.CAPACITY_PARAMETER, 'source_rules')
+    base = build_turn_prompt(role, {name: value for name, value in base_parameters.items() if name not in ignored}, header)
+    selected = paragraphs.select_prompt_parameters(role, packet)
+    if not selected:
+        return base
+    return paragraphs.append_prompt_paragraphs(base, role,
+        carried=selected.get(paragraphs.CARRY_PARAMETER), versions=selected.get(paragraphs.PARAMETER),
+        capacity=selected.get(paragraphs.CAPACITY_PARAMETER))
+
+
+def validate_turn_output(records, artifacts, assignment, packet, output, *, attempt=None, expanded=False):
     """Validate this explicit invocation without asking for the series' readiness."""
     if packet.get(KEY, {}).get('protocol') == 'exactory-review-parts-v3':
         from .review_parts_v3 import validate_turn_output as validate_v3
-        return validate_v3(records, artifacts, assignment, packet, output, attempt=attempt)
+        return validate_v3(records, artifacts, assignment, packet, output, attempt=attempt, expanded=expanded)
     inventory = read_inventory(artifacts, packet[KEY]['inventory'], packet[KEY]['inventory_digest'])
     delta = validate_output(packet, output, inventory)
     if find_kind(packet) != 'combine':
@@ -1935,7 +1982,7 @@ def validate_turn_output(records, artifacts, assignment, packet, output, *, atte
 def _prepare_v2_packet(records, artifacts, value, route, packet, prompt, history, *,
                    base_prompt_parameters=None, slot_id=None, legacy_refusal=None,
                    entry=None, read_allowance=None, replaces_assignment_id=None, refusal_notice=None,
-                   capacity_replacement=None):
+                   capacity_replacement=None, ordinary_needs_parts=False):
     """Enter or continue parts with the same base prompt and adapter-owned series key."""
     from . import review_problem_parts as legacy, review_transport as transport
     from .review_parts_roles import find_adapter, get_adapter
@@ -1971,7 +2018,7 @@ def _prepare_v2_packet(records, artifacts, value, route, packet, prompt, history
                 raise
             continuing = False
     if not continuing:
-        if legacy_refusal is None and capacity_replacement is None:
+        if legacy_refusal is None and capacity_replacement is None and not ordinary_needs_parts:
             ordinary = transport.request_body(route, prompt['text'], packet, history)
             from .review_single_request import describe_task_entry
             ordinary_fits = (legacy._measure(route, ordinary) <= transport.local_input_limit(route)
@@ -2071,8 +2118,7 @@ def _prepare_v2_packet(records, artifacts, value, route, packet, prompt, history
                 entry=entry, read_allowance=read_allowance, replaces_assignment_id=replaces_assignment_id)
             break
         except ResearchError as error:
-            if error.code not in ('review_parts_frame_too_large', 'review_parts_final_too_large',
-                                   'review_parts_inventory_too_large', 'review_parts_no_progress'):
+            if error.code not in PLANNER_ROOM_CODES:
                 raise
             if next(reductions, False) is False:
                 raise
@@ -2089,27 +2135,72 @@ def _prepare_v2_packet(records, artifacts, value, route, packet, prompt, history
     return planned
 
 
-def prepare_packet(records, artifacts, value, route, packet, prompt, history, **options):
-    """New admission is ordered; recorded series always keep their protocol."""
+def select_series_protocols(records, artifacts, value, *, head=None):
+    """Resolve a child's parts protocol from its recorded head before new admission."""
     from .review_protocol import _read_json
+    context = value.get('context', {})
+    assignments = records.get('review_assignment', {})
+    for identifier in (context.get('capacity_replacement'), (context.get('output_refusal') or {}).get('assignment_id'),
+                       context.get('prior_assignment_id'), (context.get('context_repair') or {}).get('assignment_id')):
+        if head is None and identifier is not None:
+            head = assignments.get(identifier)
+    if head is not None:
+        header = head.get(KEY)
+        if header is None and head.get('packet'):
+            header = _read_json(artifacts, head['packet']).get(KEY)
+        protocol = (header or {}).get('protocol')
+        if protocol in (PROTOCOL, 'exactory-review-parts-v3'):
+            return (protocol,), True
+    return NEW_SERIES_PROTOCOLS, False
+
+
+def prepare_packet(records, artifacts, value, route, packet, prompt, history, *, head=None, serving_trial=False,
+                   **options):
+    """New admission is ordered; recorded series always keep their protocol."""
     from .review_parts_roles import find_adapter, get_adapter
-    prior = records.get('review_assignment', {}).get(value.get('context', {}).get('prior_assignment_id'))
-    recorded = (_read_json(artifacts, prior['packet']).get(KEY, {}).get('protocol')
-                if prior and prior.get('packet') else None)
-    protocols = (recorded,) if recorded in (PROTOCOL, 'exactory-review-parts-v3') else NEW_SERIES_PROTOCOLS
+    protocols, recorded = select_series_protocols(records, artifacts, value, head=head)
+    # A refresh starts a new chain, so it takes the order of a new series and is not pinned to its predecessor.
+    refresh = recorded and starts_refresh(value, packet)
+    if options.get('legacy_refusal') is not None:
+        protocols = (PROTOCOL,)
+    elif refresh:
+        protocols = NEW_SERIES_PROTOCOLS
+    pinned = recorded and not refresh
     adapter = find_adapter(value, packet)
     can_start = get_adapter(adapter).get('can_start_series') if adapter is not None else None
-    if recorded is None and can_start is not None and not can_start(
-            records, artifacts, value, route, packet, prompt, history):
-        return packet
+    ordinary_needs_parts = False
+    if not recorded and can_start is not None:
+        if not can_start(records, artifacts, value, route, packet, prompt, history):
+            return packet
+        ordinary_needs_parts = True
+    refusal = None
     for protocol in protocols:
         if adapter is not None and protocol not in get_adapter(adapter).get('protocols', protocols):
             continue
         if protocol == PROTOCOL:
-            return _prepare_v2_packet(records, artifacts, value, route, packet, prompt, history, **options)
+            planned = _prepare_v2_packet(records, artifacts, value, route, packet, prompt, history,
+                                         ordinary_needs_parts=refusal is not None, **options)
+            if refusal is None or find_kind(planned) is not None:
+                return planned
+            break
         if protocol == 'exactory-review-parts-v3':
             from .review_parts_v3 import prepare_packet as prepare_v3
-            prepared = prepare_v3(records, artifacts, value, route, packet, prompt, history, **options)
+            try:
+                prepared = prepare_v3(records, artifacts, value, route, packet, prompt, history, pinned=pinned,
+                                      ordinary_needs_parts=ordinary_needs_parts, serving_trial=serving_trial, **options)
+            except UnfitOrdinaryPacket as error:
+                refusal = error
+                continue
+            except ResearchError as error:
+                # A unit that the v3 inventory cannot describe declines a new series; the next form may serve it.
+                if pinned or error.code != 'review_parts_inventory_too_large':
+                    raise
+                prepared = None
             if prepared is not None:
                 return prepared
+    if refusal is not None:
+        raise refusal
+    if pinned and protocols == ('exactory-review-parts-v3',):
+        from .review_route_capacity import BELOW_FLOOR_MESSAGE
+        raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE)
     return packet

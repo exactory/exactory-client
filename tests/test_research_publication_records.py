@@ -285,6 +285,13 @@ class PublicationRecordTests(DevelopmentCase):
 
 
 class HistoricalBundleInputTests(DevelopmentCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_historical_readiness_rebuild_resolves_the_pinned_export(self):
         # A current report is not a substitute for the authenticated pin-time snapshot used by managed currency.
         bundle = binding_fixtures.ManagedPublicationCurrencyTests.prepare_managed_bundle(self)

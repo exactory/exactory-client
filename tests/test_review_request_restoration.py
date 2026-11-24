@@ -220,6 +220,13 @@ class RequestRestorationTests(unittest.TestCase):
 
 
 class ProspectiveAssignmentTests(fixtures.ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_new_assignment_records_the_policy_without_changing_prompt_or_packet(self):
         from research_harness.review_request_restoration import select_policy
         assignment = self.assign('prospective-policy')

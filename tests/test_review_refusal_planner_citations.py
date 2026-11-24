@@ -1,5 +1,6 @@
 """C12 result and focused-role plans reach their registered exhaustion handoffs."""
 
+from unittest.mock import patch
 import copy
 import unittest
 
@@ -11,6 +12,13 @@ import test_record_reading_handoff as fixtures
 
 
 class CitationPlannerRoleTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def exhaust(self, case, assignment, output, invoke, record, step):
         for number in range(3):
             with self.assertRaises(ResearchError) as caught:
@@ -31,8 +39,8 @@ class CitationPlannerRoleTests(unittest.TestCase):
         for count in (0, 1):
             with self.subTest(fulltexts=count):
                 fixture = fixtures.ReadingHandoffTests()
-                fixture.setUp()
                 self.addCleanup(fixture.doCleanups)
+                fixture.setUp()
                 final, output = fixture.build_final(count=count, abstract=True, role='result')
                 def record(assignment, answer):
                     return fixture.case.mutate(decisions.record_value_review,

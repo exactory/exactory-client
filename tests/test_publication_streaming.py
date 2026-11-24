@@ -70,6 +70,10 @@ class _StreamingZenodoApi(_FakeZenodoApi):
 class ManagedStreamingTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        cls.addClassCleanup(released.stop)
         cls.pdf = b"%PDF-1.4\n" + b"paper content\n" * 80000
         cls.sources = b"PK\x03\x04" + b"source content\n" * 80000
         # This synthetic manuscript executor must cover the large streamed publication's text envelope.

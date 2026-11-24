@@ -1,5 +1,6 @@
 """Intent authority, scientific continuity and immutable strategy dependencies."""
 
+from unittest.mock import patch
 import copy
 
 from research_harness.evidence import digest
@@ -66,6 +67,13 @@ class IntentContractTests(StrategyCase):
 
 
 class StrategyRecordTests(StrategyCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_prospective_dossier_does_not_require_a_native_objective(self):
         saved = self.setup_dossier()
         self.assertEqual(saved["objective_binding"]["kind"], "proposed")

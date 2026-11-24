@@ -38,6 +38,9 @@
         "research_harness/openness_final_pages.py:verify_final_turn_binding#3": [
           "content"
         ],
+        "research_harness/review_final_pages.py:read_plan_room#1": [
+          "content"
+        ],
         "research_harness/review_final_pages.py:verify_page_plans#1": [
           "content"
         ],
@@ -70,6 +73,12 @@
         ],
         "research_harness/openness_final_pages.py:verify_final_turn_binding#4": [
           "content"
+        ],
+        "skills/math-solver/harness/search_controller/research.py:FrozenArtifacts.read#1": [
+          "content"
+        ],
+        "skills/math-solver/harness/search_controller/research.py:FrozenArtifacts.read#2": [
+          "content"
         ]
       },
       "artifact_missing": {
@@ -82,6 +91,9 @@
         "research_harness/artifacts.py:ArtifactStore.verify_sealed#1": [
           "content"
         ],
+        "research_harness/openness_reading_v7.py:_PlanningArtifacts._verify_backing#1": [
+          "content"
+        ],
         "research_harness/workspace.py:open_file#1": [
           "content"
         ],
@@ -89,6 +101,9 @@
           "content"
         ],
         "research_harness/review_composition.py:_PacketArtifacts.read#1": [
+          "content"
+        ],
+        "skills/math-solver/harness/search_controller/provenance.py:publish_import_sources#1": [
           "content"
         ]
       },
@@ -206,7 +221,22 @@
         "research_harness/review_parts_v3.py:_advance_requested_ranges#1": [
           "content"
         ],
+        "research_harness/review_parts_v3.py:_advance_requested_ranges#2": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:_advance_requested_ranges#3": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:_deliver_requested_units#1": [
+          "content"
+        ],
         "research_harness/review_parts_v3.py:_list_binary_entries#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:_read_requested_record#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:_read_requested_record#2": [
           "content"
         ],
         "research_harness/review_parts_v3.py:_read_value.check_digest#1": [
@@ -259,12 +289,12 @@
         ]
       },
       "review_prompt_mismatch": {
-        "research_harness/review_protocol.py:invoke_assignment.start#1": [
+        "research_harness/review_protocol.py:prepare_assignment_call#1": [
           "content"
         ]
       },
       "review_request_changed": {
-        "research_harness/review_protocol.py:invoke_assignment.start#1": [
+        "research_harness/review_protocol.py:prepare_assignment_call#1": [
           "content"
         ]
       },

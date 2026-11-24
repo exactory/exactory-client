@@ -91,6 +91,7 @@ def record_sample(store, payload, *, expected_revision, request_id):
         fields(value, ("id", "collection_id", "size", "seed"), ("depth",))
         text(value["id"], "Sample ID")
         text(value["seed"], "Sample seed")
+        text(value["collection_id"], "Sample collection ID")
         research_tool = ((records.get("configuration", {}).get("research") or {}).get("profile") == "research"
                          and ("depth" in value or find_current_depth_plan(records) is not None))
         if not research_tool:

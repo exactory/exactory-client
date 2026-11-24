@@ -38,7 +38,18 @@ from .storage import _canonical
 
 
 COMPOSITE_PROTOCOL = 'exactory-review-composite-final-v1'
-COMPOSITE_UNVERIFIED_MESSAGE = 'The composite final could not be authenticated. details.condition names the failed check.'
+COMPOSITE_UNVERIFIED_MESSAGE = (
+    'The composed final does not verify. The harness composes the final of a review in pages from the answers of '
+    'the pages and of the closing turn and stores it as a composite, and it takes no final from a composite that '
+    'does not verify. details.condition gives the number of the check that failed. 1: a turn of the final has no '
+    'authenticated answer, the composite names another answer than the turn holds, or the closing turn does not '
+    'have exactly one composite for its answer. 2: the composite record has other members than its protocol '
+    'gives, the turns of the final do not belong to one chain, route, reviewer, role, capacity plan and currency, '
+    'or the composite names other turns than the page plan. 3: the pages do not hold each target of the stored '
+    'capacity plan exactly once, or the targets of a turn differ from those of the page plan. 4: the composition '
+    'rule is missing or differs from the recorded one, or the output that the harness composes again from the '
+    'authenticated answers differs from the recorded output. Where details.assignment_id is present, it names the '
+    'turn at which the check failed. Check the record with record-check.')
 
 
 def build_composite(records, artifacts, assignment):

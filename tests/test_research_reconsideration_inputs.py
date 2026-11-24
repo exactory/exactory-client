@@ -1,5 +1,6 @@
 """Reconsideration checks typed evidence before comparing scientific identities."""
 
+from unittest.mock import patch
 from research_harness import integration, research_decisions, strategy
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -7,6 +8,13 @@ from strategy_fixtures import StrategyCase
 
 
 class ReconsiderationInputTests(StrategyCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def unchanged_successor(self, evidence):
         value = self.dossier("reconsidered-input")
         value.update(previous="dossier-1", material_change={

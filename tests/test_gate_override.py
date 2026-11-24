@@ -1,5 +1,6 @@
 """User instructions move work forward without giving unmet gates any credit."""
 
+from unittest.mock import patch
 import copy
 import hashlib
 import html
@@ -637,6 +638,13 @@ class ProblemOverrideTests(OverrideCommandMixin, ProblemCase):
 
 
 class NormalProblemExportTests(OverrideCommandMixin, ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_normal_problem_export_preserves_every_file_byte(self):
         self.prepare_ready(formal=True)
         self.assert_normal_export({"changes-if-resolved.md": CHANGES_IF_RESOLVED_TEXT + "\n"})

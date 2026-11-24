@@ -58,6 +58,13 @@ class LegacyReadinessBindingTests(unittest.TestCase):
 
 
 class ManagedPublicationCurrencyTests(DevelopmentCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare_managed_bundle(self, legacy=False, *, extra_abstract=False):
         from contextlib import ExitStack
         from managed_strategy_fixtures import ManagedStrategy

@@ -11,6 +11,7 @@ from unittest.mock import patch
 from ci import capacity_guard, continuity_guard as guard
 from ci.evidence_tests import require_evidence_tests
 from research_harness import cli, review_protocol as protocol, review_route_capacity as capacity, stop_classes
+from research_harness import bar_sources, review_parts
 from research_harness import review_failure_class as failures, review_transport as transport
 from research_harness.evidence import digest
 from research_harness.errors import ResearchError
@@ -38,6 +39,9 @@ class StagedPartsCase(parts_fixtures.ResultPartsCase):
     output_tokens = 1000
 
 
+# Two tests run their own cleanups between subtests, so the released forms are stated for the length of each test.
+@patch.object(protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+@patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
 class ContinuityGuardTests(unittest.TestCase):
     def prepare(self, cls):
         case = cls()

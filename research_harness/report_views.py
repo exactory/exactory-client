@@ -405,6 +405,10 @@ def status_summary(report):
         result.update(candidates=report["candidates"], slate_id=_short(report["slate_id"], 64))
         if "forming" in report:
             result["forming"] = report["forming"]
+        if "search" in report:
+            steps = report["search"]["steps"]
+            result["search"] = dict(steps=len(steps), latest_way=steps[-1]["way"] if steps else None,
+                                    has_origin=report["search"]["origin"] is not None)
     slots = report.get("slot_outcomes") or report.get("review", {}).get("slot_outcomes")
     if slots:
         result["review_slots"] = dict(occupied=slots["occupied"],

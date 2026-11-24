@@ -1,5 +1,6 @@
 """Strategic decisions use the existing scientific gates and atomic support records."""
 
+from unittest.mock import patch
 import copy
 import json
 
@@ -139,6 +140,13 @@ class ManagedBoundaryTests(DevelopmentCase):
 
 
 class TargetCommitmentTests(StrategyCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_target_accepts_an_unrelated_source_declaration_in_its_own_transaction(self):
         self.mutate(principles.initialize_research, {"profile": "research", "target": None})
         self.reviewed_dossier()

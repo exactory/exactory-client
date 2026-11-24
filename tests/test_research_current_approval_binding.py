@@ -8,6 +8,13 @@ from strategy_fixtures import StrategyCase
 
 
 class CurrentApprovalBindingTests(StrategyCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_material_successor_dossier_invalidates_default_and_explicit_old_decisions(self):
         self.reviewed_dossier()
         self.mutate(research_decisions.record_research_decision, self.decision())

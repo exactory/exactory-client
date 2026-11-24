@@ -132,9 +132,13 @@ class CapacityParagraphTests(unittest.TestCase):
 
 class CapacityAssignmentTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = problem_fixtures.ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
         self.case.prepare_review_route()
         # A route probed before output accounting has no measured task row.
@@ -256,11 +260,18 @@ class CapacityProfileSelectionTests(unittest.TestCase):
 
 
 class CapacityChainTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_legacy_parts_refresh_binds_the_prompt_after_capacity_selection(self):
         import problem_parts_fixtures as fixtures
         case = fixtures.ResultPartsCase()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         case.oversized(count=6, characters=24000, limit=110000)
         build = protocol.build_packet
         def build_refresh(*args, **kwargs):
@@ -281,8 +292,8 @@ class CapacityChainTests(unittest.TestCase):
         import problem_parts_fixtures as fixtures
         case = fixtures.ResultPartsCase()
         case.staged_entry = True
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         prior = case.assign('predecessor')
         self.assertIn('route_capacity', case.packet(prior))
         controller = case.case.assign('result', 'first', identifier='controller',
@@ -293,8 +304,8 @@ class CapacityChainTests(unittest.TestCase):
     def test_legacy_parts_chain_adds_current_turn_bounds_and_authenticates_old_turn(self):
         import review_parts_fixtures as fixtures
         case = fixtures.PartsResultCase()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         case.oversized(count=12, characters=10000, limit=110000)
         with patch.object(protocol, 'prepare_capacity_notice', side_effect=lambda records, route, role, packet: packet):
             first = case.assign('legacy-part')
@@ -328,8 +339,8 @@ class CapacityChainTests(unittest.TestCase):
     def test_fitted_session_keeps_capacity_and_delivery_notices_together(self):
         import test_review_session_delivery as fixtures
         case = fixtures.SessionDeliveryTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         final_id = case.build_reduced_session()
         assignment = case.case.read_records()['review_assignment'][final_id]
         packet = case.read_packet(final_id)

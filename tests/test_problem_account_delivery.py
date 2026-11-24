@@ -45,6 +45,13 @@ def assert_current_accounts(test, review):
 
 
 class OrdinaryAccountDeliveryTests(legacy_fixtures.ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_single_input_requires_current_accounts_and_their_exact_records(self):
         install_accounts_delivery(self.case)
         assignment = self.assign()
@@ -54,6 +61,13 @@ class OrdinaryAccountDeliveryTests(legacy_fixtures.ResultPartsCase):
 
 
 class LegacyPartsAccountDeliveryTests(legacy_fixtures.ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_parts_repeat_current_value_and_require_account_records(self):
         self.oversized()
         install_accounts_delivery(self.case)
@@ -84,6 +98,13 @@ class LegacyPartsAccountDeliveryTests(legacy_fixtures.ResultPartsCase):
 
 
 class PartsAccountDeliveryTests(parts_fixtures.PartsResultCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_parts_repeat_current_value_and_require_account_records(self):
         self.oversized()
         install_accounts_delivery(self.case)
@@ -96,6 +117,13 @@ class PartsAccountDeliveryTests(parts_fixtures.PartsResultCase):
 
 
 class StagedAccountDeliveryTests(legacy_fixtures.ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     staged_entry = True
     output_tokens = 128000
     timeout_seconds = 60
@@ -142,6 +170,13 @@ class StagedAccountDeliveryTests(legacy_fixtures.ResultPartsCase):
 
 
 class AccountValueRefreshTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_recording_a_new_value_requires_and_accepts_refreshed_result_reviews(self):
         import test_research_problem_delivery as delivery_fixtures
         from research_harness import problem_claims

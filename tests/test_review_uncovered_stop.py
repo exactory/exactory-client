@@ -4,12 +4,20 @@ from unittest.mock import patch
 
 from literature_fixtures import LiteratureCase
 import test_research_review_protocol as fixtures
-from research_harness import cli, review_protocol as protocol, review_route_capacity as capacity
+from research_harness import cli, review_parts as parts, review_protocol as protocol, review_route_capacity as capacity
 from research_harness import review_transport as transport
 from research_harness.errors import ResearchError
+from test_review_capacity_steps import CapacityAnswers
 
 
-class UncoveredReviewTests(LiteratureCase):
+class UncoveredReviewTests(CapacityAnswers, LiteratureCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     protocol = fixtures.ReviewProtocolTests.protocol
     seed = fixtures.ReviewProtocolTests.seed
     route = fixtures.ReviewProtocolTests.route
@@ -51,7 +59,7 @@ class UncoveredReviewTests(LiteratureCase):
         self.assertEqual(details['reason'], 'no_parts_delivery')
         self.assertEqual(details['capacity_source'], 'observed')
         steps = details['then'][0]['steps']
-        self.assertEqual(steps[0]['command'], 'review-probe')
+        self.assertEqual([step['command'] for step in steps], ['review-probe'])
         self.assertEqual(steps[0]['payload']['capacity']['input_tokens'], 150000)
         def respond(route, request, credential):
             packet = json.loads(request['input'][0]['content'][len(transport.PACKET_LABEL):])
@@ -62,8 +70,16 @@ class UncoveredReviewTests(LiteratureCase):
         probe = dict(steps[0]['payload'], id='capacity')
         with patch.object(transport, 'send_request', side_effect=respond):
             self.mutate(cli.OPERATIONS[steps[0]['command']], probe)
-        receipt = self.mutate(cli.OPERATIONS[steps[1]['command']], steps[1]['payload'])
+        receipt = self.mutate(protocol.record_assignment, payload)
         self.assertEqual(receipt['result']['id'], 'assignment')
+
+    def test_probe_answer_of_a_first_entry_names_the_same_command_again(self):
+        """Repairs A11. The probe answer of a stopped first assignment says that the same command follows the probe;
+        test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted takes it."""
+        from research_harness.review_plan_steps import CAPACITY_PROBE_CONDITION
+        self.route()
+        answer = self.capture_stop(self.build_assignment('x'*60000))['then'][0]
+        self.assertEqual((answer['answer'], answer['condition']), ('Probe this route', CAPACITY_PROBE_CONDITION))
 
     def test_pdf_attachment_stops_and_text_route_completes_same_review(self):
         from claude_review_fixtures import RECORDED_CONTEXTS, build_recorded_response, build_recorded_runtime
@@ -141,6 +157,9 @@ class UncoveredReviewTests(LiteratureCase):
         self.assertTrue(protocol.assignment_state(self.records(), self.artifacts, 'assignment')['ready'])
 
     def test_serving_parts_fit_the_real_frame_without_writing_artifacts(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         from claude_review_fixtures import RECORDED_CONTEXTS, build_recorded_response, build_recorded_runtime
         from research_harness import review_claude_transport as claude
         def respond(route, request, credential):
@@ -222,16 +241,16 @@ class UncoveredReviewTests(LiteratureCase):
         records['review_route']['route']['runtime']['implementation_sha256'] = '0'*64
         self.assertEqual(capacity.find_serving_routes(records, 'standalone', packet, **options), [])
 
-    def test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot(self):
+    def test_conditional_route_steps_record_a_new_head_of_the_preserved_bar_slot(self):
         import test_research_context_repair_integration as repair_fixtures
-        fixture = repair_fixtures.ContextRepairIntegrationTests()
+        fixture = self.case = repair_fixtures.ContextRepairIntegrationTests()
         self.addCleanup(fixture.doCleanups)
         fixture.setUp()
         def respond(route, request, credential):
             packet = json.loads(request['input'][0]['content'][len(transport.PACKET_LABEL):])
             response = fixture.provider_response(dict(allowed_control=packet['allowed_control'],
                 evidence_control=packet['evidence_control'], excluded_controls=[]))
-            response['usage']['input_tokens'] = 500 if route['id'] == 'tiny' else 1000000
+            response['usage']['input_tokens'] = 500 if route['id'] == 'tiny' else 23500
             return response
         with patch.object(transport, 'send_request', side_effect=respond):
             for name in ('tiny', 'wide'):
@@ -247,22 +266,25 @@ class UncoveredReviewTests(LiteratureCase):
             self.assertEqual(caught.exception.code, 'review_route_capacity_below_floor')
             self.assertEqual(fixture.store.revision, revision)
             details = caught.exception.details
-            serving = next(row for row in details['serving_routes'] if row['route_id'] == 'wide')
-            self.assertEqual(serving['delivery'], 'reassessment')
-            steps = next(row for row in details['then'] if row.get('route_id') == 'wide')['steps']
-            retirement = dict(steps[0]['payload'], id='retire', evidence=[fixture.evidence])
-            fixture.mutate(cli.OPERATIONS[steps[0]['command']], retirement)
-            fixture.mutate(cli.OPERATIONS[steps[1]['command']], dict(steps[1]['payload'], id='repair-route'))
-            fixture.mutate(protocol.probe_route, dict(id='repair-probe', route_id='repair-route'))
-            resume = dict(steps[2]['payload'], id='repair-head', route_id='repair-route', reviewer_id='repair-reviewer')
-            resume['context']['context_repair'].update(event_ids=['retire'], evidence=[fixture.evidence],
-                probe_id='repair-probe', reason='Continue the preserved scientific assessment.')
-            accepted = fixture.mutate(cli.OPERATIONS[steps[2]['command']], resume)['result']
+            self.assertEqual(details['serving_routes'], [])
+            answer = next(row for row in details['then'] if row.get('route_id') == 'wide')
+            self.assertTrue(answer['condition'])
+            steps = answer['steps']
+            self.assertEqual([step['command'] for step in steps], ['review-context', 'review-probe'])
+            self.assertEqual(steps[1]['payload']['route_id'], 'wide')
+
+            def check_repair(assignment):
+                if assignment['route_id'] == 'wide':
+                    packet = json.loads(fixture.artifacts.read(assignment['packet']))
+                    self.assertTrue(packet['scientific_history'])
+                    self.assertTrue(packet['historical_reviews'])
+
+            self.take_answers(details, reviewer='repair-reviewer', observed=150000, renewal_observed=23500)
+            accepted = self.take_probe_then_next_stop(details, 'wide', payload, reviewer='repair-reviewer',
+                                                      observed=150000, renewal_observed=23500)
+            check_repair(accepted)
         self.assertEqual(accepted['slot_id'], 'assignment-bar-a')
         self.assertEqual(accepted['context']['context_repair']['assignment_id'], 'assignment-bar-a')
-        packet = json.loads(fixture.artifacts.read(accepted['packet']))
-        self.assertTrue(packet['scientific_history'])
-        self.assertTrue(packet['historical_reviews'])
 
     def test_a_route_that_fits_only_the_old_packet_is_not_a_serving_repair_route(self):
         import test_research_context_repair_integration as repair_fixtures
@@ -339,7 +361,8 @@ class UncoveredReviewTests(LiteratureCase):
                 probe = self.mutate(cli.OPERATIONS[steps[0]['command']], dict(steps[0]['payload'], id='larger-capacity'))['result']
             self.assertTrue(probe['capacity_verified'])
             self.assertTrue(any(ord(char)>127 for char in probe['positive_controls']['evidence']))
-            accepted = self.mutate(cli.OPERATIONS[steps[1]['command']], steps[1]['payload'])['result']
+            self.assertEqual(len(steps), 1)
+            accepted = self.mutate(protocol.record_assignment, payload)['result']
         self.assertEqual(accepted['id'], payload['id'])
         self.assertEqual(accepted['context'], payload['context'])
 
@@ -366,8 +389,6 @@ class UncoveredReviewTests(LiteratureCase):
         assignment = dict(parent, id='stopped-result', role='result')
         steps = describe_capacity_steps(records, self.artifacts, assignment, [dict(route_id='serving')],
                                        packet=dict(own_bars=[dict(assignment_id='bar')]))[0]['steps']
-        self.assertEqual([step['id'] for step in steps], [8, 7, 1])
+        self.assertEqual([step['command'] for step in steps], ['review-context', 'review-probe'])
         self.assertEqual(steps[0]['payload']['assignment_id'], 'bar')
-        self.assertEqual(steps[1]['payload']['endpoint'], serving['endpoint'])
-        self.assertEqual(steps[-1]['payload']['context']['context_repair']['assignment_id'], 'bar')
-        self.assertIn('context.context_repair.event_ids', steps[-1]['chooses'])
+        self.assertEqual(steps[1]['payload']['route_id'], 'serving')

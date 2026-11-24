@@ -1,5 +1,6 @@
 """Record 5: account-cited search records leave the frame and arrive once."""
 
+from unittest.mock import patch
 import copy
 import json
 from pathlib import Path
@@ -348,6 +349,13 @@ class AccountRecordUnitTests(unittest.TestCase):
 
 
 class AccountRecordJourneyTests(PartsResultCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_authenticated_series_rebuilds_accounts_and_openness_for_coverage_and_citations(self):
         self.oversized(count=0, room=100000)
         packet = make_search_packet(2, characters=65000, body_characters=30000)

@@ -123,26 +123,32 @@ def was_graded_before_a7(grades):
     return isinstance(admission, dict) and set(admission) == set(ADMISSION_ITEMS_BEFORE_A7)
 
 
-def validate_grades(grades, *, potential=False, allow_previous=False):
+def validate_grades(grades, *, potential=False, allow_previous=False, path=None):
     code = "invalid_rubric_grades"
     required = ("significance", "priority") if potential else (
         "admission", "significance", "priority", "attempt", "accessibility", "calibration")
     fields(grades, required, ("readiness",) if potential else (), code=code)
     fields(grades["significance"], GROUNDS, code=code)
-    for level in list(grades["significance"].values()) + [grades["priority"]]:
+    levels = [("/significance/" + key, value) for key, value in grades["significance"].items()]
+    levels.append(("/priority", grades["priority"]))
+    for location, level in levels:
         if type(level) is not int or level not in LEVELS:
-            raise ResearchError(code, "Rubric levels must be integers from 0 to 3")
-    verdicts = [grades["readiness"]] if potential and "readiness" in grades else []
+            raise ResearchError(code, "Rubric levels must be integers from 0 to 3",
+                                {"path": path + location} if path is not None else None)
+    verdicts = [("/readiness", grades["readiness"])] if potential and "readiness" in grades else []
     if not potential:
         admission = grades["admission"]
         previous = allow_previous and was_graded_before_a7(grades)
         fields(admission, ADMISSION_ITEMS_BEFORE_A7 if previous else ADMISSION_ITEMS, code=code)
-        verdicts.extend(grades["admission"].values())
-        verdicts.extend((grades["attempt"], grades["calibration"]))
+        verdicts.extend(("/admission/" + key, verdict) for key, verdict in admission.items())
+        verdicts.extend((("/attempt", grades["attempt"]), ("/calibration", grades["calibration"])))
         if grades["accessibility"] not in ACCESSIBILITY_CLASSES:
-            raise ResearchError(code, "Use accessibility class E-F, E-A or E-N")
-    if any(verdict not in VERDICTS for verdict in verdicts):
-        raise ResearchError(code, "Rubric verdicts must be pass or fail")
+            raise ResearchError(code, "Use accessibility class E-F, E-A or E-N",
+                                {"path": path + "/accessibility"} if path is not None else None)
+    for location, verdict in verdicts:
+        if verdict not in VERDICTS:
+            raise ResearchError(code, "Rubric verdicts must be pass or fail",
+                                {"path": path + location} if path is not None else None)
     return grades
 
 

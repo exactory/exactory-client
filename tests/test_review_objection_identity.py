@@ -12,6 +12,7 @@ from strategy_fixtures import StrategyCase
 import test_research_problem_delivery as fixtures
 import test_research_problem_objections as objection_fixtures
 import test_research_problem_slate as slate_fixtures
+from slate_refresh_fixtures import cite_in_refresh_chain, cite_review
 
 SHARED_ID = "counterexample-unverified"
 QUALIFIED_ID = SHARED_ID + "@review-bar-second"
@@ -26,6 +27,13 @@ def list_identity_pairs(objections):
 
 
 class BlindObjectionIdentityTests(fixtures.ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     build_slate_output = slate_fixtures.ProblemSlateTests.build_slate_output
     prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence
     assert_blocked_delivery = objection_fixtures.ProblemObjectionTests.assert_blocked_delivery
@@ -344,6 +352,8 @@ class BlindObjectionIdentityTests(fixtures.ProblemDeliveryCase):
         refresh["value"]["bar_ids"] = bar_ids
         refresh["value"]["objection_findings"] = [self.make_finding(QUALIFIED_ID, "continuing")]
         refresh["objections"] = [dict(self.make_objection("second"), id=QUALIFIED_ID, candidate_ids=[])]
+        # The refresh is a new chain whose packet delivers the bars as records, so its answer cites the reviewer's bar.
+        refresh = cite_in_refresh_chain(refresh, self.supporting, cite_review(self, "review-bar-second-v2"))
         refreshed = self.observe("slate", "second", refresh, identifier="slate-second-v2")
         saved = self.confirm_repaired_copy(refreshed, [first["id"], refreshed["id"]], objection_id=SHARED_ID)
         packet = json.loads(self.artifacts.read(
@@ -691,6 +701,10 @@ class DossierObjectionIdentityTests(StrategyCase):
     """AI Science dossiers keep one claim per objection id for every reviewer."""
 
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.setup_dossier()
         self.route()

@@ -303,8 +303,8 @@ def build_scaled_correction_references(quantity, size):
     if quantity not in ('identifiers', 'sources'):
         raise ValueError('The correction reference factory scales record identities or source bytes')
     case = ResultReassessmentBindingTests()
-    case.setUp()
     try:
+        case.setUp()
         fixture = case.fixture
         identifier_size = size if quantity == 'identifiers' else 12
         identifier = 'value-' + 'x' * identifier_size

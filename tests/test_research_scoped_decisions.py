@@ -5,11 +5,18 @@ from unittest.mock import patch
 
 from source_limited_fixtures import SourceLimitedCase
 from strategy_fixtures import StrategyCase
-from research_harness import strategy, research_decisions, review_protocol
+from research_harness import bar_sources, strategy, research_decisions, review_protocol, review_session_v4
 from research_harness.errors import ResearchError
 
 
 class ScopedDecisionTests(SourceLimitedCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     module = StrategyCase.module
     put = StrategyCase.put
     error = StrategyCase.error
@@ -60,8 +67,14 @@ class ScopedDecisionTests(SourceLimitedCase):
 
     def test_supported_scoped_delivery_does_not_require_completion_of_unavailable_comparison(self):
         self.prepare_scoped_strategy()
-        for suffix in ("a", "b"):
-            self.scoped_response(suffix)
+        with patch.object(review_protocol, "NEW_SESSION_RULES", (review_session_v4.PROTOCOL, bar_sources.PROTOCOL_V3)):
+            for suffix in ("a", "b"):
+                saved = self.scoped_response(suffix)
+                assignment = self.store.snapshot()["records"]["review_assignment"][saved["assignment_id"]]
+                packet = json.loads(self.artifacts.read(assignment["packet"]))
+                self.assertEqual(packet["protocol"], bar_sources.PROTOCOL)
+                self.assertEqual(packet["source_rules"], bar_sources.PROTOCOL_V3)
+                self.assertEqual(assignment["prompt"]["parameters"]["source_rules"], bar_sources.PROTOCOL_V3)
         readiness = self.manuscript_readiness()
         payload = self.decision(action="deliver_requested")
         payload.update(phase="result", artifact_disposition="deliver_under_instruction", review_ids=["scoped-a", "scoped-b"],

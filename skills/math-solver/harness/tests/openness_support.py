@@ -7,9 +7,16 @@ import sys
 import uuid
 
 PLUGIN = Path(__file__).resolve().parents[4]
-sys.path.append(str(PLUGIN / "tests"))
+_tests = str(PLUGIN / "tests")
+if _tests in sys.path:
+    from literature_fixtures import LiteratureCase
+else:
+    sys.path.append(_tests)
+    try:
+        from literature_fixtures import LiteratureCase
+    finally:
+        sys.path.remove(_tests)
 
-from literature_fixtures import LiteratureCase
 from research_harness.acquisition import import_response
 from research_harness.artifacts import ArtifactStore
 from research_harness.literature import import_bundle, record_search

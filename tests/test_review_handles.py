@@ -354,6 +354,10 @@ class HandleObservationTests(LiteratureCase):
 
 class HandleRecordingTests(unittest.TestCase):
     def test_bar_final_by_handle_records_only_expanded_native_references(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         case = problem_fixtures.ProblemReviewTests()
         self.addCleanup(case.doCleanups)
         case.setUp()

@@ -35,6 +35,13 @@ def record_legacy():
 
 
 class ProblemResultRestartTests(PartsResultCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     output_tokens = 128000
 
     def create_legacy(self, count=3, characters=50000, limit=130000, reviewer='first', closed=False):
@@ -81,6 +88,21 @@ class ProblemResultRestartTests(PartsResultCase):
         self.assertNotIn('review_parts_restart', packet)
         return packet
 
+    def test_a_recorded_v2_successor_keeps_its_protocol_with_v3_first(self):
+        from research_harness.review_parts_v3 import PROTOCOL as V3
+
+        self.oversized(count=2, characters=100000, limit=190000)
+        with patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,)), \
+                patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL):
+            first = self.assign()
+            self.assertEqual(self.packet(first)[parts.KEY]['protocol'], parts.PROTOCOL)
+            self.invoke(first)
+        with patch.object(parts, 'NEW_SERIES_PROTOCOLS', (V3, parts.PROTOCOL)):
+            child = self.assign('next', first['id'])
+        header = self.packet(child)[parts.KEY]
+        self.assertEqual((header['series_assignment_id'], header['protocol'], header['turn']),
+                         (first['id'], parts.PROTOCOL, 2))
+
     def test_refusal_starts_v2_even_when_ordinary_without_replay_would_fit(self):
         with patch.object(legacy, 'PART_UNIT_CHARACTERS', 60000):
             prior = self.create_legacy()
@@ -97,6 +119,44 @@ class ProblemResultRestartTests(PartsResultCase):
         refusal = protocol.ResearchError('review_input_too_large', 'Fixture planner refusal.',
                                          dict(stage='part', input_characters=499000, input_limit_characters=500000))
         with patch.object(history, 'bound_history', side_effect=refusal):
+            assignment = self.assign('restart', prior['id'])
+        self.assert_restart(prior, assignment)
+        self.assertEqual(assignment['review_parts_restart']['details'], refusal.details)
+        records = self.case.read_records()
+        files = output_views._build_series(records, self.case.artifacts, output_views._ViewInputs({}, {}))
+        documents = [json.loads(view.content) for path, view in files.items() if path.endswith('/series.json')]
+        abandoned = next(document for document in documents if document.get('review_parts_restarts'))
+        self.assertEqual(abandoned['review_parts_restarts'], [dict(assignment['review_parts_restart'],
+                         successor_assignment_id=assignment['id'])])
+        successor = next(document for document in documents if document['root_assignment_id'] == assignment['id'])
+        self.assertEqual(successor['turns'][0]['review_parts_restart'], assignment['review_parts_restart'])
+        self.assertTrue(any(path.endswith('.json') and prior['id'] in path and not path.endswith('series.json')
+                            for path in files))
+        payload = {key: assignment[key] for key in ('id', 'dossier_id', 'role', 'route_id', 'reviewer_id', 'author_id', 'context')}
+        replay = protocol.record_assignment(self.case.store, payload,
+            expected_revision=assignment['recorded_revision'] - 1, request_id='task3-' + str(self.case.sequence))
+        self.assertEqual(replay['result'], assignment)
+
+
+    def test_refusal_starts_v2_even_when_ordinary_without_replay_would_fit_with_v3_first(self):
+        from research_harness.review_parts_v3 import PROTOCOL as V3
+
+        with patch.object(legacy, 'PART_UNIT_CHARACTERS', 60000):
+            prior = self.create_legacy()
+        frozen_request = self.request(prior)
+        limit_codex_input(self, 500000)
+        self.assertEqual(self.request(prior), frozen_request)
+        records = self.case.read_records()
+        ordinary_packet = protocol.build_packet(records, self.case.artifacts, None, 'result', 'first',
+                                                prior_assignment_id=prior['id'])
+        ordinary_prompt = protocol.canonical_prompt('result', orchestration='problem_creation', excerpts=True)
+        ordinary = transport.request_body(records['review_route']['route'], ordinary_prompt['text'], ordinary_packet, [])
+        self.assertLessEqual(legacy._measure(records['review_route']['route'], ordinary), 500000)
+        self.assertTrue(legacy.preserves_ordinary_packet(self.case.artifacts, ordinary_packet, ordinary))
+        refusal = protocol.ResearchError('review_input_too_large', 'Fixture planner refusal.',
+                                         dict(stage='part', input_characters=499000, input_limit_characters=500000))
+        with patch.object(history, 'bound_history', side_effect=refusal), \
+                patch.object(parts, 'NEW_SERIES_PROTOCOLS', (V3, parts.PROTOCOL)):
             assignment = self.assign('restart', prior['id'])
         self.assert_restart(prior, assignment)
         self.assertEqual(assignment['review_parts_restart']['details'], refusal.details)
@@ -186,6 +246,17 @@ class ProblemResultRestartTests(PartsResultCase):
         prior = self.create_legacy()
         self.case.expected['openness_searches'][0]['search']['reason'] += ' Changed evidence.'
         assignment = self.assign('changed-evidence', prior['id'])
+        self.assertIn(parts.KEY, self.packet(assignment))
+        self.assertNotIn('review_parts_restart', assignment)
+
+
+    def test_changed_legacy_evidence_starts_normally_without_restart_diagnostics_with_v3_first(self):
+        from research_harness.review_parts_v3 import PROTOCOL as V3
+
+        prior = self.create_legacy()
+        self.case.expected['openness_searches'][0]['search']['reason'] += ' Changed evidence.'
+        with patch.object(parts, 'NEW_SERIES_PROTOCOLS', (V3, parts.PROTOCOL)):
+            assignment = self.assign('changed-evidence', prior['id'])
         self.assertIn(parts.KEY, self.packet(assignment))
         self.assertNotIn('review_parts_restart', assignment)
 
@@ -359,6 +430,9 @@ class ProblemResultRestartTests(PartsResultCase):
 
     @patch.dict(result_parts.ADAPTER, unit_rule=None)
     def test_prospective_withholding_protects_unit_and_requested_bodies(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         from review_parts_fixtures import make_packet
         packet = make_packet(count=3, characters=100000)
         owned = self.case.artifacts.put(b'owned' * 50000, 'text/plain')
@@ -389,6 +463,13 @@ class ProblemResultRestartTests(PartsResultCase):
 
 
 class CurrentResultSlotTests(PartsResultCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_non_result_slot_summary_retains_existing_pending_occupancy(self):
         records = self.case.read_records()
         prior = records['review_assignment']['bar-first']
@@ -501,3 +582,53 @@ class CurrentResultSlotTests(PartsResultCase):
                                                         assignment['subject'])
         self.assertEqual(slots['occupied'], 1)
         self.assertEqual(len(slots['pending']), 1)
+
+
+class ProblemResultWideRouteTests(PartsResultCase):
+    """Starts on a route of 245,000 input tokens."""
+    output_tokens = 128000
+    create_legacy = ProblemResultRestartTests.create_legacy
+
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        with patch('test_research_problem_reviews.ProblemReviewTests.capacity_probe_tokens',
+                   self.output_tokens + 245000, create=True):
+            super().setUp()
+
+    def test_a_fitting_v1_successor_keeps_its_protocol_with_v3_first(self):
+        from research_harness import review_parts_v3, review_route_capacity
+        from test_review_output_profile import build_row
+
+        first = self.create_legacy()
+        limit_codex_input(self, 1000000)
+        profiles = [dict(build_row(level=None, kind=kind, thinking=1), largest_output_tokens=12)
+                    for kind in ('single', 'read', 'combine', 'check', 'final')]
+        with patch.object(parts, 'NEW_SERIES_PROTOCOLS', (review_parts_v3.PROTOCOL, parts.PROTOCOL)), \
+                patch.object(review_route_capacity, 'read_profile_priors', return_value=profiles):
+            child = self.assign('next', first['id'])
+        header = self.packet(child)[legacy.KEY]
+        self.assertEqual((header['series_assignment_id'], header['stage'], header['turn']),
+                         (first['id'], 'part', 2))
+        self.assertNotIn(parts.KEY, child)
+
+    def test_a_fitted_single_cannot_drop_required_assessment_text(self):
+        from research_harness import review_parts_v3, review_route_capacity
+        from test_review_output_profile import build_row
+
+        self.oversized(count=1, characters=210000, limit=230000)
+        evidence = self.case.artifacts.put(b'B' * 60000, 'text/plain')
+        self.case.expected['assessment_evidence'] = [evidence]
+        profiles = [dict(build_row(level=None, kind=kind, thinking=1), largest_output_tokens=12)
+                    for kind in ('single', 'read', 'combine', 'check', 'final')]
+        with patch.object(parts, 'NEW_SERIES_PROTOCOLS', (review_parts_v3.PROTOCOL, parts.PROTOCOL)), \
+                patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL), \
+                patch.object(review_route_capacity, 'read_profile_priors', return_value=profiles):
+            first = self.assign()
+        self.assertEqual((first[parts.KEY]['protocol'], first[parts.KEY]['kind']),
+                         (review_parts_v3.PROTOCOL, 'read'))
+        packet = self.packet(first)
+        logical = parts.read_logical_packet(self.case.artifacts, packet[parts.KEY])
+        self.assertIn(evidence, [row['artifact'] for row in logical['evidence']])

@@ -17,6 +17,13 @@ from problem_parts_fixtures import ResultPartsCase
 
 
 class StagedCitationMetadataTests(CitationMetadataCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def make_packet(self, reading):
         manifest = staged.build_manifest({'statement': 'The bounded claim.', 'grade': 2},
             [dict(key='readings', index=0, item=reading, artifacts=[], source_ids=[])], [])

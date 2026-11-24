@@ -262,6 +262,53 @@ def render_finding_prompt(finding_version=1):
     return rendered + (FINDING_V2_TEXT if finding_version == 2 else '')
 
 
+FINDING_V2_PAGE_TEXT = (
+    '\n\nFinding rules version 2. Under these rules a reviewer_gap is one unread work or one search that was not '
+    'run. It holds kind, text, formulation, basis, need, unsettled and exactly one of work or search, with optional '
+    'refs. formulation is {ref:<handle>} with the handle of the target of its row; this is the one place outside '
+    'refs where this answer writes ref. The harness puts the exact text of the formulation in its place and does '
+    'not count it in the limits of the row. basis is a list of one to eight quotations {unit,text}: unit is the '
+    'member unit of an excerpt or a passage answer of reading_final.entries, a u handle, and text copies at least '
+    '20 consecutive characters of the text of that entry. need states the question about this formulation that the '
+    'judgment needs answered. unsettled states why no bound reading, query or recorded search judgment answers it; '
+    'explain why any exclusion reason fails. work is {title,identifiers?}; it names a work in the basis and no work '
+    'already read. search is {terms,missing_term}; missing_term occurs in order in a quotation and has a content '
+    'token that occurs in no bound query of this formulation. Reordering, case and punctuation do not make a gap. '
+    'Tokens use NFKC, case folding and splitting at every nonletter and nondigit. A refusal names the rule that '
+    'failed in details.rule: gap_fields, gap_formulation, gap_basis, gap_work_read, gap_term_delivered or '
+    'gap_term_bound. An index, a database, a language, a period or unpublished literature that was not reached is a '
+    'limit of coverage unless an entry supplies the named work or term and the need: state such a limit in '
+    'coverage, and give no ground for it. Other kinds of ground keep their fields and meaning.\n\n'
+    'finding_index holds the bound searches of the targets of this page. finding_index.searches gives record_id, '
+    'search_digest, formulations and digest references to queries, scope, dispositions, resolved and '
+    'row_dispositions where present, and finding_index.fields holds each value once under its digest. Where the '
+    'index is too long, its longest values other than queries are not in fields, and finding_index.units gives for '
+    'each, under the same digest, {unit,characters}: the handle of the body that holds the value, and its length. A '
+    'passage request for that handle returns text of the body. finding_index.read_works lists reading_id, '
+    'reading_digest, version_id, identifiers and title of every read work. A matching normalized '
+    'identifier or tokenized title means that the work is already read. When finding_index is '
+    '{unit,characters,searches,read_works}, the body with that handle holds the index of every bound search.')
+FINDING_V2_CLOSING_TEXT = (
+    '\n\nFinding rules version 2. Under these rules a reviewer_gap is one unread work or one search that was not '
+    'run. It holds kind, text, formulation, basis, need, unsettled and exactly one of work or search, and the pages '
+    'state such gaps: a row whose kinds hold reviewer_gap carries one. In a reviewer_gap of this answer, '
+    'formulation is the exact text of the statement or of a neighbour, and basis quotes retained entries as '
+    '{unit,text}. Without a retained entry in this turn to quote, the answer adds no reviewer_gap of its own. A '
+    'limit of the literature coverage that names no work and no term is no ground: the pages state such limits in '
+    'coverage, and they do not keep rule 2 from applying. Other kinds of ground and the three outcome rules keep '
+    'their fields and meaning. finding_index holds, or names by a unit, the index of the bound searches and of the '
+    'read works of the chain, against which the harness checks a reviewer_gap.')
+
+
+def find_finding_v2_text(stage):
+    """Select the addition for the fields the current stage can answer."""
+    if stage == 'page':
+        return FINDING_V2_PAGE_TEXT
+    if stage == 'closing':
+        return FINDING_V2_CLOSING_TEXT
+    return FINDING_V2_TEXT
+
+
 PROBLEM_OPENNESS_PROMPT = render_finding_prompt()
 
 
@@ -588,11 +635,15 @@ def _nonempty(value):
 
 
 def _validate_objections(value, *, empty=False, path='/unresolved_objections'):
-    _require(isinstance(value, list) and (not empty or not value), "unresolved_objections must be a list" +
+    # The refusal names the member that it checks: unresolved_objections of a proposal review, or objections of a
+    # math nonapproval.
+    member = path.rsplit('/', 1)[-1]
+    entry = 'unresolved objection' if member == 'unresolved_objections' else 'objection'
+    _require(isinstance(value, list) and (not empty or not value), member + " must be a list" +
              (" and empty in an approval" if empty else ""), path=path)
     for index, objection in enumerate(value):
         item_path = path + '/' + str(index)
-        _closed(objection, ("blocking", "description"), "Each unresolved objection is exactly {blocking,description}",
+        _closed(objection, ("blocking", "description"), "Each " + entry + " is exactly {blocking,description}",
                 path=item_path)
         _require(type(objection["blocking"]) is bool,
                  "An objection needs a boolean blocking flag and a nonempty description", path=item_path + '/blocking')

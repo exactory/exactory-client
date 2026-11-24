@@ -1,5 +1,6 @@
 """Correction requests rebuild from the historical inputs they actually used."""
 
+from unittest.mock import patch
 import json
 from pathlib import Path
 import subprocess
@@ -12,9 +13,13 @@ import test_review_output_correction as fixtures
 
 class CorrectionRecordCheckTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = fixtures.CorrectionTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.fixture.prepare_refused()
         self.fixture.correct(self.fixture.delta())
 

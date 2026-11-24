@@ -33,14 +33,27 @@ class Stage3MatrixTests(unittest.TestCase):
                         row = stage3.execute_size_journey(self, stage, outcome, detail)
                     # Final has one admitted level in 0.91.0. The response-body
                     # limit must use the reading ladder just as the other limits do.
-                    # A condensing turn of five entries is split down to one entry.
-                    expected = dict(reading=[120000, 60000, 30000, 15000], combine=[5, 3, 2, 1]).get(stage, [240000])
+                    # A condensing turn of five entries (1,800 characters) has no split
+                    # whose blocks each hold 1,024 characters, so it keeps its one level
+                    # and ends at the capacity decision (design v7-final-pages, V5).
+                    expected = dict(reading=[120000, 60000, 30000, 15000], combine=[5]).get(stage, [240000])
                     self.assertEqual(row['levels'], expected, row)
                     self.assertEqual(row['end'], 'stop', row)
                 finally:
                     self.doCleanups()
         # The subtests retain each failed row independently; table additions
         # enter this loop without editing a second list of expected outcomes.
+
+    def test_v7_final_at_its_output_cap_states_no_route_class_condition(self):
+        """Reviews M-F4 and PL-F1: the final of a v7 chain stops at its output cap after two attempts at its one level,
+        so the output profile of its route class lowers no frame of a new chain on that class, and the answer "Move to
+        another route" states no condition that the store refuses such a route."""
+        stops = []
+        with patch.object(stage3, 'execute_stop_answers', side_effect=lambda owner, case, head, stop: stops.append(stop)):
+            stage3.execute_size_journey(self, 'final', 'output_over_cap', None)
+        [stop] = stops
+        answer = next(row for row in stop['details']['decision']['then'] if row['answer'] == 'Move to another route')
+        self.assertNotIn('condition', answer)
 
     @record_reachable_errors('plan_next')
     def test_g1_chain_kind_and_outcome_tables_include_the_stage3_rows(self):
@@ -77,7 +90,10 @@ class Stage3MatrixTests(unittest.TestCase):
         self.assertTrue(all(row['outcome'] == 'provider_refused' for row in attempts))
         from collections import Counter
         counts = Counter(row['sequence'] for row in attempts)
-        self.assertEqual(counts[1], failures.PROVIDER_REFUSAL_ATTEMPT_LIMIT + 3)
+        # Sequence 1 also holds one refusal at each lower level of the reading ladder. The frame of a v7 turn reserves
+        # its notes cost and its list rows, so this fixture's first reading turn takes 60,000 characters and the
+        # ladder has two lower levels (30,000 and 15,000).
+        self.assertEqual(counts[1], failures.PROVIDER_REFUSAL_ATTEMPT_LIMIT + 2)
         self.assertTrue(all(counts[sequence] == failures.PROVIDER_REFUSAL_ATTEMPT_LIMIT
                             for sequence in range(2, failures.SEQUENCE_LIMIT + 1)))
         result = case.record_final(final, packet)

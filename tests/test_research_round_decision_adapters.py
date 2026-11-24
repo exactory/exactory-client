@@ -1,10 +1,18 @@
 """Legacy round command names consume the same current scientific decision."""
 
+from unittest.mock import patch
 from strategy_fixtures import StrategyCase
 from research_harness.errors import ResearchError
 
 
 class CanonicalRoundAdapterTests(StrategyCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def test_evaluate_returns_to_literature_on_the_ready_canonical_investigation(self):
         from research_harness.gates import validate_transition
         self.mutate(self.module('principles').initialize_research, {'profile': 'research', 'target': None})

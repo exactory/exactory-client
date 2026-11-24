@@ -128,20 +128,26 @@ def _policy(records):
         "covered_adapters": list(COVERED_ADAPTERS), "generation": 0})
 
 
+def validate_capacity_policy(value):
+    """Validate policy input before any write and return its covered adapters."""
+    fields(value, ("store_limit", "route_limits"), ("covered_adapters",))
+    _positive(value["store_limit"], "Store capacity")
+    if not isinstance(value["route_limits"], dict):
+        raise ResearchError("invalid_input", "Route limits must be an object")
+    for route_id, limit in value["route_limits"].items():
+        text(route_id, "Route ID")
+        _positive(limit, "Route capacity")
+    covered = value.get("covered_adapters", list(COVERED_ADAPTERS))
+    if (not isinstance(covered, list) or not covered or any(item not in COVERED_ADAPTERS for item in covered)
+            or len(set(covered)) != len(covered)):
+        raise ResearchError("invalid_input", "Capacity covers explicitly named supported local adapters")
+    return covered
+
+
 def record_capacity(store, payload, *, request_id, expected_revision=None):
     """Record store and optional route limits; lowering a limit drains active calls."""
     def apply(tx, value, revision):
-        fields(value, ("store_limit", "route_limits"), ("covered_adapters",))
-        _positive(value["store_limit"], "Store capacity")
-        if not isinstance(value["route_limits"], dict):
-            raise ResearchError("invalid_input", "Route limits must be an object")
-        for route_id, limit in value["route_limits"].items():
-            text(route_id, "Route ID")
-            _positive(limit, "Route capacity")
-        covered = value.get("covered_adapters", list(COVERED_ADAPTERS))
-        if (not isinstance(covered, list) or not covered or any(item not in COVERED_ADAPTERS for item in covered)
-                or len(set(covered)) != len(covered)):
-            raise ResearchError("invalid_input", "Capacity covers explicitly named supported local adapters")
+        covered = validate_capacity_policy(value)
         previous = _policy(_TransactionRecords(tx))
         record = dict(value, version=1, scope="store", covered_adapters=covered,
                       generation=previous["generation"] + 1, recorded_revision=revision)
@@ -388,6 +394,9 @@ def reconcile_call(store, payload, *, request_id, expected_revision=None):
                     if operation == "review.invoke":
                         tx.put("review_attempt", invocation_id, failure)
                     elif operation == "review.route_probe":
+                        from .review_probe_reasons import list_unverified_reasons
+                        failure["unverified_reasons"] = list_unverified_reasons(
+                            store.build_artifact_store(), _get(records, "review_route", invocation["route_id"]), failure)
                         tx.put("review_route_probe", invocation_id, failure)
                     else:
                         tx.put("review_output_correction", invocation_id, failure)

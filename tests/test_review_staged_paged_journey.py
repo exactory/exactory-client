@@ -33,6 +33,13 @@ def build_output(body, root):
 
 
 class PagedJourneyTests(ResultPartsCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     staged_entry = True
     output_tokens = 4000
     timeout_seconds = 30

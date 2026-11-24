@@ -13,9 +13,13 @@ import test_review_output_correction as correction_fixtures
 
 class RefusalPlannerTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = fixtures.RefusalReplacementTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
 
     def plan(self, assignment):
@@ -144,9 +148,13 @@ class RefusalPlannerTests(unittest.TestCase):
 
 class CorrectionPlannerTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = correction_fixtures.CorrectionTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.fixture = self.case.fixture
         self.assignment = self.case.case.assignment
 
@@ -203,6 +211,17 @@ class CorrectionPlannerTests(unittest.TestCase):
 
 
 class PlannerChainRowsTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        from research_harness import review_parts
+        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def execute_planned_replacements(self, test_class, method):
         fixture = test_class()
         self.addCleanup(fixture.doCleanups)
@@ -236,8 +255,8 @@ class PlannerChainRowsTests(unittest.TestCase):
         from research_harness import review_parts as parts
         from research_harness.review_problem_parts import _measure
         fixture = parts_fixtures.PartsResultCase()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.oversized(count=5, characters=30000, room=65000)
         first = fixture.assign()
         packet = fixture.packet(first)

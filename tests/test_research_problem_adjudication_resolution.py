@@ -11,9 +11,17 @@ from research_harness import bar_sources, finishing, research_decisions as decis
 from research_harness import review_refusal
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
+from slate_refresh_fixtures import cite_in_refresh_chain
 
 
 class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     make_objection = objection_fixtures.ProblemObjectionTests.make_objection
     make_finding = objection_fixtures.ProblemObjectionTests.make_finding
     prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence
@@ -25,6 +33,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
     build_slate_output = objection_fixtures.ProblemObjectionTests.build_slate_output
     cite_a_requested_source = objection_fixtures.ProblemObjectionTests.cite_a_requested_source
     replace_first_bar = objection_fixtures.ProblemObjectionTests.replace_first_bar
+    cite_in_slate_refresh = objection_fixtures.ProblemObjectionTests.cite_in_slate_refresh
 
     def prepare_bar_adjudication(self):
         self.prepare_reviews(bar_reviewer="second")
@@ -137,6 +146,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         output = self.build_slate_output(["candidate-1", "candidate-2"])
         output["value"]["objection_findings"] = [dict(self.make_finding("contested"), evidence=evidence,
             reason="The candidate-2 observation is a counterexample to the resolution.")]
+        output = self.cite_in_slate_refresh(output)
         with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
             self.mutate(protocol.invoke_assignment, {"id": "attempt-" + assignment["id"], "assignment_id": assignment["id"]},
                         credential="test-only")
@@ -1246,6 +1256,12 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
 
 class RecordedReviewEvidenceTests(delivery_fixtures.ProblemDeliveryCase):
     """R65 audits legacy records and refreshes only their affected reviewer slots."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     prepare_reviews = objection_fixtures.ProblemObjectionTests.prepare_reviews
     prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence
@@ -1339,8 +1355,15 @@ class RecordedReviewEvidenceTests(delivery_fixtures.ProblemDeliveryCase):
         prior = records['review_assignment'][review['assignment_id']]
         refreshed = self.assign(prior['role'], prior['reviewer_id'], identifier='evidence-refresh')
         packet = self.read_packet(refreshed['id'])
-        self.assertEqual((refreshed['session_id'], refreshed['slot_id'], refreshed['history_assignment_id']),
-                         (prior['session_id'], prior['slot_id'], prior['id']))
+        if prior['role'] == 'slate':
+            # An ordinary slate review is reassessed as a new chain in its slot (0.93.0); a bar and a result in
+            # their session.
+            self.assertEqual((refreshed['context'], refreshed['session_id'], refreshed['slot_id'],
+                              refreshed['history_assignment_id']),
+                             ({'session_refresh': {'assignment_id': prior['id']}}, refreshed['id'], prior['slot_id'], None))
+        else:
+            self.assertEqual((refreshed['session_id'], refreshed['slot_id'], refreshed['history_assignment_id']),
+                             (prior['session_id'], prior['slot_id'], prior['id']))
         self.assertEqual(packet['problem_refresh']['reason'], 'evidence_undelivered')
         self.assertIn(review['id'], packet['problem_refresh']['review_ids'])
         self.assertIn(review['id'], [row.get('payload', row)['id'] for row in packet['historical_reviews']])
@@ -1348,6 +1371,8 @@ class RecordedReviewEvidenceTests(delivery_fixtures.ProblemDeliveryCase):
                   else self.build_review_output(prior['role']))
         if prior['role'] != 'bar':
             output['value']['bar_ids'] = packet['bar_ids']
+        if prior['role'] == 'slate':
+            output = cite_in_refresh_chain(output, self.supporting, packet['own_bars'][0]['record_reference'])
         if prior['role'] == 'result':
             output['value']['objection_findings'] = [dict(self.make_finding('continuing'), reason=self.make_objection()['reason'])]
             output['reassessment'] = {'assignment_id': 'result-second', 'findings': [{
@@ -1465,6 +1490,12 @@ class RecordedReviewEvidenceTests(delivery_fixtures.ProblemDeliveryCase):
 
 class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
     """R60 recovery uses authenticated observed bytes, frozen delivery and two refused outputs."""
+    def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
 
     prepare_reviews = objection_fixtures.ProblemObjectionTests.prepare_reviews
     prepare_problem_evidence = objection_fixtures.ProblemObjectionTests.prepare_problem_evidence

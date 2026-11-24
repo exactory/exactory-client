@@ -14,6 +14,10 @@ import test_problem_result_reassessment_binding as fixtures
 
 class CorrectionTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = fixtures.ResultReassessmentBindingTests()
         self.addCleanup(self.case.doCleanups)
         self.case.setUp()

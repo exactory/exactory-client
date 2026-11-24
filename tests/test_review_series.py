@@ -18,9 +18,13 @@ import test_review_continuation as continuation_fixtures
 
 class SeriesTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.fixture = continuation_fixtures.ContinuationTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
 
     def drive(self):
@@ -346,7 +350,7 @@ class SeriesTests(unittest.TestCase):
                    self.case.build_provider_response(self.case.build_review_output('bar'))]
         with patch('research_harness.review_transport.send_request', side_effect=outputs) as send, patch(
                 'research_harness.review_failure_class.plan_after_failure',
-                side_effect=lambda records, artifacts, identifier: dict(
+                side_effect=lambda records, artifacts, identifier, **options: dict(
                     state='replace' if any(row['assignment_id'] == identifier
                         for row in records.get('review_attempt', {}).values()) else 'run',
                     code='fixture_failure', details={})):

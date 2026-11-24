@@ -22,7 +22,7 @@
           "harness",
           "record"
         ],
-        "research_harness/openness_carried.py:read_chain_records#1": [
+        "research_harness/openness_carried.py:_require_origin_stamp#1": [
           "content"
         ],
         "research_harness/publication_scope.py:find_required_corrections#1": [
@@ -73,8 +73,25 @@
           "record"
         ]
       },
+      "execution_pending": {
+        "skills/math-solver/harness/search_controller/deferrals.py:validate_deferrals#1": [
+          "record"
+        ]
+      },
       "exploratory_evidence": {
         "research_harness/problem_evidence.py:validate_computation#1": [
+          "record"
+        ],
+        "skills/math-solver/harness/search_controller/evidence.py:audit_manifest#1": [
+          "record"
+        ],
+        "skills/math-solver/harness/search_controller/evidence.py:audit_manifest#2": [
+          "record"
+        ],
+        "skills/math-solver/harness/search_controller/provenance.py:audit_probe_credit#1": [
+          "record"
+        ],
+        "skills/math-solver/harness/search_controller/provenance.py:collect_import_sources#1": [
           "record"
         ]
       },

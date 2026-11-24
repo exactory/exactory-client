@@ -64,9 +64,7 @@ STOP_REGISTRY.update({
     'invalid_review_capacity_probe': dict(code='invalid_review_capacity_probe', **{'class': 'decision'},
         owner='D1', next=dict(kind='handoff', step=16, command='review-probe')),
     'review_route_capacity_below_floor': dict(code='review_route_capacity_below_floor', **{'class': 'decision'},
-        owner='D1', reasons=('no_parts_delivery', 'binary_input_over_measure',
-                             'binary_input_without_bound', 'body_without_text_form'),
-        next=dict(kind='handoff', step=14, command='review-assignment')),
+        owner='D1', next=dict(kind='handoff', step=14, command='review-assignment')),
     'review_series_no_progress': dict(code='review_series_no_progress', **{'class': 'harness_defect'},
         owner='D2', proof='test_automatic_gate_override.RecordedSeriesStopTests.'
                          'test_unchanged_repeat_records_the_harness_stop_and_ended_schedule',
@@ -135,6 +133,10 @@ for _code, _command in (
         ('review_staged_scale_unsupported', 'review-series'),
         ('review_source_no_progress', 'fulltext'),
         ('native_review_acceptance_required', 'search accept'),
+        ('native_review_completion_required', 'search complete'),
+        ('native_review_not_approved', 'search review-packet'),
+        ('native_review_legacy_closure', 'search review-packet'),
+        ('native_review_stale_minimum', 'search review-packet'),
         ('verification_verdict_body_required', 'bind-verdict'),
         ('review_route_retired', 'review-assignment'),
         ('review_recording_required', 'review'),
@@ -148,6 +150,14 @@ STOP_REGISTRY['assessment_incomplete'] = dict(code='assessment_incomplete',
     next=dict(kind='decision', owner_decides='How should the incomplete assessment be answered?',
         then=[dict(answer='Check the retained record', steps=[dict(command='record-check')]),
               dict(answer='List what the workspace owes', steps=[dict(command='status')])]))
+for _code, _question, _answer, _command in (
+        ('native_review_recording_blocked',
+         'How the owner answers the refusal of the math controller that details.message states.',
+         'Read the state of the math objective', 'search guard-status'),
+        ('native_review_objective_unavailable', 'In which workspace this review goes on.',
+         'List what this workspace holds', 'status')):
+    STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
+        next=dict(kind='decision', owner_decides=_question, then=[dict(answer=_answer, steps=[dict(command=_command)])]))
 _STORED_STATE_CODES_FIRST = ()
 
 
@@ -238,6 +248,8 @@ for _code in ('stale_revision', 'review_task_dependency_changed', 'review_output
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', next=dict(kind='continue'))
 STOP_REGISTRY['openness_packet_outdated'] = dict(code='openness_packet_outdated', **{'class': 'decision'},
     owner='D3', next=dict(kind='handoff', step=4, command='export'))
+STOP_REGISTRY['openness_carried_turn_unverified'] = dict(code='openness_carried_turn_unverified',
+    **{'class': 'decision'}, owner='D2', next=dict(kind='handoff', step=4, command='export'))
 STOP_REGISTRY['search_completion_invalid'] = dict(code='search_completion_invalid', **{'class': 'decision'},
     owner='D3', next=dict(kind='handoff', command='search'))
 STOP_REGISTRY['openness_finding_invalid'] = dict(code='openness_finding_invalid', **{'class': 'decision'},
@@ -298,6 +310,24 @@ _STORED_STATE_CODES_DECISION = (
 for _code in ('invalid_rubric_grades', 'invalid_strategy'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
         next=dict(kind='outcome', outcome='scientific_refused'))
+
+_CITATION_FIELD_QUESTION = 'How should the citation field be corrected?'
+for _code, _command in (
+        ('problem_citation_text_character', 'problem-citation-metadata'),
+        ('problem_citation_text_length', 'problem-citation-metadata'),
+        ('problem_citation_locator_character', 'problem-citation-locator'),
+        ('problem_citation_locator_length', 'problem-citation-locator'),
+        ('problem_citation_locator_format', 'problem-citation-locator'),
+):
+    STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
+        next=dict(kind='decision', owner_decides=_CITATION_FIELD_QUESTION,
+                  then=[dict(answer='Correct the citation field', steps=[dict(command=_command)])]))
+
+# Only the post command raises this code (exactory_api.validate_post_citations, called by bin/exactory).
+for _code in ('problem_citations_count',):
+    STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
+        next=dict(kind='outcome', outcome='scientific_refused'))
+
 
 # These commands and their input choices come from the CLI reference. A decision
 # carries its own payload rule, so a non-review command receives no assignment_id.
@@ -371,7 +401,6 @@ _NAMED_CAUSE_CODES_ENTRY = (
     'embedded_visual_dependency_unsupported',
     'embedded_visual_unsupported',
     'execution_coverage_missing',
-    'execution_pending',
     'expected_outcome_unresolved',
     'external_case_within_field',
     'external_cases_excess',
@@ -496,6 +525,7 @@ _NAMED_CAUSE_CODES_RECORD = (
     'component_pending',
     'configuration_not_ready',
     'execution_output_seal_required',
+    'execution_pending',
     'exploratory_evidence',
     'inheritance_refresh_stale',
     'inherited_result_stale',

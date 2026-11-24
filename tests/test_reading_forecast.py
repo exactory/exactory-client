@@ -13,6 +13,13 @@ from test_openness_final_preflight import FinalPreflightCase
 
 
 class ReadingProjectionTests(FinalPreflightCase):
+    def setUp(self):
+        from research_harness import openness_reading
+        released = patch.object(openness_reading, 'NEW_MATH_CHAIN_PROTOCOLS', (openness_reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     reading_protocol = None
     historical_v5 = True
     input_limit = 1300000
@@ -142,6 +149,13 @@ class ReadingProjectionTests(FinalPreflightCase):
 
 
 class MathForecastTests(FinalPreflightCase):
+    def setUp(self):
+        from research_harness import openness_reading
+        released = patch.object(openness_reading, 'NEW_MATH_CHAIN_PROTOCOLS', (openness_reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     reading_protocol = None
     historical_v5 = True
     text_sizes = (125000, 125000, 125000)
@@ -447,6 +461,13 @@ class AdversarialProjectionTests(FinalPreflightCase):
 
 
 class LegacyReadingForecastTests(FinalPreflightCase):
+    def setUp(self):
+        from research_harness import openness_reading
+        released = patch.object(openness_reading, 'NEW_MATH_CHAIN_PROTOCOLS', (openness_reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     reading_protocol = None
     historical_v5 = True
 
@@ -560,9 +581,9 @@ class SeriesReadingForecastTests(FinalPreflightCase):
             self.assertEqual(terminal['stop_class'], 'decision')
             self.assertEqual(terminal['state'], 'stop')
             self.assertIsNone(terminal['details']['successor']['protocol'])
-            self.assertEqual(len(terminal['details']['decision']['then']), 2)
-            self.assertNotIn(reading.WAIT_PROBLEM_ANSWER,
-                             [answer['answer'] for answer in terminal['details']['decision']['then']])
+            self.assertEqual(terminal['details']['largest_one_request_targets'], 0)
+            answers = terminal['details']['decision']['then']
+            self.assertEqual([[step['id'] for step in answer['steps']] for answer in answers], [[7, 4]])
             self.assertIn('input', terminal['capacity_warning'])
             self.assertTrue(all('capacity_forecast' in row for row in rows))
             self.assertEqual(len(self.store.snapshot()['records']['review_attempt']), 49)
@@ -580,9 +601,9 @@ class SeriesReadingForecastTests(FinalPreflightCase):
             plan = plan_next(self.store.snapshot()['records'], self.artifacts, 'turn-1')
         self.assertEqual((plan['state'], plan['code']), ('stop', 'review_input_too_large'))
         self.assertIsNone(plan['details']['successor']['protocol'])
-        self.assertEqual(len(plan['details']['decision']['then']), 2)
-        self.assertNotIn(reading.WAIT_PROBLEM_ANSWER,
-                         [answer['answer'] for answer in plan['details']['decision']['then']])
+        self.assertEqual(plan['details']['largest_one_request_targets'], 0)
+        answers = plan['details']['decision']['then']
+        self.assertEqual([[step['id'] for step in answer['steps']] for answer in answers], [[7, 4]])
 
 
 if __name__ == '__main__':
