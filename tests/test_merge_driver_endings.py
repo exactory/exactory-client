@@ -16,8 +16,8 @@ class MergedDriverEndingTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.fixture = fixtures.ContinuationTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
 
     def test_startup_refusal_gets_a_retained_ending(self):

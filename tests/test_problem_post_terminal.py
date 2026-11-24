@@ -261,8 +261,8 @@ class PostedCarryRaceTests(unittest.TestCase):
         source = fixtures.source()
         staged = ResultPartsCase()
         staged.staged_entry = True
-        staged.setUp()
         self.addCleanup(staged.doCleanups)
+        staged.setUp()
         sys.modules['research_harness.problem_claims'].require_problem = real_claims.require_problem
         home = staged.case
         carry_fixtures.legacy_handoff_or_carry_adapter(home, source)

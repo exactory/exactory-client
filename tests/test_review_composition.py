@@ -1226,8 +1226,8 @@ class StoredFinalAcceptanceTests(unittest.TestCase):
         import json
         from test_research_problem_reviews import ProblemReviewTests
         fixture = ProblemReviewTests()
-        fixture.setUp()
         try:
+            fixture.setUp()
             fixture.observe_result_reviews()
             records = fixture.read_records()
             for attempt in records['review_attempt'].values():

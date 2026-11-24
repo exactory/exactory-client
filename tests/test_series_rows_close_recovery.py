@@ -70,8 +70,8 @@ class RecoveryRowTests(unittest.TestCase):
 
     def prepare_fixture(self, cls=continuation_fixtures.ContinuationTests):
         fixture = cls()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         return fixture
 
     def run_series(self, case, head):

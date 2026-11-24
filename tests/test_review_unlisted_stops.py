@@ -20,8 +20,8 @@ class UnlistedStopTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.fixture = fixtures.ContinuationTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
 
     @record_reachable_errors('run_series', injected={UNLISTED_CODE})
@@ -136,9 +136,9 @@ class UnlistedStopTests(unittest.TestCase):
             packet.pop('digest', None)
             packet['digest'] = digest(packet)
             return packet
+        self.addCleanup(capacity_fixture.doCleanups)
         with patch.object(review_protocol, 'build_packet', side_effect=build_packet):
             capacity_fixture.setUp()
-        self.addCleanup(capacity_fixture.doCleanups)
         case = capacity_fixture.case
         assignment = capacity_fixture.assignment
         operation = cli.OPERATIONS['review-run']

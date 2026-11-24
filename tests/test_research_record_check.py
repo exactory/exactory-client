@@ -690,9 +690,11 @@ from pathlib import Path
 import shutil
 import sys
 sys.path[:0] = sys.argv[1:3]
+from literature_fixtures import LiteratureCase
 from test_research_review_protocol import ReviewProtocolTests
 case = ReviewProtocolTests()
-case.setUp()
+# The archived release has no selection of the session rules: set the fixture up without the statement of its rules.
+LiteratureCase.setUp(case)
 try:
     # Use the archived route operation; modern test backends require later modules.
     case.mutate(case.protocol().record_route, dict(id='route', adapter='openai_responses_v1',

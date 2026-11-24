@@ -17,8 +17,8 @@ from test_review_route_capacity import build_route
 def build_problem_packets():
     from review_parts_fixtures import PartsResultCase
     case = PartsResultCase()
-    case.setUp()
     try:
+        case.setUp()
         fixture = case.case
         records = fixture.read_records()
         return {role: review_protocol.build_packet(records, fixture.artifacts, None, role, 'first')

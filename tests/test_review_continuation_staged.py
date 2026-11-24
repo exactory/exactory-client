@@ -22,8 +22,8 @@ class StagedContinuationTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.fixture = fixtures.FrontierTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
         self.controller = self.fixture.create_controller()
 

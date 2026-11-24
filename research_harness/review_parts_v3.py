@@ -1443,8 +1443,10 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
                 repair_binding=describe_prompt_binding(logical) if adapter == 'context_repair' else None))
         if admitted['state'] != 'accept':
             if options.get('pinned'):
-                # A recorded v3 head keeps its protocol, so its refusal keeps the admission's diagnostics.
-                raise ResearchError('review_route_capacity_below_floor', admitted['message'], admitted.get('details'))
+                # A recorded v3 head keeps its protocol (no other planner follows), so its refusal keeps the
+                # admission's diagnostics and reaches the coverage check of the assignment, which states the answers.
+                raise legacy.UnfitOrdinaryPacket('review_route_capacity_below_floor', admitted['message'],
+                                                 admitted.get('details'))
             if ordinary_needs_parts and options.get('capacity_replacement') is None:
                 raise legacy.UnfitOrdinaryPacket('review_route_capacity_below_floor', admitted['message'],
                                                  admitted.get('details'))

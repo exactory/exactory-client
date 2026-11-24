@@ -26,8 +26,8 @@ class ReviewBRowTests(unittest.TestCase):
 
     def prepare_fixture(self, fixture_type=continuation_fixtures.ContinuationTests):
         fixture = fixture_type()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         return fixture
 
     def test_every_stored_content_code_keeps_the_reviewed_record_check_decision(self):

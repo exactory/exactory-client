@@ -206,6 +206,19 @@ def select_capacity_probe_size(records, route, request_tokens, *, artifacts=None
     return describe_route_capacity(route, records=records, artifacts=artifacts)['capacity_evidence']['probe_input_tokens']
 
 
+def describe_floor_probe_tokens(records, artifacts, route, floor):
+    """The input tokens of a capacity probe of the route after which an admission that stopped at the floor `floor`
+    (its room and its minimum) has the request room that it lacked, or None where a probe cannot raise that room: the
+    admission stopped at another room than the request text of the route, or the input limit of the route is no
+    observation of a probe."""
+    limits = describe_route_capacity(route, records=records, artifacts=artifacts)
+    text = limits['input_text_characters']
+    if floor.get('room') != text['value'] or limits['input_tokens']['source'] not in ('observed', 'default'):
+        return None
+    tokens = math.ceil(floor['minimum'] / (text['characters_per_token'] or 1))
+    return select_capacity_probe_size(records, route, tokens, artifacts=artifacts)
+
+
 def build_capacity_probe_request(route, prompt, packet, tokens):
     """Fill only evidence, keeping both controls in the unchanged three-member packet."""
     from .errors import ResearchError
@@ -734,12 +747,16 @@ def require_covered_assignment(records, artifacts, assignment, packet, prompt, r
                                       public_assignment=public_assignment, trial_assignment=trial_assignment)
     probe = None
     unavailable_probe = None
-    if (planner_floor is None and reason == 'no_parts_delivery' and complete
+    if planner_floor is not None and complete and route['adapter'] != 'codex_cli_visual_v1':
+        # The probe of the route verifies the room that the floor of the series planner needs, where it can.
+        probe = describe_floor_probe_tokens(records, artifacts, route, planner_floor)
+    elif (planner_floor is None and reason == 'no_parts_delivery' and complete
             and route['adapter'] != 'codex_cli_visual_v1'
             and (measure['character_limit'] is None or measure['characters'] <= measure['character_limit'])
             and measure['tokens_upper'] is not None and measure['tokens_upper'] > measure['token_limit']
             and capacity['input_tokens']['source'] in ('observed', 'default')):
         probe = select_capacity_probe_size(records, route, measure['tokens_upper'] or measure['text_tokens_upper'], artifacts=artifacts)
+    if probe is not None:
         from .review_protocol import build_probe_prompt
         size = scale_capacity_probe_size(records, artifacts, route, probe)
         try:

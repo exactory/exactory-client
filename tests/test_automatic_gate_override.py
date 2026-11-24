@@ -111,8 +111,8 @@ class StopClassificationTests(unittest.TestCase):
     def test_authentication_series_follows_backoff_and_stops_on_seventh_failure(self):
         from datetime import datetime, timedelta, timezone
         fixture = continuation_fixtures.ContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         now = [datetime(2026, 11, 7, 8, tzinfo=timezone.utc)]
         delays = []
 
@@ -219,8 +219,8 @@ class RecordedSeriesStopTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.fixture = continuation_fixtures.ContinuationTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
 
     def stop_series(self):

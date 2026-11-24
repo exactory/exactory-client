@@ -406,18 +406,15 @@ class _PendingAttachmentTests:
 
 
 class TestManagedDepositForAProblem(_PendingAttachmentTests, _DepositTestCase):
-    def setUp(self):
-        from research_harness import bar_sources, review_protocol
-        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
-        released.start()
-        self.addCleanup(released.stop)
-        super().setUp()
-
     # The same manuscript resumes the completed intent, so a new record needs another manuscript or a new version.
     _NEXT_DEPOSIT_ADVICE_MSG = ("To publish another record for this problem, change the manuscript or add --new-version."
                                 " The same manuscript resumes the same completed deposit.")
 
     def setUp(self) -> None:
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.exactory = _install_exactory(self)
 

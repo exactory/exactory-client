@@ -107,7 +107,12 @@ class ReviewRequestParityTests(unittest.TestCase):
                     selection['value'] = [self.extend_expected_attempt(name, binding), refused,
                                           [self.extend_expected_attempt(name, value) for value in completed]]
         if field == 'status' and 'value' in expected:
-            expected['value']['review']['outside_solved_part'] = copy.deepcopy(self.capacity['outside_solved_part'])
+            outside = copy.deepcopy(self.capacity['outside_solved_part'])
+            # Since 0.93.0 a new math chain is of the math protocol v2, so native_math no longer lists math_reading_v1.
+            math_rows = outside['native_math']
+            self.assertEqual([row['reason'] for row in math_rows][-1], 'math_reading_v1')
+            outside['native_math'] = math_rows[:-1]
+            expected['value']['review']['outside_solved_part'] = outside
             routes = self.capacity['cases'][name]['routes']
             if routes is not None:
                 self.assertNotIn('routes', expected['value']['review'])

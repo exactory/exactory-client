@@ -488,6 +488,10 @@ class FormingImportTests(unittest.TestCase):
         self.destination.assert_error('problem_accounts_history_missing', lambda: self.destination.mutate(problem_claims.record_value, value))
 
     def test_real_slate_packet_carries_the_candidates_imported_provenance(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         import test_research_problem_slate as fixtures
         from research_harness import review_protocol
         destination = fixtures.ProblemSlateTests()
@@ -509,6 +513,10 @@ class FormingImportTests(unittest.TestCase):
         self.assertEqual(found[0]['record'], self.call)
 
     def test_slate_import_describes_the_probe_program_and_keeps_unread_outputs_sealed(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         import test_research_problem_slate as fixtures
         from test_research_program_probes import ProgramProbeCase
 
@@ -559,8 +567,8 @@ class FormingImportTests(unittest.TestCase):
         imported = self.import_history()
         reference = self.reference('forming_call', self.call, imported['source_origin'])
         case = fixtures.ResultPartsCase()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         case.case.expected['forming_imports'] = [dict(source_origin=imported['source_origin'], source_revision=imported['source_revision'])]
         case.case.expected['account_records'] = [dict(record=self.call, cite=reference)]
         search = dict(id='import-search', queries=['The source forming history.'])
@@ -575,6 +583,10 @@ class FormingImportTests(unittest.TestCase):
         self.assertEqual([row['code'] for row in pending], ['problem_evidence_unassessed'])
 
     def test_observed_result_review_can_cite_the_foreign_record(self):
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         import test_research_problem_delivery as fixtures
         from research_harness import research_decisions
         destination = fixtures.ProblemDeliveryCase()

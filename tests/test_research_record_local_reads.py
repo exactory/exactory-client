@@ -43,8 +43,8 @@ class LocalReadTests(unittest.TestCase):
         # the machine has none.
         use_absent_programs(self)
         fixture = parts_fixtures.PartsViewCase()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.prepare_parts()
         assignment = fixture.assign()
         fixture.invoke(assignment)

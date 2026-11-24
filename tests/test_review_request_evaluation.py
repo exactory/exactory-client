@@ -170,8 +170,8 @@ class RequestReuseTests(ResultPartsCase):
         from research_harness import research_decisions as decisions
         from test_research_problem_reviews import ProblemReviewTests
         fixture = ProblemReviewTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.supporting = fixture.artifacts.put(b'A captured field standard.', 'text/plain')
         record_codex_route(fixture)
         assignment = fixture.assign('bar', 'first', **fixture.deliver_supporting('first'))

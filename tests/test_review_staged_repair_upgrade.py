@@ -367,8 +367,8 @@ class StagedVisualRepairTests(unittest.TestCase):
         import test_visual_result_delivery as visual
         import test_visual_context_repair as visual_repair
         fixture = visual.VisualResultDeliveryTests(methodName='runTest')
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         self.fixture, self.case = fixture, fixture.case
         prior = fixture.assignment
         value = {key:prior[key] for key in ('role', 'route_id', 'reviewer_id', 'author_id', 'dossier_id')}

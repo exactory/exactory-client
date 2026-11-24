@@ -772,8 +772,8 @@ class ScientificRecoveryTests(unittest.TestCase):
     def test_first_refusal_after_provider_failure_executes_authenticated_replacement(self):
         from test_review_refusal_replacement import RefusalReplacementTests
         fixture = RefusalReplacementTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         context = fixture.case.deliver_supporting('first')
         assignment = fixture.case.assign('bar', 'first', identifier='initial', **context)
         with patch.object(protocol.transport, 'send_request', side_effect=OSError('Synthetic provider failure')):

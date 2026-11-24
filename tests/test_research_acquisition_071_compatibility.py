@@ -26,8 +26,8 @@ class AcquisitionCompatibilityTests(jobs_fixtures.JobCase):
         import test_review_staged_scale_entry as staged_fixtures
         from research_harness import review_protocol as protocol
         fixture = staged_fixtures.StagedScaleEntryTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.oversized(count=6, characters=24000, limit=110000)
         part = fixture.assign('historical-part')
         fixture.invoke(part)

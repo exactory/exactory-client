@@ -21,8 +21,8 @@ class ActualDeliveryContractTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.case = fixtures.ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.observe_bar_reviews()
 
     def fit_local_requests(self):

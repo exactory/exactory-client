@@ -18,9 +18,13 @@ class ExhaustionRepairTests(unittest.TestCase):
         released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
         released.start()
         self.addCleanup(released.stop)
+        from research_harness import review_parts
+        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = problem_fixtures.ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
         self.case.prepare_review_route()
         for reviewer in ('first', 'second'):
@@ -400,8 +404,8 @@ class ExhaustionDeliveryTests(unittest.TestCase):
     def test_predecessor_input_is_credited_only_for_the_same_reviewer_and_route(self):
         from research_harness.review_delivered_evidence import read_chain_delivery, read_selected_delivery
         fixture = ExhaustionRepairTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         case = fixture.case
         predecessor = fixture.build_position()
         repaired = fixture.admit(predecessor)

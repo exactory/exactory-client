@@ -43,9 +43,10 @@ def refuse_shape(values, **options):
     raise AssertionError('The shape check accepted ' + json.dumps(values))
 
 
-def build_fixture(fixture_type):
-    """An instance of a fixture test case, set up outside its own test methods."""
+def build_fixture(owner, fixture_type):
+    """An instance of a fixture test case, set up outside its own test methods, whose cleanups the owner runs."""
     fixture = fixture_type()
+    owner.addCleanup(fixture.doCleanups)
     fixture.setUp()
     return fixture
 
@@ -193,14 +194,14 @@ class OtherGrammarTests(unittest.TestCase):
     """The arrays of another grammar get the positions in their array and no text of the three forms."""
     def setUp(self):
         from research_harness import review_parts
-        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
-        released.start()
-        self.addCleanup(released.stop)
+        for released in (patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,)),
+                         patch.object(protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))):
+            released.start()
+            self.addCleanup(released.stop)
         super().setUp()
 
     def prepare(self, fixture_type):
-        fixture = build_fixture(fixture_type)
-        self.addCleanup(fixture.doCleanups)
+        fixture = build_fixture(self, fixture_type)
         return fixture
 
     def classify(self, fixture, attempt_id):
@@ -276,8 +277,7 @@ class ArrayPathTests(unittest.TestCase):
         self.assertEqual(error.details, {'path': path, 'refused_indexes': [1], 'refused_count': 1, 'notice': notice})
 
     def test_a_reassessment_finding_of_a_review_names_its_evidence_array(self):
-        fixture = build_fixture(binding_fixtures.ResultReassessmentBindingTests)
-        self.addCleanup(fixture.doCleanups)
+        fixture = build_fixture(self, binding_fixtures.ResultReassessmentBindingTests)
         fixture.prepare()
         output = copy.deepcopy(fixture.output)
         finding = output['reassessment']['findings'][0]
@@ -304,8 +304,7 @@ class ArrayPathTests(unittest.TestCase):
             '/evidence', refusal.EVIDENCE_FORMS_NOTICE)
 
     def test_a_problem_adjudication_names_its_evidence_array(self):
-        case = build_fixture(problem_fixtures.ProblemReviewTests)
-        self.addCleanup(case.doCleanups)
+        case = build_fixture(self, problem_fixtures.ProblemReviewTests)
         case.supporting = case.artifacts.put(b'An exact synthetic field standard.', 'text/plain')
         case.prepare_review_route()
         case.observe('bar', 'first')
@@ -332,8 +331,7 @@ class StoredShapeRefusalTests(unittest.TestCase):
         super().setUp()
 
     def test_a_stored_replacement_without_shape_details_stays_verified_with_the_same_fingerprint(self):
-        fixture = build_fixture(continuation_fixtures.ContinuationTests)
-        self.addCleanup(fixture.doCleanups)
+        fixture = build_fixture(self, continuation_fixtures.ContinuationTests)
         installed = refusal.classify_observed_output
 
         def classify_without_positions(records, artifacts, attempt_id):

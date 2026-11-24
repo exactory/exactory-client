@@ -801,21 +801,6 @@ SESSION_UNSERVED_REVIEW_MESSAGE = ('No verified route of this record serves a ne
                                    'session rules v4, and a new chain does not start under an older rule set.')
 
 
-def describe_floor_probe_tokens(records, artifacts, assignment, admission):
-    """The input tokens of a capacity probe of the route after which the admission of the rules v4 has the request
-    room that it lacked, or None where a probe cannot raise that room: the admission stopped at another room than
-    the request text of the route, or the input limit of the route is no observation of a probe."""
-    import math
-    route = records['review_route'][assignment['route_id']]
-    limits = capacity.describe_route_capacity(route, records=records, artifacts=artifacts)
-    floor = admission.get('details', {})
-    text = limits['input_text_characters']
-    if floor.get('room') != text['value'] or limits['input_tokens']['source'] not in ('observed', 'default'):
-        return None
-    tokens = math.ceil(floor['minimum'] / (text['characters_per_token'] or 1))
-    return capacity.select_capacity_probe_size(records, route, tokens, artifacts=artifacts)
-
-
 def require_session_capacity(records, artifacts, value, logical, admission, *, prompt, trial_assignment, explain=True):
     """Rule V5: a new chain that the admission of the rules v4 stops for capacity, and that would start as a session
     of an older rule set, which has no capacity plan, ends before its first call, with the stop that a first request
@@ -836,7 +821,8 @@ def require_session_capacity(records, artifacts, value, logical, admission, *, p
         prompt=prompt, exclude_route=value['route_id'], repair_plan=repair_plan, trial_assignment=trial_assignment)
     # Without a serving route, the stop leads on through this route: a probe that raises its input, or another route
     # whose output limit holds the smallest final.
-    probe_tokens = None if serving else describe_floor_probe_tokens(records, artifacts, value, admission)
+    probe_tokens = None if serving else capacity.describe_floor_probe_tokens(
+        records, artifacts, records['review_route'][value['route_id']], admission.get('details', {}))
     then = describe_capacity_steps(records, artifacts, value, serving, probe_tokens, repair_plan=repair_plan)
     if not serving and admission.get('details', {}).get('reason') == 'output_floor':
         assign = describe_capacity_assignment(records, artifacts, value, value['route_id'])

@@ -13,7 +13,7 @@ from research_harness import research_decisions as decisions
 from research_harness.evidence import digest
 from research_harness.errors import ResearchError
 from review_parts_fixtures import PartsResultCase
-from test_review_parts_v3 import build_native_acceptance_case, make_turn_output
+from test_review_parts_v3 import build_native_acceptance_case, make_turn_output, set_up_parts_v2_fixture
 
 
 class PagedSeriesTests(PartsResultCase):
@@ -1318,10 +1318,6 @@ class AdapterPageTests(unittest.TestCase):
         self.addCleanup(entry.stop)
 
     def setUp(self):
-        from research_harness import review_parts
-        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
-        released.start()
-        self.addCleanup(released.stop)
         from research_harness import bar_sources, review_protocol
         released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
         released.start()
@@ -1381,9 +1377,7 @@ class AdapterPageTests(unittest.TestCase):
     def test_verification_pages_bind_the_verdict(self):
         from test_review_parts_study import VerificationPartsTests
         from research_harness import verification, review_transport as transport
-        case = VerificationPartsTests()
-        self.addCleanup(case.doCleanups)
-        case.setUp()
+        case = set_up_parts_v2_fixture(self, VerificationPartsTests())
         self.pin_read_profile()
         def answer(assignment):
             output = case.final_output(assignment)
@@ -1401,9 +1395,7 @@ class AdapterPageTests(unittest.TestCase):
     def test_readiness_pages_record_the_support_review(self):
         from test_review_parts_study import ReadinessPartsTests
         from research_harness import development, review_transport as transport
-        case = ReadinessPartsTests()
-        self.addCleanup(case.doCleanups)
-        case.setUp()
+        case = set_up_parts_v2_fixture(self, ReadinessPartsTests())
         self.pin_read_profile()
         def answer(assignment):
             output = case.final_output(assignment)
@@ -1476,9 +1468,7 @@ class AdapterPageTests(unittest.TestCase):
         replacement of the page is accepted."""
         from test_review_parts_study import VerificationPartsTests
         from research_harness import review_transport as transport
-        case = VerificationPartsTests()
-        self.addCleanup(case.doCleanups)
-        case.setUp()
+        case = set_up_parts_v2_fixture(self, VerificationPartsTests())
         self.pin_read_profile()
         quote = 'An unrequested note.'
         unsent = case.case.artifacts.put(quote.encode('utf-8'), 'text/plain; charset=utf-8')
@@ -1562,9 +1552,7 @@ class AdapterPageTests(unittest.TestCase):
         from test_review_parts_native import NativePartsTests
         from codex_route_fixtures import invoke_codex
         from research_harness.review_parts_native import find_final_assignment
-        case = NativePartsTests()
-        self.addCleanup(case.doCleanups)
-        case.setUp()
+        case = set_up_parts_v2_fixture(self, NativePartsTests())
         self.pin_read_profile()
         def output(assignment):
             return case.final_output([row['digest'] for row in case.native['evidence']])

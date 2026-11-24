@@ -472,8 +472,8 @@ class RoutePlanGuardTests(RoutePlanCase):
         refused = {}
         for name, build in sorted(builders.items()):
             case = RoutePlanCase('setUp')
-            case.setUp()
             try:
+                case.setUp()
                 head = build(case)
                 fixture = case.case
                 with tempfile.TemporaryDirectory() as directory:

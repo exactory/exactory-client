@@ -33,8 +33,8 @@ class SeriesEndingTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.fixture = fixtures.ContinuationTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
         self.plan = self.fixture.plan()
         self.snapshot = self.case.store.snapshot()
@@ -1112,8 +1112,8 @@ class SeriesEndingTests(unittest.TestCase):
     def end_over_pending_delivery(self):
         """End a bar session whose three requested full texts exceed the input of its route."""
         forecast = forecast_fixtures.SessionForecastTests()
-        forecast.setUp()
         self.addCleanup(forecast.doCleanups)
+        forecast.setUp()
         requested = forecast.request_texts([180000, 180000, 180000])
         lines = []
         self.assertEqual(self.run_series(forecast.case.store, forecast.assignment['id'], emit=lines.append), 3)

@@ -349,8 +349,8 @@ class ExcludedCodeRecorderTests(unittest.TestCase):
             raise ResearchError('contract_changed', 'The external controller contract changed.')
         import test_review_continuation as continuation_fixtures
         fixture = continuation_fixtures.ContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         store = fixture.case.store
         head = fixture.assignment['id']
         with patch.object(review_continuation, 'plan_next', plan), patch.object(

@@ -23,8 +23,8 @@ class SessionDeliveryTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.case = problem_fixtures.ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
         record_codex_route(self.case, model='gpt-6-astra')
         # Retain the reduced-history fitting budget on a route that can admit

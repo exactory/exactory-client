@@ -44,8 +44,8 @@ class RouteRenewalFixture(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.case = problem_fixtures.ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
         self.outputs, self.calls = [], []
         self.capacity_share, self.capacity_failure, self.probe_failure = 1.0, None, False
@@ -315,8 +315,8 @@ class RouteRenewalRegressionTests(RouteRenewalFixture):
         with self.subTest(case='frontier of a staged review'):
             import test_review_staged_frontier as frontier_fixtures
             fixture = frontier_fixtures.FrontierTests()
-            fixture.setUp()
             self.addCleanup(fixture.doCleanups)
+            fixture.setUp()
             controller = fixture.create_controller()
             step = controller['next'][0]
             make_codex_stale(self)
@@ -391,8 +391,8 @@ def build_refused_parts_turn(test):
     import review_parts_fixtures as parts_fixtures
     from codex_route_fixtures import limit_codex_input
     fixture = parts_fixtures.PartsResultCase()
-    fixture.setUp()
     test.addCleanup(fixture.doCleanups)
+    fixture.setUp()
     fixture.oversized(count=4, characters=24000, room=40000)
     assignment = fixture.assign()
     output = parts_fixtures.make_output(fixture.packet(assignment))
@@ -724,8 +724,8 @@ class RouteRenewalContractTests(RouteRenewalFixture):
         with self.subTest(position='result'):
             # Its own store, run before this store installs another runtime.
             other = type(self)(self._testMethodName)
-            other.setUp()
             try:
+                other.setUp()
                 other.check_result_limit_stop()
             finally:
                 other.doCleanups()
@@ -782,6 +782,9 @@ class RouteRenewalContractTests(RouteRenewalFixture):
         from research_harness import bar_sources, review_parts as parts, review_refusal_notice as notices
         from research_harness.review_refusal_replacement import validate_replacement_origin
         from review_parts_fixtures import make_output
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         real = notices.select_refusal_notice
         def select_parts_only(*args, **options):
             # No form fits a packet without a parts header, as when the notice lifts the task over its level.
@@ -923,8 +926,8 @@ class RouteRenewalCapacityTests(RouteRenewalFixture):
     def test_second_capacity_probe_follows_a_first_one_that_left_the_evidence_short(self):
         with self.subTest(store='both probes short, on its own store'):
             other = type(self)(self._testMethodName)
-            other.setUp()
             try:
+                other.setUp()
                 other.check_short_probes_end_the_offer()
             finally:
                 other.doCleanups()
@@ -989,8 +992,8 @@ class RouteRenewalCapacityTests(RouteRenewalFixture):
     def test_capacity_probe_without_evidence_ends_the_offer(self):
         with self.subTest(probe='a capacity probe that does not complete, on its own store'):
             other = type(self)(self._testMethodName)
-            other.setUp()
             try:
+                other.setUp()
                 other.check_probe_that_does_not_complete()
             finally:
                 other.doCleanups()
@@ -1066,8 +1069,8 @@ class RouteRenewalCompatibilityTests(RouteRenewalFixture):
         with self.subTest(review='the frontier of a staged review on a retired and stale route'):
             import test_review_staged_frontier as frontier_fixtures
             fixture = frontier_fixtures.FrontierTests()
-            fixture.setUp()
             self.addCleanup(fixture.doCleanups)
+            fixture.setUp()
             controller = fixture.create_controller()
             fixture.case.mutate(protocol.record_context_event, dict(id='retire-controller-route',
                 assignment_id=controller['id'], kind='route_retired', source='owner',
@@ -1092,8 +1095,8 @@ class RouteRenewalCompatibilityTests(RouteRenewalFixture):
         with self.subTest(head='a result turn whose plan is the output correction'):
             import test_review_output_correction as correction_fixtures
             correction = correction_fixtures.CorrectionTests()
-            correction.setUp()
             self.addCleanup(correction.doCleanups)
+            correction.setUp()
             correction.prepare_refused()
             fixture, assignment = correction.fixture, correction.case.assignment
             current = plan_next(fixture.read_records(), fixture.artifacts, assignment['id'])
@@ -1110,8 +1113,8 @@ class RouteRenewalCompatibilityTests(RouteRenewalFixture):
             import test_review_staged_frontier as frontier_fixtures
             from research_harness import review_worker
             fixture = frontier_fixtures.FrontierTests()
-            fixture.setUp()
             self.addCleanup(fixture.doCleanups)
+            fixture.setUp()
             controller = fixture.create_controller()
             (fixture.case.root / 'refuse').touch()
             with patch.object(review_worker, '_entry_command', return_value=[sys.executable, '-c', frontier_fixtures.WORKER]):
@@ -1177,9 +1180,9 @@ class RouteRenewalStoredShapeTests(unittest.TestCase):
                 compared.append(assignment['id'])
             return result
         fixture = test_class(method)
-        if set_up:
-            fixture.setUp()
         try:
+            if set_up:
+                fixture.setUp()
             with patch.object(failures, 'list_turn_assignments', side_effect=compare), patch.object(
                     failures, 'list_failure_position_assignments', side_effect=compare_position):
                 getattr(fixture, method)()
@@ -1229,8 +1232,8 @@ def build_session_fixture(test):
     """A bar session of exactory-independent-review-sources-v4 on a Codex route."""
     import test_review_session_v4_turns as session_fixtures
     fixture = session_fixtures.SessionTurnsTests('test_refused_final_keeps_level_and_material_with_notice_then_records')
-    fixture.setUp()
     test.addCleanup(fixture.doCleanups)
+    fixture.setUp()
     return fixture
 
 
@@ -1238,8 +1241,8 @@ def build_series_fixture(test):
     """A result series of exactory-review-parts-v3 with pages on a Codex route."""
     import test_review_parts_v3_pages as series_fixtures
     fixture = series_fixtures.PagedSeriesTests('test_a6_refused_closing_is_replaced_with_notice_then_records')
-    fixture.setUp()
     test.addCleanup(fixture.doCleanups)
+    fixture.setUp()
     return fixture
 
 

@@ -1092,8 +1092,8 @@ class StagedMetricTests(unittest.TestCase):
         from test_review_staged_protocol import StagedEntryTests
         from research_harness import review_protocol as protocol
         case = StagedEntryTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         case.oversized()
         controller = case.assign_staged('controller')
         self.assertNotIn('task', controller)

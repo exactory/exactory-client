@@ -926,11 +926,14 @@ class FormFindingTests(unittest.TestCase):
 
 class ThirdRoundTests(unittest.TestCase):
     def setUp(self):
+        self.select_session_rules_v3()
+        super().setUp()
+
+    def select_session_rules_v3(self):
         from research_harness import bar_sources, review_protocol
         released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
         released.start()
         self.addCleanup(released.stop)
-        super().setUp()
 
     def prepare(self, cls):
         return forms.prepare_unit_fixture(self, cls, 'runTest')
@@ -1043,6 +1046,8 @@ class ThirdRoundTests(unittest.TestCase):
             (failures, 'classify_final_capacity_attempt', dict(side_effect=injected))])
 
         self.doCleanups()
+        # The ordinary chain of the source rules v3 is a released form; the cleanups above removed its selection.
+        self.select_session_rules_v3()
         case, head, fixture = forms.matrix.prepare_assignment(self, 'source')
         ordinary = forms.FormTurn('ordinary', 'source', fixture, case, head['id'])
         blocks(ordinary, 'review_source_continuation_unverified', [

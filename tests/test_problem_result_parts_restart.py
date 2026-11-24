@@ -430,6 +430,9 @@ class ProblemResultRestartTests(PartsResultCase):
 
     @patch.dict(result_parts.ADAPTER, unit_rule=None)
     def test_prospective_withholding_protects_unit_and_requested_bodies(self):
+        released = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         from review_parts_fixtures import make_packet
         packet = make_packet(count=3, characters=100000)
         owned = self.case.artifacts.put(b'owned' * 50000, 'text/plain')

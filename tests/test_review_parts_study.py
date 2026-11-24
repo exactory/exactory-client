@@ -361,6 +361,10 @@ class ReadinessPartsTests(StudyPartsCase):
         released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
         released.start()
         self.addCleanup(released.stop)
+        from research_harness import bar_sources, review_protocol
+        released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         self.case = DevelopmentCase()
         self.addCleanup(self.case.doCleanups)
         self.case.setUp()

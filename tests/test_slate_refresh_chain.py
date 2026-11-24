@@ -2,11 +2,14 @@
 to D6, requirements R6 to R9). Its request replays no earlier turn, and its review supersedes the refreshed review."""
 
 import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from continuity_forms_fixtures import fork_store
 from research_harness import review_continuation as continuation, review_protocol as protocol
-from research_harness import review_route_capacity as capacity, review_transport as transport
+from research_harness import review_parts, review_route_capacity as capacity, review_transport as transport
 from research_harness import research_decisions as decisions
+from research_harness.errors import ResearchError
 from test_slate_delivery import SlateDeliveryCase
 
 DELIVERY_PROTOCOL = 'exactory-problem-slate-delivery-v1'
@@ -286,3 +289,55 @@ class SlateRefreshPlanTests(SlateRefreshCase):
         after = continuation.plan_next(self.read_records(), self.artifacts, 'slate-first')
         self.assertEqual((after['state'], after.get('command'), after['payload']['context']),
                          ('continue', 'review-assignment', {'session_refresh': {'assignment_id': 'slate-first'}}))
+
+    def test_B10_with_parts_v3_the_plan_of_a_refresh_is_the_stop_of_the_store_and_each_answer_is_taken(self):
+        """Selection SEL-1: with the parts protocol v3 selected, the store refuses the refresh of B9 at the floor of
+        the slate series. The plan is the stop that the store gives for that refresh, with the same answers, and the
+        store takes each answer: the probe of the route, after which it records the refresh there, and the refresh
+        on the serving route."""
+        from codex_route_fixtures import build_codex_response, invoke_codex, record_codex_route
+        selection = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', ('exactory-review-parts-v3', review_parts.PROTOCOL))
+        selection.start()
+        self.addCleanup(selection.stop)
+        self.record_candidate()
+        self.observe_bars()
+        self.capacity_probe_tokens = 128000 + 125000
+        record_codex_route(self, 'local', output_tokens=128000)
+        first = self.mutate(protocol.record_assignment, {'id': 'slate-first', 'route_id': 'local', 'dossier_id': None,
+            'role': 'slate', 'reviewer_id': 'first', 'author_id': 'problem-author', 'context': {}})['result']
+        output = self.build_slate_output(['candidate-1'])
+        invoke_codex(self, first['id'], output)
+        self.mutate(decisions.record_value_review, dict(output, id='review-slate-first', dossier_id=None,
+                                                        assignment_id=first['id']))
+        self.revise_citing(words=60000, number=9)
+        plan = continuation.plan_next(self.read_records(), self.artifacts, 'slate-first')
+        self.assertEqual((plan['state'], plan['code'], plan['command']),
+                         ('stop', 'review_route_capacity_below_floor', 'review-probe'))
+        then = plan['details']['decision']['then']
+        refresh = dict(next(step['payload'] for answer in then for step in answer['steps']
+                            if step['command'] == 'review-assignment'), route_id='local')
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(protocol.record_assignment, refresh)
+        stop = caught.exception.details
+        self.assertEqual(caught.exception.code, plan['code'])
+        self.assertEqual({key: plan['details'][key] for key in stop}, stop)
+        self.assertEqual(stop['then'], then)
+        self.assertEqual(stop['planner_floor']['kind'], 'combine')
+        self.assertEqual([[step['id'] for step in answer['steps']] for answer in then], [[16], [14]])
+
+        def answer_probe(route, request, credential):
+            packet = json.loads(request['input'][0]['content'][len(transport.PACKET_LABEL):])
+            return build_codex_response(route, request, {'allowed_control': packet['allowed_control'],
+                'evidence_control': packet['evidence_control'], 'excluded_controls': []})
+        for answer in then:
+            [step] = answer['steps']
+            with self.subTest(answer=answer['answer']), fork_store(SimpleNamespace(case=self)):
+                if step['command'] == 'review-probe':
+                    with patch.object(transport, 'send_request', side_effect=answer_probe):
+                        self.mutate(protocol.probe_route, dict(step['payload'], id='capacity-probe'),
+                                    credential='test-only')
+                    saved = self.mutate(protocol.record_assignment, refresh)['result']
+                else:
+                    saved = self.mutate(protocol.record_assignment, step['payload'])['result']
+                self.assertEqual((saved['route_id'], saved['context']),
+                                 (step['payload']['route_id'], {'session_refresh': {'assignment_id': 'slate-first'}}))

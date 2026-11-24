@@ -1114,14 +1114,11 @@ class TestRunLocal(_InsideWorkspaceTestCase):
 
 
 class TestColabBackend(_InsideWorkspaceTestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         from research_harness import bar_sources, review_protocol
         released = patch.object(review_protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
         released.start()
         self.addCleanup(released.stop)
-        super().setUp()
-
-    def setUp(self) -> None:
         super().setUp()
         self.sync_root = Path(self._temp_dir.name) / "sync"
         self.sync_root.mkdir()

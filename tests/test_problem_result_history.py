@@ -801,8 +801,8 @@ class ProblemResultHistoryTests(ResultPartsCase):
     def build_short_series_inputs(self):
         # Use a separate existing fixture so short output is itself authenticated.
         helper = ProblemResultHistoryTests()
-        helper.setUp()
         self.addCleanup(helper.doCleanups)
+        helper.setUp()
         prior = helper.use_fixture('short')
         inputs = helper.refusal_inputs(prior)
         # One long part can shrink, while the authenticated one-character note stays verbatim.
@@ -1107,8 +1107,8 @@ class ProblemResultHistoryTests(ResultPartsCase):
         from research_harness import review_claude_transport as claude
         from test_research_problem_reviews import ProblemReviewTests
         self.case = ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         case = self.case
         case.supporting = case.artifacts.put(b'A captured field standard.', 'text/plain')
         route = {'id': 'route', 'adapter': 'claude_cli_v1', 'model': 'fixture-model',

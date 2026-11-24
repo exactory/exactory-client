@@ -23,8 +23,8 @@ class PendingViewTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         fixture = continuation_fixtures.ContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         self.case, self.assignment = fixture.case, fixture.assignment
         self.store, self.root = self.case.store, self.case.root
         self.folder = self.root / 'intermediate/reviews/bar/bar-first'

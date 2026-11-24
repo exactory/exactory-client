@@ -23,8 +23,8 @@ class SeriesTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.fixture = continuation_fixtures.ContinuationTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
 
     def drive(self):

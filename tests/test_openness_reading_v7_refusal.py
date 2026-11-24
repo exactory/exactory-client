@@ -991,6 +991,9 @@ class LegacySuccessorTests(OpennessReadingCase):
 
     def test_math_solver_input_stop_keeps_its_answers_in_both_protocol_states(self):
         from research_harness.review_plan_steps import complete_plan
+        released = patch.object(reading, 'NEW_MATH_CHAIN_PROTOCOLS', (reading.MATH_PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         head = self.fail_legacy_final()
         records = self.store.snapshot()['records']
         assignment = copy.deepcopy(records['review_assignment'][head])

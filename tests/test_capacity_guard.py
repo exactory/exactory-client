@@ -353,8 +353,8 @@ class CapacityGuardTests(unittest.TestCase):
         import test_review_continuation as fixtures
         from research_harness import review_protocol, review_transport
         case = fixtures.ContinuationTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         assignment = case.assignment
         records = case.case.read_records()
         packet = review_protocol._read_json(case.case.artifacts, assignment['packet'])

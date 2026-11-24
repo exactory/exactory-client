@@ -99,14 +99,14 @@ class RoleFixtures:
     """One recorded assignment that has not run, on a route record with a completed probe, for each role."""
 
     def start(self, case):
-        case.setUp()
         self.opened = getattr(self, 'opened', []) + [case]
         self.addCleanup(self.close_cases)
+        case.setUp()
         return case
 
     def close_cases(self):
         """Run the cleanups of the fixtures of one role before the next role builds its own."""
-        for case in getattr(self, 'opened', []):
+        for case in reversed(getattr(self, 'opened', [])):
             case.doCleanups()
         self.opened = []
 
@@ -321,8 +321,8 @@ class CallContextRoleTests(RoleFixtures, unittest.TestCase):
         """On 12ce6199 the task reaches its dispatch: the refusal is the one that the patched dispatch raises."""
         from test_review_continuation_staged import StagedContinuationTests
         fixture = StagedContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.execute(fixture.plan())
         planned = fixture.plan()
         self.assertEqual((planned['state'], planned['command']), ('run', 'review-run'))
@@ -582,8 +582,8 @@ class CallContextStaleRouteTests(unittest.TestCase):
         (tests/test_review_route_plan.py), whose first step retires the record (rule PC6)."""
         from test_review_route_renewal import RouteRenewalFixture
         fixture = RouteRenewalFixture()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         head = fixture.assign('bar', 'first', 'stale-head', **fixture.case.deliver_supporting('first'))
         fixture.probe_failure = True
         fixture.probe('route', 'failed-probe')

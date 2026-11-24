@@ -29226,15 +29226,6 @@
       ]
     },
     {
-      "ast_sha256": "1068244ad11a7d99bb68d72f43f166f7dce539e3a2b4fbc92da731325e3718e7",
-      "callee": "research_harness.errors.ResearchError",
-      "caller": "research_harness.review_parts_v3.prepare_packet",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.errors.ResearchError"
-      ]
-    },
-    {
       "ast_sha256": "d0b00967e7fe7a737444dc1326ebbd681a6cd1d88a7daa56e8bd66da0227e672",
       "callee": "research_harness.review_parts.UnfitOrdinaryPacket",
       "caller": "research_harness.review_parts_v3.prepare_packet",
@@ -30785,6 +30776,15 @@
       "classification": "listed module",
       "targets": [
         "research_harness.openness_reading.find_protocol"
+      ]
+    },
+    {
+      "ast_sha256": "f5b17856cea9e6cdf79b518be59ad4cd60c3c25653c1fa911f01c25d1ea50785",
+      "callee": "research_harness.errors.ResearchError",
+      "caller": "research_harness.review_parts_v3.prepare_packet",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.errors.ResearchError"
       ]
     }
   ],
@@ -34546,7 +34546,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_reassessment names the path of the evidence of each finding for the evidence check. No packet member, packet call or stored record changes. Reviewed the merge of 0.91.5 to 0.91.7 into 0.92.0: validate_reassessment names the array /reassessment/findings/<i>/evidence of each finding, as 0.91.7 does; the session chain branches of 0.92.0 stand in other functions. Reviewed lane session-v4-refresh of 0.92.0 (rules F1 to F8): the refresh of a problem review that a chain of the session rules v4 recorded is a new chain in the same slot, linked by the context member session_refresh; its packet is the first packet of the role with problem_refresh and the earlier reviews in historical_reviews. Reviewed lane call-context-present (requirement R3.5, rules PC1 to PC8 with findings F1 to F6 of its review): a new reviewer call, an output correction, the next assignment of a v7 or math v2 chain and the plan of a head read the state of the route record and the contamination events of each turn of the review, and refuse or hand off with review_context_unverified or review_context_contaminated; historical_reviews reads the same turns through list_context_turns with the same result; packet members, packet builders, prompts, requests, writes and closed shapes are unchanged. Reviewed lane session-v4-refresh-edges (task T2.14, rules E1 to E5 of designs/session-v4-refresh-edges.md): find_latest_chain_repair gives the latest repair of the chain of an assignment, back to the first assignment after the last session_refresh link, and reassessment_reviews, frozen_reassessment_packet and validate_reassessment read it (rule E2); find_review_context_issue states whether the review of a refreshed lineage counts today (a contamination on the repair or refresh segment, or a repair that does not cover the cause events of its predecessor), and historical_reviews and validate_repair_binding read it (rule E5); cause_events and validate_repair_origin can read the event index of an evaluation; a lineage without a refresh link keeps its rules (rule E4), and historical_reviews reads the context turns of lane call-context-present for it with the same result. Reviewed lane call-context-refresh-link (task T2.16): iter_refresh_contaminations walks the turns that rule E5 reads for a refreshed lineage, and find_review_context_issue and the call rule both read it; find_last_repair_index gives the place of the latest repair of a list of turns; list_context_turns can take the exposure that its caller read. The result of find_review_context_issue and of historical_reviews is unchanged. Writer's pass of release 0.92.0 (task T5.1, the texts that an installed command can show): REFRESH_CONTAMINATED_MSG states the state and the step; no statement of code changes."
     },
     "research_harness.review_continuation": {
-      "ast_sha256": "d6a13b8d4fda42e6cb5d93610c741a6549f0c99b5344a1f9772b18c40cecaf94",
+      "ast_sha256": "cffe467f7db06ac4b4749ba13d434399ae9720ad4f6db4b9b823166a0b583064",
       "functions": {
         "_build_assignment_payload": "e3303fe41aa0507724cc8ecc4a76f33b41ad1145e6ffd12e7a5e5ee7884dad76",
         "_build_run_payload": "0a14cde861381a8aa9b30ce38e832e66d3021f9e6751e0446c81c53afa19a18d",
@@ -35609,7 +35609,7 @@
       "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision. Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_study_references and validate_verification_final pass forms_notice false, and the verification names the path of the evidence of each check. No packet member, packet call or stored record changes. Reviewed the merge of 0.91.5 to 0.91.7 into 0.92.0: validate_study_references and validate_verification_final pass forms_notice false, and the second names /checks/<i>/evidence, as 0.91.7 does; list_bearing_references keeps the parts v3 branch of 0.92.0."
     },
     "research_harness.review_parts_v3": {
-      "ast_sha256": "275c37f8d538f7fbcd8c6aa235112da1ec5cd9ae4c8ac6047228c7c61e43f39e",
+      "ast_sha256": "9a902d2257702ee6bb2095705d86140e488bd8942b43738b5ae5af65ec0e65ec",
       "functions": {
         "_advance_group": "c2a09676e335c9fa314f690d454f9660c1af77273d094f796173780e526b33f9",
         "_advance_requested_ranges": "47a2de2aa833ca0fce6ac60d3e5fd75ab4546889e00ddce30fa66caa32180cd4",
@@ -35684,7 +35684,7 @@
         "plan_target_condensing": "85d4eaeee0b7da702d4e712681f578d8ca7e6b3931ca05102ceb4822c56a9fdf",
         "plan_turn_recovery": "6deb5ecd0b818830719d71b46a36e8cdfa971705d8fbec82b787659222fcfa68",
         "prepare_capacity_assignment": "9fe4adad2212beadddfce979f3d735476e081ccd10ea70077592828b338c58df",
-        "prepare_packet": "e4e76e4d767d3dcb288d35f2da30d103e97506ed8317c6faacf286c108a2cc4e",
+        "prepare_packet": "6c4371fabde75995193da86f7f2e8adbf16873bda3e1b8904749d6737e4aeb91",
         "prepare_refusal_assignment": "a8482f1ef8f9468009fc22c41f6794a12e1981d9c1ffd679c59ee3b27dc9099f",
         "read_content_rate": "1df09ad3ca42e2549bf372ef224faedaa2a92185d0e834edbc50a7469aecbb4c",
         "read_material_texts": "a5625a3aee2f3528dc99d8ef135269b782e8ab06e7532fb7c26765d7895ec987",
@@ -35723,7 +35723,6 @@
         "0f6ddaef0db9602d8a36df36e2820a6bbc8aebe8504233b8a4f0ff20720c751b",
         "0f878b8950db0fbadf6152a88261c1f3aa54edbddc2b5aa5d035396554695372",
         "0faee714078d9faad7a15083d1b4a0fcfd7c6728b0bcbbc589087ac0aef90806",
-        "1068244ad11a7d99bb68d72f43f166f7dce539e3a2b4fbc92da731325e3718e7",
         "144774c9f542aa680c98d48adafb62aa725e2711168f086f7d9ff89c5c3c9702",
         "1488ad2fd7b32081a6fb4f10f25e29d2e73f8e84a471dc5004e1cc0e610804e2",
         "14b0b72b9d22306d0b0609dd4be0fa7f1430943c61c53418f308c38a8fe16328",
@@ -36014,6 +36013,7 @@
         "f41041451747104b07e6508dd71c4c7c3c6063b6b685b4afaeb5c5caf5e90b8c",
         "f4bb74061113f43dfe44d2ab73bef30d5ca9f27c72c739306129f7fc72cb952e",
         "f5a04c177f1bfce11a6ae54ffe6781369e8100b16df89ebad754c4c5b20ed4f8",
+        "f5b17856cea9e6cdf79b518be59ad4cd60c3c25653c1fa911f01c25d1ea50785",
         "f5dbec1f6ea65362d7839f09db49b78986f5a5dde9fc2689b5822ac145cbd3dd",
         "f61ff9ce021d24130b3aa15e4557e8ea37597550daa81d6d57a86e271dd91d1b",
         "f67e053c5bf42af897c2c679f43cc8f03dd1c7a53a6219f328f054d4d584c388",
@@ -36316,7 +36316,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. G8.11 and G8.12 of 0.92.0 (lane g8-finding-index, second change set, for review): the inventory of a bounded chain whose final names values by their bodies lists their spans in finding_units, located by key; its reading turns hold their number and the paragraph finding-units, and the reading frame reserves FINDING_UNITS_CHARACTERS; a carried credit does not cover a named span, in the reading plan and in the report of the carried selection; a capacity replacement selects the paragraphs of its new packet. Reviewed 0.91.6: two registered paragraphs, changes-if-resolved for result and adjudicator and slate-places for slate, each selected by a member of its packet; the text of every earlier version keeps its bytes. Reviewed the merge of 0.91.5 to 0.91.7 into 0.92.0: PARAGRAPHS holds the paragraphs changes-if-resolved and slate-places of 0.91.6 at their places and the paragraph finding-units of G8 before output-refusal-whole; SHARED_PARAGRAPH_NAMES keeps its five names, because the two paragraphs of 0.91.6 apply to problem packets only."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "544f97c01af2f7dae6214a4888070130ce0b0e54996f3d10c904b64c45795b59",
+      "ast_sha256": "345d5695bfd24d2ec58581d3947551060bd91c2a7e10f8c440f9597250536031",
       "functions": {
         "_assignment_state": "9fc87462eec4ee108c5b77aa7bba8eda202c6129c2484735d3731317fcd511c1",
         "_bars": "32eae33223d02654a4c28ba7d928d16c458c21dd2ebbbc61d0d7b1461580854a",
@@ -36840,7 +36840,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_route_capacity": {
-      "ast_sha256": "61d61d527508a50b88ed7d450828b5341df2c996eee90b4d363dad694af2c5d1",
+      "ast_sha256": "028be8a21c1dce649aec3105a20cbaf6a6ed404ccbc30d02183a9b5a4d95d16b",
       "functions": {
         "_build_serving_parts": "8dbda94074a1c4afd70780bebc5d5fb0f1cad1e75a617e1de19bd2246e44ad4e",
         "_build_serving_repair": "8847f828abc10e682fe098069bd8cfb679c68af115c96545b7a6ced3a5405c9c",
@@ -36917,7 +36917,7 @@
         "read_output_profile": "4844b8fa30fbcaa682409d10e96ee7588e5e1caaa9ac9c02d53f971e52a38524",
         "read_profile_priors": "66ba3117eae212e65062f37bd38406a83ea909b370394442889641ef6d5ef8d3",
         "render_profile_json": "a4c3f27e862185ae20a37bbef3f622c81a1876e1ecac702f1512eafa2704d605",
-        "require_covered_assignment": "e30377bc63abb66df13b34a6b4a9dca2508c2724a1a067a6d413de89a1e585b1",
+        "require_covered_assignment": "75c9d869e98a07ad2263653de6cc6117bab617ab9eeb268bb7c70a850ee9cbab",
         "scale_capacity_probe_size": "ef76790aa32dae503bd20a3b46ae0c47565600786dcc1eceedba0336a7e7bc07",
         "select_capacity_probe_size": "9174f4792f5c419fe697fe6c8d4bcc3998e4f148adf68336348ee801e8daf27d",
         "select_task_limits": "a8eed35bbff03e60218eef058514db4b509b570b5d60a81949b60c5244eea1ef",
@@ -38672,7 +38672,7 @@
       "reason": "Reviewed v7 page-plan integration: bounded packet selection from immutable plan, inventory and state artifacts; complete native validation stays transient. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. Reviewed the byte-measured page-room fallback: it retains the frozen allocation and current material bound; calibrated ratio adaptation is unchanged. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment."
     },
     "research_harness.review_session_v4": {
-      "ast_sha256": "b29df5573b0056d6d02c724ddcaa8836b0cb4da32b6b3968c40a2a3331f0a562",
+      "ast_sha256": "73de396873981dd72234c9983147bca0d282b22254cbafb12272d9b2d2b33283",
       "functions": {
         "_describe_json": "7c6004e53039a80228d53341ea102c68af46e1cc51855d15c96893ebef98c919",
         "build_session_inventory": "6c17080602defdf017f7d02062e97511e93f35e65de7a180d8270969f769f7f2",

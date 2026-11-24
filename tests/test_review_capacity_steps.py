@@ -739,6 +739,39 @@ class CapacityPublicEntryTests(CapacityAnswers, unittest.TestCase):
             if saved is not None:
                 self.assertEqual(saved['context']['context_repair']['assignment_id'], head['id'])
 
+    def test_a_recorded_v3_adjudicator_repair_below_its_floor_keeps_v3_on_each_answer(self):
+        """Selection SEL-2: with the parts protocol v3 selected, the context repair of a recorded v3 series (adapter
+        problem_adjudicator) on a route below the floor of v3 is the capacity stop with its answers, and the head keeps
+        its form (decision D6). The store takes each answer in v3: the probe of the route, after which the plan of the
+        head names the repair there, and the repair on the serving route."""
+        from research_harness import review_parts
+        from test_review_parts_repair_journey import AdjudicatorRepairJourneyTests
+        selection = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', ('exactory-review-parts-v3', review_parts.PROTOCOL))
+        selection.start()
+        self.addCleanup(selection.stop)
+        fixture = AdjudicatorRepairJourneyTests()
+        self.addCleanup(fixture.doCleanups)
+        self.case, head, value = fixture.prepare_adjudicator_repair(staged=False)
+        self.assertEqual(head[review_parts.KEY]['protocol'], 'exactory-review-parts-v3')
+        self.record_route('tiny', 128050, model='fixture-tiny')
+        probe_codex_route(self.case, 'current', head['route_id'])
+        binding = dict(assignment_id=head['id'], event_ids=['exposure'], probe_id='probe-tiny',
+                       reason='Reassess the retained objection.', evidence=[self.case.supporting])
+        stop = self.capture_stop(dict(value, id='repair', route_id='tiny', reviewer_id='replacement',
+                                      context=dict(context_repair=binding)))
+        self.assertEqual((stop['planner_floor']['kind'], stop['planner_floor']['room']), ('read', 50))
+        self.assertEqual([(answer.get('route_id'), [step['id'] for step in answer['steps']]) for answer in stop['then']],
+                         [(None, [16]), (head['route_id'], [14])])
+        for answer in stop['then']:
+            route_id = answer['steps'][-1]['payload']['route_id']
+            with self.subTest(answer=answer['answer']), fork_store(self), fork_rollouts():
+                saved = self.execute_repair(answer['steps'], route_id, reviewer='replacement', observed=3000000)
+                if saved is None:
+                    saved = self.take_next_plan(head['id'], route_id, reviewer='replacement', observed=3000000)
+                self.assertEqual((saved['route_id'], saved[review_parts.KEY]['protocol']),
+                                 (route_id, 'exactory-review-parts-v3'))
+                self.assertEqual(saved['context']['context_repair']['assignment_id'], head['id'])
+
     def test_retired_plain_adjudicator_keeps_the_focused_assignment_step(self):
         from test_research_problem_adjudication_contract import ProblemAdjudicationContractTests
         self.case = prepare_unit_fixture(self, ProblemAdjudicationContractTests, 'runTest')

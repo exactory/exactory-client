@@ -10116,6 +10116,32 @@
         "test_review_parts_v3_pages.AdapterPageTests.test_adjudicator_page_citing_an_undelivered_record_is_refused_at_the_page",
         "test_review_parts_v3_pages.AdapterPageTests.test_adjudicator_page_citing_a_record_without_its_digest_is_refused_at_the_page"
       ]
+    },
+    {
+      "id": "selection-refresh-plan-asks-store",
+      "record": "20261122143013",
+      "class": "plan names a refused step",
+      "summary": "With the parts protocol v3 selected, the plan of an ordinary slate head named its refresh, which the store refused at the floor of the slate series; the store's stop had no probe answer.",
+      "expected": "The plan runs the store's admission of the refresh as a trial and, where it refuses, is the store's stop with its answers; a floor stop offers the probe of the route where a probe can verify the room of the floor.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_slate_refresh_chain.SlateRefreshPlanTests.test_B9_the_plan_of_a_refresh_that_does_not_fit_is_a_stop_whose_step_the_store_takes",
+        "test_slate_refresh_chain.SlateRefreshPlanTests.test_B10_with_parts_v3_the_plan_of_a_refresh_is_the_stop_of_the_store_and_each_answer_is_taken"
+      ]
+    },
+    {
+      "id": "selection-recorded-v3-repair-stop-answers",
+      "record": "20261122143013",
+      "class": "stop without an answer",
+      "summary": "The context repair of a recorded v3 series on a route below its floor was refused with the admission's diagnostics alone: no answer and no step.",
+      "expected": "The refusal is the capacity stop with the answers that keep the parts protocol v3 (the probe of the route, each serving route on which v3 accepts the repair), or coverage when none exists.",
+      "fixed_in": "0.93.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_capacity_steps.CapacityPublicEntryTests.test_admitted_parts_adjudicator_retry_contains_only_public_context",
+        "test_review_capacity_steps.CapacityPublicEntryTests.test_a_recorded_v3_adjudicator_repair_below_its_floor_keeps_v3_on_each_answer"
+      ]
     }
   ]
 }

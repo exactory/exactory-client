@@ -26,8 +26,8 @@ class PartOffsetReplacementIncidentTests(unittest.TestCase):
         second part of a split full text with whole-text offsets."""
         # Shape and quantities: 20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets, T2.
         case = fixtures.ProblemReviewTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         case.supporting = case.artifacts.put(b'A synthetic field standard.', 'text/plain')
         case.prepare_review_route()
         case.observe('bar', 'first')

@@ -774,7 +774,7 @@ def _plan_session_refresh(records, artifacts, assignment):
         return dict(plan_retired_route(assignment), payload=payload)
     payload['route_id'] = found['route_id']
     if not assignment.get('session_chain'):
-        refusal = protocol.check_slate_refresh_capacity(records, artifacts, payload)
+        refusal = protocol.check_assignment_capacity(records, artifacts, payload)
         if refusal is not None:
             return dict(state='stop', code=refusal.code, details=refusal.details, payload=payload)
     return dict(state='continue', command='review-assignment', payload=payload)

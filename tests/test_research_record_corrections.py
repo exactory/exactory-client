@@ -18,8 +18,8 @@ class CorrectionRecordCheckTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.fixture = fixtures.CorrectionTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.fixture.prepare_refused()
         self.fixture.correct(self.fixture.delta())
 

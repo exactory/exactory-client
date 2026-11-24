@@ -4655,38 +4655,6 @@ def _build_session_refresh_packet(records, artifacts, dossier_id, role, reviewer
     return packet
 
 
-def check_slate_refresh_capacity(records, artifacts, value):
-    """The capacity refusal that record_assignment gives the refresh assignment `value` of an ordinary slate review,
-    or None when it admits it. The check builds the refresh packet, its prompt and its request as the assignment does,
-    on a planning overlay that writes no artifact, and asks the measure of the covered assignment; a refresh that
-    the slate series planner starts as a series is admitted. A refresh chain has no history."""
-    from .openness_reading_v7 import _PlanningArtifacts
-    from .review_route_capacity import require_covered_assignment
-    from . import review_parts_slate
-    route = records['review_route'][value['route_id']]
-    planning = _PlanningArtifacts(artifacts)
-    value = dict(value, subject=build_problem_subject(records, value['role']))
-    with transport.text_only_delivery(route['adapter'] in transport.TEXT_ONLY_ADAPTERS
-                                      or route['adapter'] == 'codex_cli_visual_v1'):
-        packet = build_packet(records, planning, value['dossier_id'], value['role'], value['reviewer_id'],
-                              **value['context'])
-    packet = prepare_capacity_notice(records, route, value['role'], packet)
-    prompt = canonical_prompt(value['role'], orchestration='problem_creation',
-                              excerpts=review_excerpts.KEY in packet, source_rules=packet.get('source_rules'),
-                              **prompt_paragraphs.select_prompt_parameters(value['role'], packet))
-    if (review_parts_slate.applies(value, packet)
-            and review_parts_slate.can_start_series(records, planning, value, route, packet, prompt, [])):
-        return None
-    try:
-        require_covered_assignment(records, planning, value, packet, prompt,
-                                   transport.request_body(route, prompt['text'], packet, []))
-    except ResearchError as error:
-        if error.code != 'review_route_capacity_below_floor':
-            raise
-        return error
-    return None
-
-
 def _initial_size_failure(records, artifacts, prior, value):
     """An unrun focused assignment or initial result that its route cannot carry: it was refused before
     starting its CLI, or it never ran and `review-run` refuses its exact frozen request before an invocation exists
@@ -4888,7 +4856,7 @@ def _prepare_assignment(store_artifacts, expected_revision, carry_guards):
     def prepare(records, value, *, trial=None):
         # A trial prepares a candidate assignment into its own buffer of artifacts. It writes nothing, takes no
         # second freshness guard, and its coverage check keeps the measure of the admitted request without
-        # looking for serving routes.
+        # looking for serving routes. A trial with `explain` refuses with the stop of the store and its answers.
         public_assignment = value
         artifacts = Evaluation.of(records, store_artifacts if trial is None else trial['artifacts'])
         from .review_parts_slate import bind_assignment_bodies, requires_body_binding
@@ -4907,7 +4875,7 @@ def _prepare_assignment(store_artifacts, expected_revision, carry_guards):
 
         def check_coverage(value, candidate_packet, prompt, request=None, history=(), **options):
             from .review_route_capacity import require_covered_assignment
-            if trial is None:
+            if trial is None or trial.get('explain'):
                 require_covered_assignment(records, artifacts, value, candidate_packet, prompt, request, history,
                     trial_assignment=trial_assignment, public_assignment=public_assignment, **options)
             else:
@@ -5423,7 +5391,7 @@ def _prepare_assignment(store_artifacts, expected_revision, carry_guards):
         elif session_admission is not None and repair is None:
             # Rule V5: the one place where a new chain that v4 did not admit starts as a session of an older rule set.
             review_session_v4.require_session_capacity(records, artifacts, value, logical, session_admission,
-                prompt=prompt, trial_assignment=trial_assignment, explain=trial is None)
+                prompt=prompt, trial_assignment=trial_assignment, explain=trial is None or trial.get('explain', False))
         restart = None
         try:
             history = review_problem_history.bound_history(
@@ -5564,6 +5532,22 @@ def preview_parts_successor(records, artifacts, payload):
     request = build_assignment_request(records, buffered, assignment)
     report = review_preflight.build_assignment_report(records, buffered, assignment, request=request)
     review_preflight.check_request(report, request, packet=packet, artifacts=buffered)
+
+
+def check_assignment_capacity(records, artifacts, payload):
+    """The capacity refusal that record_assignment gives `payload`, with the answers of its stop, or None when the
+    store admits it. The admission is the trial of the assignment that the discovery of the serving routes runs: it
+    prepares the assignment into a buffer of artifacts and writes nothing. Another refusal is left to the command."""
+    from .review_staged_protocol import ControllerArtifacts
+    revision = records.read_revision() if hasattr(records, 'read_revision') else max(
+        (row['recorded_revision'] for row in records.get('review_assignment', {}).values()), default=0)
+    trial = dict(artifacts=ControllerArtifacts(artifacts), explain=True)
+    try:
+        _prepare_assignment(artifacts, revision, None)(records, copy.deepcopy(payload), trial=trial)
+    except ResearchError as error:
+        if error.code == 'review_route_capacity_below_floor':
+            return error
+    return None
 
 
 def record_assignment(store, payload, *, expected_revision, request_id):

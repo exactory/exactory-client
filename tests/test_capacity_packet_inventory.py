@@ -569,8 +569,8 @@ class ProductionPacketInventoryTests(unittest.TestCase):
             self.assertTrue(inspect_packet_sources(sources, incomplete))
         # Execute the reviewed production builder copy with the generated variant.
         case = ContinuationTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         namespace = dict(review_protocol.__dict__)
         exec(compile(sources[module], '<reviewed-production-builder>', 'exec'), namespace)
         records = dict(case.case.read_records(), capacity_guard_variant=['x'] * 10000)
@@ -717,8 +717,8 @@ class ProductionPacketInventoryTests(unittest.TestCase):
     def test_real_problem_bar_packet_has_no_undeclared_member(self):
         from test_review_continuation import ContinuationTests
         case = ContinuationTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         packet = json.loads(case.case.artifacts.read(case.assignment['packet']))
         self.assertEqual(validate_packet('bar', packet, read_packet_registry()), [])
         from research_harness import bar_sources

@@ -36,8 +36,8 @@ class SessionForecastTests(unittest.TestCase):
         bounded.start()
         self.addCleanup(bounded.stop)
         self.fixture = fixtures.ContinuationTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
         self.assignment = self.fixture.assignment
         from visual_capacity_fixtures import install_bounded_binary_backend
@@ -100,8 +100,8 @@ class SessionForecastTests(unittest.TestCase):
         for rules, remaining in ((bar_sources.PROTOCOL_V3, 34), (bar_sources.PROTOCOL, 0)):
             with self.subTest(rules=rules), patch.object(bar_sources, 'SESSION_PROTOCOL', rules):
                 scenario = SessionForecastTests()
-                scenario.setUp()
                 self.addCleanup(scenario.doCleanups)
+                scenario.setUp()
                 with patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', 100):
                     scenario.request_texts([3500], repeated=True)
                     with patch.object(capacity, 'SESSION_PENDING_TURN_LIMIT', 64):
@@ -244,8 +244,8 @@ class SessionForecastTests(unittest.TestCase):
                 scenario = self
                 if entry != 'plan':
                     scenario = SessionForecastTests()
-                    scenario.setUp()
                     self.addCleanup(scenario.doCleanups)
+                    scenario.setUp()
                 if entry == 'delivered':
                     # Reproduce a paid partial delivery under an earlier, larger
                     # input allowance, then restore the current route capacity.
@@ -360,8 +360,8 @@ class SessionForecastTests(unittest.TestCase):
     def test_advisory_selection_keeps_a_stored_metadata_correction(self):
         import test_review_output_correction as corrections
         fixture = corrections.CorrectionTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.prepare_refused()
         fixture.correct(fixture.delta())
         case = fixture.fixture
@@ -529,8 +529,8 @@ class SessionForecastTests(unittest.TestCase):
                 scenario = self
                 if direct:
                     scenario = SessionForecastTests()
-                    scenario.setUp()
                     self.addCleanup(scenario.doCleanups)
+                    scenario.setUp()
                 scenario.request_texts([180000])
                 stopped = scenario.refuse_direct_run() if direct else scenario.plan()
                 head_id = stopped['head_id']

@@ -272,8 +272,8 @@ class LegacySessionBytesTests(unittest.TestCase):
 
     def setUp(self):
         self.case = turn_fixtures.problem_fixtures.ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
         record_codex_route(self.case, model='gpt-6-astra', output_tokens=128000)
 

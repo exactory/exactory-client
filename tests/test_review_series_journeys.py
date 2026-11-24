@@ -26,10 +26,17 @@ from research_harness.evidence import digest
 
 
 class SeriesJourneyTests(unittest.TestCase):
+    def setUp(self):
+        from research_harness import bar_sources
+        released = patch.object(protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare(self, case_type):
         case = case_type()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         return case
 
     def drive_codex(self, case, head, output, expected_exit=0, observe=None):

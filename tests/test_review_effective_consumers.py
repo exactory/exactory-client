@@ -99,8 +99,8 @@ class EffectiveConsumerTests(unittest.TestCase):
         from research_harness import review_composition as composition
         from test_research_problem_reviews import ProblemReviewTests
         case = ProblemReviewTests(methodName='runTest')
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         self.addCleanup(case.tearDown)
         case.observe_bar_reviews()
         payload = case.observe('result', 'first', record=False)

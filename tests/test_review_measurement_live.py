@@ -128,8 +128,8 @@ class LiveSeriesTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         fixture = continuation_fixtures.ContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         self.case = fixture.case
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -303,8 +303,8 @@ class LiveCasePreparationTests(unittest.TestCase):
         from tools.review_measurement import live_cases
         from test_review_parts_adjudication_journey import AdjudicationPartsCase
         fixture = AdjudicationPartsCase()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         case = fixture.case
         payload = dict(id='refused-primary', route_id='route', dossier_id=None,
                        role='adjudicator', reviewer_id='third', author_id='author',

@@ -21,8 +21,8 @@ class StagedRecordCheckTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.fixture = fixtures.FrontierTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.controller = self.fixture.create_controller()
         # The record checks of these tests, and the fingerprint command that one of them starts as a child
         # process, look for the Codex program. The test states that the machine has none.

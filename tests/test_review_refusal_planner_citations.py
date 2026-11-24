@@ -39,8 +39,8 @@ class CitationPlannerRoleTests(unittest.TestCase):
         for count in (0, 1):
             with self.subTest(fulltexts=count):
                 fixture = fixtures.ReadingHandoffTests()
-                fixture.setUp()
                 self.addCleanup(fixture.doCleanups)
+                fixture.setUp()
                 final, output = fixture.build_final(count=count, abstract=True, role='result')
                 def record(assignment, answer):
                     return fixture.case.mutate(decisions.record_value_review,

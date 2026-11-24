@@ -16,6 +16,11 @@ import test_research_problem_slate as slate_fixtures
 
 
 class SlateFormingTests(unittest.TestCase):
+    def setUp(self):
+        released = patch.object(protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+
     def make_destination(self):
         case = slate_fixtures.ProblemSlateTests()
         case.setUp()

@@ -18,8 +18,8 @@ class RefusalPlannerTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.fixture = fixtures.RefusalReplacementTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
 
     def plan(self, assignment):
@@ -153,8 +153,8 @@ class CorrectionPlannerTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.case = correction_fixtures.CorrectionTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.fixture = self.case.fixture
         self.assignment = self.case.case.assignment
 
@@ -255,8 +255,8 @@ class PlannerChainRowsTests(unittest.TestCase):
         from research_harness import review_parts as parts
         from research_harness.review_problem_parts import _measure
         fixture = parts_fixtures.PartsResultCase()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.oversized(count=5, characters=30000, room=65000)
         first = fixture.assign()
         packet = fixture.packet(first)

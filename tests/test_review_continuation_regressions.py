@@ -30,8 +30,8 @@ class ContinuationRegressionTests(unittest.TestCase):
 
     def fixture(self, kind=fixtures.ContinuationTests):
         case = kind()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         return case
 
     def prepare_refused_later_role(self, case, role):

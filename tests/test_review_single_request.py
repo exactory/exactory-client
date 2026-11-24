@@ -338,8 +338,8 @@ class SingleEntryTests(unittest.TestCase):
         # as FrozenSingleTests does for its ordinary native assignment.
         with patch.object(capacity, 'read_output_profile', self.read_output_profile):
             fixture = ResultRepairJourneyTests()
-            fixture.setUp()
             self.addCleanup(fixture.doCleanups)
+            fixture.setUp()
             fixture.oversized(count=6, characters=60000, room=110000)
             previous = fixture.assign('repair-origin')
             fixture.invoke(previous)

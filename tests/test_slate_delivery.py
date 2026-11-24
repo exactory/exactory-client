@@ -21,6 +21,9 @@ class SlateDeliveryCase(ProblemDeliveryCase):
     read_assignment = slate_fixtures.ProblemSlateTests.read_assignment
 
     def setUp(self):
+        released = patch.object(protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
         super().setUp()
         self.initialize_problem()
 

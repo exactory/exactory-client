@@ -20,8 +20,8 @@ class StagedExposureTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.fixture = staged_fixture.StagedContinuationTests()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
         self.controller = self.fixture.controller['id']
         self.fixture.execute(self.fixture.plan())

@@ -31,6 +31,13 @@ class CarryFixture(ProblemDeliveryCase):
     route_id = 'route'
     settling_evidence = False
 
+    def setUp(self):
+        from research_harness import bar_sources
+        released = patch.object(protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,))
+        released.start()
+        self.addCleanup(released.stop)
+        super().setUp()
+
     def prepare_problem_evidence(self):
         objection_fixtures.ProblemObjectionTests.prepare_problem_evidence(self)
         if self.settling_evidence:
@@ -128,8 +135,8 @@ class ProblemObjectionCarryTests(unittest.TestCase):
         case.area = area
         case.source_reference = None if source is None else str(source.root)
         case.settling_evidence = settling
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         case.prepare_problem_evidence()
         if bars:
             case.bars()
@@ -897,8 +904,8 @@ class ProblemObjectionCarryTests(unittest.TestCase):
         sibling = self.fixture('math.PR')
         fixture = ResultPartsCase()
         fixture.staged_entry = True
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         sys.modules['research_harness.problem_claims'].require_problem = real_claims.require_problem
         home = fixture.case
         fixture.oversized()
@@ -1202,6 +1209,9 @@ class ProblemObjectionCarryDeliveryTests(unittest.TestCase):
         from codex_route_fixtures import invoke_codex, limit_codex_input
         from review_parts_fixtures import make_output
         from research_harness import review_parts
+        released = patch.object(review_parts, 'NEW_SERIES_PROTOCOLS', (review_parts.PROTOCOL,))
+        released.start()
+        self.addCleanup(released.stop)
         source, case = self.local_destination()
         limit_codex_input(self, 135000)
         assignment = case.assign('result', 'first', identifier='part-1')
@@ -1375,8 +1385,8 @@ class ProblemObjectionCarryDeliveryTests(unittest.TestCase):
         fixture.staged_entry = True
         fixture.timeout_seconds = 600
         fixture.output_tokens = 1000000
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         # The established staged fixture isolates its claim description, but
         # carry still uses the real problem-store discriminator.
         sys.modules['research_harness.problem_claims'].require_problem = real_claims.require_problem

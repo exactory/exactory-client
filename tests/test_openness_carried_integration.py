@@ -346,6 +346,9 @@ class CarriedIntegrationCases(CarriedIntegrationSupport):
         self.finish_chain(native)
 
     def test_pool_charge_is_included_in_a_denser_ratio_handoff(self):
+        released = patch.object(v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         native, receipt = self.start_chain()
         self.invoke('new', self.answer_v7(self.read_packet('new')))
         records = copy.deepcopy(self.store.snapshot()['records'])
@@ -1056,6 +1059,9 @@ class StoredSelectionIntegrationTests(CarriedIntegrationSupport, OpennessReading
                 self.assert_mismatch(altered[2])
 
     def test_artifact_missing_at_the_first_assignment_refuses_the_assignment(self):
+        released = patch.object(v7, 'V7_FINAL_FORMS', ('request',))
+        released.start()
+        self.addCleanup(released.stop)
         native = self.export(name='new-export', assignment_id='new')
         # The contract assertion comes before removing an artifact, so the base
         # fails for its protocol rather than an incidental refusal.

@@ -34,8 +34,8 @@ class ReleaseGuardTests(unittest.TestCase):
         from research_harness import review_protocol as protocol, review_transport as transport
         fixture = session_fixtures.ContinuationTests()
         case = problem_fixtures.ProblemReviewTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         build_response = case.build_provider_response
         def respond(output):
             response = build_response(output)

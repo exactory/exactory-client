@@ -254,6 +254,17 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(state['pending_requests'], [])
 
 
+def set_up_parts_v2_fixture(test, case):
+    """Set up, inside a test of parts v3, a fixture whose own tests are of parts v2. The fixture states parts v2 alone
+    in its setUp, so the order with parts v3 first is stated again after it."""
+    test.addCleanup(case.doCleanups)
+    case.setUp()
+    selected = patch.object(legacy, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL, legacy.PROTOCOL))
+    selected.start()
+    test.addCleanup(selected.stop)
+    return case
+
+
 class AdapterJourneyTests(unittest.TestCase):
     def setUp(self):
         from research_harness import bar_sources, review_protocol
@@ -279,9 +290,7 @@ class AdapterJourneyTests(unittest.TestCase):
     def test_native_adapter_recorded_final_authenticates_without_inline_handles(self):
         import test_review_parts_native as fixtures
         from codex_route_fixtures import invoke_codex
-        case = fixtures.NativePartsTests()
-        self.addCleanup(case.doCleanups)
-        case.setUp()
+        case = set_up_parts_v2_fixture(self, fixtures.NativePartsTests())
         with patch.object(fixtures, 'make_output', side_effect=make_turn_output):
             turns, final = case.finish_series()
         self.assertEqual(case.read_packet(final)[legacy.KEY]['protocol'], parts.PROTOCOL)
@@ -316,9 +325,7 @@ class AdapterJourneyTests(unittest.TestCase):
     def test_verification_adapter_reaches_the_verdict_command_boundary(self):
         import test_review_parts_study as fixtures
         from research_harness import review_transport as transport, verification
-        case = fixtures.VerificationPartsTests()
-        self.addCleanup(case.doCleanups)
-        case.setUp()
+        case = set_up_parts_v2_fixture(self, fixtures.VerificationPartsTests())
         case.enlarge_verification()
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 1300000), \
                 patch.object(fixtures, 'make_output', side_effect=make_turn_output):
@@ -342,9 +349,7 @@ class AdapterJourneyTests(unittest.TestCase):
     def test_readiness_adapter_reaches_its_review_command_boundary(self):
         import test_review_parts_study as fixtures
         from research_harness import review_transport as transport, development
-        case = fixtures.ReadinessPartsTests()
-        self.addCleanup(case.doCleanups)
-        case.setUp()
+        case = set_up_parts_v2_fixture(self, fixtures.ReadinessPartsTests())
         case.enlarge_readiness()
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 1300000), \
                 patch.object(fixtures, 'make_output', side_effect=make_turn_output):

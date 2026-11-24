@@ -63,8 +63,8 @@ class SessionRulesTests(ExcerptSessionCase):
     def test_a_v3_result_refresh_names_the_wrapped_prompt_and_its_digest(self):
         case = result_contract_fixtures.ProblemResultContractTests()
         case.source_rules_protocol = RULES
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         prior, _ = case.old_result()
         self.assertEqual(json.loads(case.case.artifacts.read(prior['packet']))['source_rules'], RULES)
         successor = case.case.assign('result', 'first', identifier='result-source-rules-refresh')
@@ -205,8 +205,8 @@ class SessionRulesTests(ExcerptSessionCase):
 
     def test_a_new_parts_series_keeps_its_existing_source_contract(self):
         case = review_parts_fixtures.PartsResultCase()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         case.oversized()
         ordinary = protocol.build_packet(case.case.read_records(), case.case.artifacts, None, 'result', 'first')
         self.assertEqual(ordinary.get('source_rules'), RULES)
@@ -217,8 +217,8 @@ class SessionRulesTests(ExcerptSessionCase):
 
     def test_an_active_v3_session_is_not_downgraded_to_parts(self):
         case = review_parts_fixtures.PartsResultCase()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         first = case.assign()
         self.assertEqual(case.packet(first).get('source_rules'), RULES)
         output = case.case.build_review_output('result')

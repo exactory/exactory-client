@@ -20,8 +20,8 @@ class DeadAssignmentTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.case = fixtures.ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         from test_series_code_reach import record_reachable_errors
         recorder = record_reachable_errors('run_series')
         recorder.__enter__()
@@ -292,8 +292,8 @@ class DeadAssignmentTests(unittest.TestCase):
     def test_dead_staged_child_is_refused_before_reservation(self):
         from test_review_continuation_staged import StagedContinuationTests
         fixture = StagedContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.execute(fixture.plan())
         planned = fixture.plan()
         records = fixture.case.read_records()
@@ -363,8 +363,8 @@ class DeadAssignmentTests(unittest.TestCase):
     def prepare_staged_child(self):
         from test_review_continuation_staged import StagedContinuationTests
         fixture = StagedContinuationTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         fixture.execute(fixture.plan())
         return fixture, fixture.plan()
 
@@ -375,8 +375,8 @@ class DeadAssignmentTests(unittest.TestCase):
         for planned_child in (False, True):
             with self.subTest(planned_child=planned_child):
                 fixture = StagedContinuationTests()
-                fixture.setUp()
                 self.addCleanup(fixture.doCleanups)
+                fixture.setUp()
                 if planned_child:
                     fixture.execute(fixture.plan())
                 original_id = fixture.controller['id']

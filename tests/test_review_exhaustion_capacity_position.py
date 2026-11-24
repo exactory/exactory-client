@@ -20,8 +20,8 @@ class MixedCapacityPositionTests(unittest.TestCase):
         released.start()
         self.addCleanup(released.stop)
         self.fixture = PartsResultCase()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.fixture.oversized(count=6, characters=24000, room=110000)
         self.case, self.artifacts = self.fixture.case, self.fixture.case.artifacts
 
@@ -111,8 +111,8 @@ class MixedCapacityPositionTests(unittest.TestCase):
         for form in ('whole', 'bounded'):
             with self.subTest(form=form):
                 fixture = PartsResultCase()
-                fixture.setUp()
                 self.addCleanup(fixture.doCleanups)
+                fixture.setUp()
                 fixture.oversized(count=5, characters=30000, room=65000)
                 case, artifacts = fixture.case, fixture.case.artifacts
                 seed = None
@@ -181,8 +181,8 @@ class MixedCapacityPositionTests(unittest.TestCase):
         from test_review_parts_repair_journey import ResultRepairJourneyTests
 
         fixture = ResultRepairJourneyTests()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         case, artifacts = fixture.case, fixture.case.artifacts
         ordinary = protocol.build_packet(case.read_records(), artifacts, None, 'result', 'first')
         route = case.read_records()['review_route']['route']
